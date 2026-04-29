@@ -538,21 +538,33 @@ function handleSilence() {
   }
 }
 
+let recognitionActive = false;
+
 function startListening() {
   if (!callActive) return;
   if (isSpeaking) { log('startListening skipped — still speaking'); return; }
-  if (recognition) { try { recognition.stop(); } catch(e){} }
+  if (recognitionActive) { log('startListening skipped — already active'); return; }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showError('Speech recognition not supported. Use Chrome or Edge.'); return; }
 
+  if (recognition) {
+    recognition.onend = null;
+    recognition.onerror = null;
+    recognition.onresult = null;
+    try { recognition.abort(); } catch(e) {}
+    recognition = null;
+  }
+
   recognition = new SR();
-  recognition.continuous = true;
+  recognition.continuous = false;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
+  recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
-    if (callActive && !isSpeaking) setStatus('listening', 'Listening...');
+    recognitionActive = true;
+    setStatus('listening', 'Listening...');
     log('Mic listening started');
   };
 
@@ -580,35 +592,50 @@ function startListening() {
   };
 
   recognition.onerror = (e) => {
+    recognitionActive = false;
     if (e.error === 'not-allowed') {
       showError('Microphone access denied. Allow mic in browser settings and retry.');
       endCall();
-    } else if (e.error === 'no-speech' || e.error === 'aborted') {
-      // normal
+    } else if (e.error === 'no-speech') {
+      // no speech detected — restart quietly
+      if (callActive && !isSpeaking) {
+        restartTimeout = setTimeout(startListening, 300);
+      }
+    } else if (e.error === 'aborted') {
+      // intentional abort — do nothing
     } else {
       log('Recognition error: ' + e.error, 'err');
+      if (callActive && !isSpeaking) {
+        restartTimeout = setTimeout(startListening, 500);
+      }
     }
   };
 
   recognition.onend = () => {
-    if (callActive && !isSpeaking) {
-      if (restartTimeout) clearTimeout(restartTimeout);
-      restartTimeout = setTimeout(() => {
-        if (callActive && !isSpeaking) {
-          try { recognition.start(); } catch(e) {}
-        }
-      }, 200);
+    recognitionActive = false;
+    if (callActive && !isSpeaking && !silenceTimer) {
+      restartTimeout = setTimeout(startListening, 300);
     }
   };
 
-  try { recognition.start(); } catch(e) { log('start() threw: ' + e.message, 'err'); }
+  try {
+    recognition.start();
+  } catch(e) {
+    recognitionActive = false;
+    log('start() threw: ' + e.message, 'err');
+  }
 }
 
 function stopListening() {
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
+  recognitionActive = false;
   if (recognition) {
-    try { recognition.stop(); } catch(e){}
+    recognition.onend = null;
+    recognition.onerror = null;
+    recognition.onresult = null;
+    try { recognition.abort(); } catch(e) {}
+    recognition = null;
   }
 }
 
@@ -741,7 +768,7 @@ function endCall() {
   pendingTranscript = '';
   interimMsgEl = null;
   callerName = ''; callerEmail = ''; callerPhone = '';
-  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false;
+  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; recognitionActive = false;
   confirmCard.classList.remove('show');
   confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
   confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
