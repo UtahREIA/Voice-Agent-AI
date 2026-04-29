@@ -419,12 +419,22 @@ async function playElevenLabs(text) {
       isSpeaking = false;
       currentAudio = null;
       URL.revokeObjectURL(url);
-      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      if (callActive) {
+        setTimeout(() => {
+          setStatus('listening', 'Listening...');
+          startListening();
+        }, 300);
+      }
     };
     currentAudio.onerror = () => {
       isSpeaking = false;
       currentAudio = null;
-      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      if (callActive) {
+        setTimeout(() => {
+          setStatus('listening', 'Listening...');
+          startListening();
+        }, 300);
+      }
     };
     await currentAudio.play();
   } catch (e) {
@@ -527,7 +537,8 @@ function handleSilence() {
 }
 
 function startListening() {
-  if (!callActive || isSpeaking) return;
+  if (!callActive) return;
+  if (isSpeaking) { log('startListening skipped — still speaking'); return; }
   if (recognition) { try { recognition.stop(); } catch(e){} }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -617,13 +628,23 @@ function playBrowserTTS(text) {
     utt.onend = () => {
       isSpeaking = false;
       currentAudio = null;
-      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      if (callActive) {
+        setTimeout(() => {
+          setStatus('listening', 'Listening...');
+          startListening();
+        }, 300);
+      }
       resolve();
     };
     utt.onerror = () => {
       isSpeaking = false;
       currentAudio = null;
-      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      if (callActive) {
+        setTimeout(() => {
+          setStatus('listening', 'Listening...');
+          startListening();
+        }, 300);
+      }
       resolve();
     };
     isSpeaking = true;
