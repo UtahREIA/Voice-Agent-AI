@@ -267,23 +267,24 @@ Utah REIA is not a motivational program. It is not a guru platform. It is a room
 
 ---
 
-INTAKE PHASE — COLLECT CONTACT DETAILS FIRST:
-Before anything else, you must collect the caller's name, email address, and phone number. Do this naturally across three turns — one piece per turn. Do not ask for all three at once.
+INTAKE PHASE — CONTACT DETAILS VIA FORM:
+A typed form is shown on screen the moment the call starts. The caller will enter their name, email address, and phone number by typing — you do NOT need to ask for these verbally.
 
-Order: name first, then email, then phone number.
+Your FIRST message must be a brief warm welcome only (1–2 sentences). Tell them their details form is on screen and you'll get started once they've filled it in. Example: "Hey, welcome to Utah REIA — go ahead and fill in your details in the form on screen and we'll take it from there."
 
-When you have heard all three, read them back clearly in a single sentence and ask the caller to confirm. For example: "Just to confirm — your name is Sarah, email is sarah at gmail dot com, and phone is 801 555 0123. Does that look right?"
+When the caller submits the form, you will receive a message in this format:
+"My name is X, my email is Y, and my phone number is Z."
 
-CRITICAL — when you have extracted contact details from what the caller says, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
+At that point: acknowledge them by their first name, emit the INTAKE JSON block, then move immediately into the conversation. Do not ask them to repeat or confirm anything they just typed — it is already on screen.
+
+CRITICAL — when you receive the typed form submission, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
 [INTAKE:{"name":"...","email":"...","phone":"..."}]
 
 Rules for the JSON block:
 - Include it ONLY when you have newly extracted or updated one or more fields
 - Include all three fields every time you output the block, even if some are still empty strings
 - Use empty string "" for fields not yet collected
-- Phone numbers: extract digits only, format as collected
-- Email: transcribe exactly as spoken, correcting obvious spoken artifacts (e.g. "at" becomes "@", "dot" becomes ".")
-- Once all three are confirmed by the caller, include: [INTAKE_CONFIRMED]
+- Once all three are present and the caller has not asked to change anything, also include: [INTAKE_CONFIRMED]
 
 ---
 
@@ -588,8 +589,9 @@ let audioContext = null;
 let analyser = null;
 let vadInterval = null;
 let silenceCount = 0;
-const SILENCE_THRESHOLD = 20;  // higher threshold to ignore residual audio bleed
-const SILENCE_FRAMES = 20;     // ~2 seconds of silence
+let speechDetected = false;
+const SILENCE_THRESHOLD = 20;
+const SILENCE_FRAMES = 20;
 
 async function initMicStream() {
   if (micStream) return true;
@@ -628,9 +630,14 @@ function startListening() {
       stopVAD();
       if (!callActive) return;
 
+      if (!speechDetected) {
+        // No voice activity — restart quietly without hitting Whisper
+        if (callActive && !isSpeaking) setTimeout(startListening, 200);
+        return;
+      }
+
       const blob = new Blob(audioChunks, { type: mimeType });
       if (blob.size < 1000) {
-        // Too short — just restart
         log('Audio too short, restarting...');
         if (callActive && !isSpeaking) setTimeout(startListening, 200);
         return;
@@ -649,6 +656,7 @@ function startListening() {
     // Short drain — discard first 500ms of audio but keep chunk[0] (WebM init header)
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
+      speechDetected = false;
       startVAD();
     }, 500);
   } catch(e) {
@@ -678,12 +686,17 @@ function startVAD() {
     if (amplitude < SILENCE_THRESHOLD) {
       silenceCount++;
       if (silenceCount >= SILENCE_FRAMES) {
-        log('Silence detected — stopping recording');
-        stopRecording();
+        if (!speechDetected) {
+          // Only silence — restart without sending to Whisper
+          stopRecording();
+        } else {
+          log('Silence detected — stopping recording');
+          stopRecording();
+        }
       }
     } else {
       silenceCount = 0;
-      // Show speaking indicator
+      speechDetected = true;
       if (!isSpeaking) setStatus('listening', 'Listening...');
     }
   }, 100);
