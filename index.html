@@ -591,6 +591,7 @@ let vadInterval = null;
 let silenceCount = 0;
 let speechDetected = false;
 const SILENCE_THRESHOLD = 20;
+const SPEECH_THRESHOLD = 8;  // lower bar — just needs to exceed background noise
 const SILENCE_FRAMES = 20;
 
 async function initMicStream() {
@@ -681,14 +682,15 @@ function startVAD() {
       return;
     }
     analyser.getByteTimeDomainData(dataArray);
-    const amplitude = Math.max(...dataArray) - 128;
+    const amplitude = Math.max(...dataArray.map(v => Math.abs(v - 128)));
+
+    if (amplitude >= SPEECH_THRESHOLD) speechDetected = true;
 
     if (amplitude < SILENCE_THRESHOLD) {
       silenceCount++;
       if (silenceCount >= SILENCE_FRAMES) {
         if (!speechDetected) {
-          // Only silence — restart without sending to Whisper
-          stopRecording();
+          stopRecording(); // restart quietly — no voice heard
         } else {
           log('Silence detected — stopping recording');
           stopRecording();
@@ -696,7 +698,6 @@ function startVAD() {
       }
     } else {
       silenceCount = 0;
-      speechDetected = true;
       if (!isSpeaking) setStatus('listening', 'Listening...');
     }
   }, 100);
@@ -824,7 +825,7 @@ async function startCall() {
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
 
-  const greeting = `Hey, thanks for reaching out to Utah REIA. Before we get into it, what's your name?`;
+  const greeting = `Hey, welcome to Utah REIA. Please enter your name, email address, and phone number in the form below so we can get started.`;
   intakePhase = true;
   intakeConfirmed = false;
   awaitingConfirmation = false;
