@@ -215,7 +215,6 @@ let callerPhone = '';
 let intakePhase = true;
 let intakeConfirmed = false;
 let awaitingConfirmation = false;
-let recognition = null;
 let callActive = false;
 let conversationHistory = [];
 let currentAudio = null;
@@ -429,11 +428,13 @@ async function playElevenLabs(text) {
         isSpeaking = false;
         currentAudio = null;
         audioCtx.close();
+        log('ElevenLabs audio ended — waiting to open mic...');
         if (callActive) {
           setTimeout(() => {
+            log('Opening mic now...');
             setStatus('listening', 'Listening...');
             startListening();
-          }, 300);
+          }, 800);
         }
         resolve();
       };
@@ -538,105 +539,166 @@ function handleSilence() {
   }
 }
 
-let recognitionActive = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let micStream = null;
+let vadTimer = null;
+let isRecording = false;
+let audioContext = null;
+let analyser = null;
+let vadInterval = null;
+let silenceCount = 0;
+const SILENCE_THRESHOLD = 8;   // amplitude threshold (0-255)
+const SILENCE_FRAMES = 18;     // ~1.8 seconds of silence at 100ms intervals
+
+async function initMicStream() {
+  if (micStream) return true;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+    });
+    log('Mic stream acquired', 'ok');
+    return true;
+  } catch(e) {
+    showError('Microphone access required: ' + e.message);
+    return false;
+  }
+}
 
 function startListening() {
-  if (!callActive) return;
-  if (isSpeaking) { log('startListening skipped — still speaking'); return; }
-  if (recognitionActive) { log('startListening skipped — already active'); return; }
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showError('Speech recognition not supported. Use Chrome or Edge.'); return; }
-
-  if (recognition) {
-    recognition.onend = null;
-    recognition.onerror = null;
-    recognition.onresult = null;
-    try { recognition.abort(); } catch(e) {}
-    recognition = null;
-  }
-
-  recognition = new SR();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    recognitionActive = true;
-    setStatus('listening', 'Listening...');
-    log('Mic listening started');
-  };
-
-  recognition.onresult = (e) => {
-    let interim = '';
-    let final = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-
-    if (isSpeaking && (interim.trim().length > 2 || final.trim().length > 0)) {
-      log('User interrupted AI');
-      interruptAI();
-    }
-
-    if (final) pendingTranscript += final + ' ';
-    const display = (pendingTranscript + interim).trim();
-
-    if (display) {
-      addMessage('user', display, true);
-      if (silenceTimer) clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(handleSilence, 1300);
-    }
-  };
-
-  recognition.onerror = (e) => {
-    recognitionActive = false;
-    if (e.error === 'not-allowed') {
-      showError('Microphone access denied. Allow mic in browser settings and retry.');
-      endCall();
-    } else if (e.error === 'no-speech') {
-      // no speech detected — restart quietly
-      if (callActive && !isSpeaking) {
-        restartTimeout = setTimeout(startListening, 300);
-      }
-    } else if (e.error === 'aborted') {
-      // intentional abort — do nothing
-    } else {
-      log('Recognition error: ' + e.error, 'err');
-      if (callActive && !isSpeaking) {
-        restartTimeout = setTimeout(startListening, 500);
-      }
-    }
-  };
-
-  recognition.onend = () => {
-    recognitionActive = false;
-    if (callActive && !isSpeaking && !silenceTimer) {
-      restartTimeout = setTimeout(startListening, 300);
-    }
-  };
+  if (!callActive || isSpeaking || isRecording) return;
+  if (!micStream) { log('No mic stream', 'err'); return; }
 
   try {
-    recognition.start();
+    audioChunks = [];
+    silenceCount = 0;
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
+
+    mediaRecorder = new MediaRecorder(micStream, { mimeType });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      isRecording = false;
+      stopVAD();
+      if (!callActive) return;
+
+      const blob = new Blob(audioChunks, { type: mimeType });
+      if (blob.size < 1000) {
+        // Too short — just restart
+        log('Audio too short, restarting...');
+        if (callActive && !isSpeaking) setTimeout(startListening, 200);
+        return;
+      }
+
+      setStatus('thinking', 'Transcribing...');
+      await transcribeAndSend(blob);
+    };
+
+    mediaRecorder.start(100); // collect chunks every 100ms
+    isRecording = true;
+    setStatus('listening', 'Listening...');
+    log('Mic recording started');
+
+    startVAD();
   } catch(e) {
-    recognitionActive = false;
-    log('start() threw: ' + e.message, 'err');
+    log('MediaRecorder error: ' + e.message, 'err');
+  }
+}
+
+function startVAD() {
+  if (!micStream) return;
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioContext.createMediaStreamSource(micStream);
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const dataArray = new Uint8Array(analyser.fftSize);
+  silenceCount = 0;
+
+  vadInterval = setInterval(() => {
+    if (!isRecording || !callActive || isSpeaking) {
+      stopVAD();
+      return;
+    }
+    analyser.getByteTimeDomainData(dataArray);
+    const amplitude = Math.max(...dataArray) - 128;
+
+    if (amplitude < SILENCE_THRESHOLD) {
+      silenceCount++;
+      if (silenceCount >= SILENCE_FRAMES) {
+        log('Silence detected — stopping recording');
+        stopRecording();
+      }
+    } else {
+      silenceCount = 0;
+      // Show speaking indicator
+      if (!isSpeaking) setStatus('listening', 'Listening...');
+    }
+  }, 100);
+}
+
+function stopVAD() {
+  if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
+  if (audioContext) { try { audioContext.close(); } catch(e){} audioContext = null; }
+  analyser = null;
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop(); } catch(e) {}
+  }
+}
+
+async function transcribeAndSend(blob) {
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+    const resp = await fetch('/.netlify/functions/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: base64
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error('Transcribe error ' + resp.status + ': ' + err.substring(0, 200));
+    }
+
+    const data = await resp.json();
+    const text = (data.text || '').trim();
+
+    if (!text || text.length < 2) {
+      log('Empty transcript — restarting');
+      if (callActive && !isSpeaking) setTimeout(startListening, 200);
+      return;
+    }
+
+    log('Transcript: ' + text, 'ok');
+    pendingTranscript = text;
+    addMessage('user', text, false);
+    pendingTranscript = '';
+    await sendToAI(text);
+
+  } catch(e) {
+    log('Transcription error: ' + e.message, 'err');
+    if (callActive && !isSpeaking) setTimeout(startListening, 500);
   }
 }
 
 function stopListening() {
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
-  recognitionActive = false;
-  if (recognition) {
-    recognition.onend = null;
-    recognition.onerror = null;
-    recognition.onresult = null;
-    try { recognition.abort(); } catch(e) {}
-    recognition = null;
-  }
+  stopVAD();
+  stopRecording();
+  isRecording = false;
 }
 
 function playBrowserTTS(text) {
@@ -690,14 +752,8 @@ async function speak(text) {
 
 async function startCall() {
   log('Requesting mic access...');
-  try {
-    const test = await navigator.mediaDevices.getUserMedia({ audio: true });
-    test.getTracks().forEach(t => t.stop());
-    log('Mic access granted', 'ok');
-  } catch(e) {
-    showError('Microphone access required: ' + e.message);
-    return;
-  }
+  const micOk = await initMicStream();
+  if (!micOk) return;
 
   if (window.speechSynthesis) window.speechSynthesis.getVoices();
 
@@ -768,7 +824,9 @@ function endCall() {
   pendingTranscript = '';
   interimMsgEl = null;
   callerName = ''; callerEmail = ''; callerPhone = '';
-  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; recognitionActive = false;
+  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   confirmCard.classList.remove('show');
   confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
   confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
