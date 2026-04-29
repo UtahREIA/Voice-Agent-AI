@@ -469,7 +469,7 @@ async function playElevenLabs(text) {
               setStatus('listening', 'Listening...');
               startListening();
             }
-          }, 1500);
+          }, 400);
         }
         resolve();
       };
@@ -592,8 +592,8 @@ let silenceCount = 0;
 let speechDetected = false;
 let suppressRestart = false;
 const SILENCE_THRESHOLD = 20;
-const SPEECH_THRESHOLD = 8;  // lower bar — just needs to exceed background noise
-const SILENCE_FRAMES = 20;
+const SPEECH_THRESHOLD = 8;
+const SILENCE_FRAMES = 10; // 1 second of silence to stop (was 2s)
 
 async function initMicStream() {
   if (micStream) return true;
@@ -658,12 +658,12 @@ function startListening() {
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    // Short drain — discard first 500ms of audio but keep chunk[0] (WebM init header)
+    // Short drain — discard first 200ms of audio but keep chunk[0] (WebM init header)
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
       speechDetected = false;
       startVAD();
-    }, 500);
+    }, 200);
   } catch(e) {
     log('MediaRecorder error: ' + e.message, 'err');
   }
