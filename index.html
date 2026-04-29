@@ -401,7 +401,7 @@ async function playElevenLabs(text) {
     setStatus('speaking', 'Speaking...');
     isSpeaking = true;
     log('Calling ElevenLabs via proxy...');
-    const resp = await fetch('/.netlify/functions/elevenlabs', {
+    const resp = await fetch('/api/elevenlabs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
@@ -463,7 +463,7 @@ async function sendToAI(userText) {
   stopListening();
   log('Calling Claude via proxy...');
   try {
-    const resp = await fetch('/.netlify/functions/claude', {
+    const resp = await fetch('/api/claude', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -667,7 +667,7 @@ async function transcribeAndSend(blob) {
     log('Sending audio for transcription — size: ' + blob.size + ' bytes');
     const arrayBuffer = await blob.arrayBuffer();
 
-    const resp = await fetch('/.netlify/functions/transcribe', {
+    const resp = await fetch('/api/transcribe', {
       method: 'POST',
       headers: { 'Content-Type': 'audio/webm' },
       body: arrayBuffer
