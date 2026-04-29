@@ -8,6 +8,7 @@ export const config = {
 import { Readable } from 'stream';
 import busboy from 'busboy';
 import FormData from 'form-data';
+import axios from 'axios';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -53,19 +54,18 @@ export default async function handler(req, res) {
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
 
-    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
+    // Use axios to send the form-data stream
+    const resp = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
       headers: {
         'Authorization': 'Bearer ' + OPENAI_KEY,
         ...formData.getHeaders()
       },
-      body: formData
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     });
 
-    const result = await resp.json();
+    const result = resp.data;
     console.log('OpenAI response:', resp.status, result.text || result.error?.message);
-
-    if (!resp.ok) return res.status(resp.status).json({ error: JSON.stringify(result) });
 
     return res.status(200).json({ text: result.text || '' });
   } catch (e) {
