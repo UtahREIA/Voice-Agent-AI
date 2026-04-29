@@ -7,6 +7,7 @@ export const config = {
 
 import { Readable } from 'stream';
 import busboy from 'busboy';
+import FormData from 'form-data';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -43,15 +44,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Audio too small: ' + fileBuffer.length + ' bytes' });
     }
 
+    // Use form-data package to send the file as a real multipart upload
     const formData = new FormData();
-    formData.append('file', new Blob([fileBuffer], { type: fileMime || 'audio/webm' }), 'audio.webm');
+    formData.append('file', fileBuffer, {
+      filename: 'audio.webm',
+      contentType: fileMime || 'audio/webm'
+    });
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
 
     const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + OPENAI_KEY
+        'Authorization': 'Bearer ' + OPENAI_KEY,
+        ...formData.getHeaders()
       },
       body: formData
     });
