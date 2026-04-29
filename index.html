@@ -902,6 +902,7 @@ function endCall() {
 startBtn.addEventListener('click', startCall);
 endBtn.addEventListener('click', endCall);
 
+// "Looks correct" — only fires AFTER the user has reviewed the confirm card
 confirmYesBtn.addEventListener('click', () => {
   callerName = confirmNameEl.value.trim() || callerName;
   callerEmail = confirmEmailEl.value.trim() || callerEmail;
@@ -913,9 +914,11 @@ confirmYesBtn.addEventListener('click', () => {
   confirmNameEl.disabled = true;
   confirmEmailEl.disabled = true;
   confirmPhoneEl.disabled = true;
-  log('Caller confirmed details via button', 'ok');
-  // Tell AI details are confirmed so it continues
-  sendToAI('Yes, those details are correct.');
+  log('Caller confirmed details', 'ok');
+  const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
+  addMessage('user', msg);
+  stopListening();
+  sendToAI(msg);
 });
 
 confirmEditBtn.addEventListener('click', () => {
@@ -936,11 +939,15 @@ confirmEditBtn.addEventListener('click', () => {
     awaitingConfirmation = false;
     confirmActions.style.display = 'none';
     log('Caller saved corrected details', 'ok');
-    sendToAI(`I've updated my details. Name is ${callerName}, email is ${callerEmail}, phone is ${callerPhone}. Those are correct now.`);
+    const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
+    addMessage('user', msg);
+    stopListening();
+    sendToAI(msg);
   });
 });
 
-intakeSubmitBtn.addEventListener('click', async () => {
+// "Submit my details" — show confirm card for review, do NOT send to AI yet
+intakeSubmitBtn.addEventListener('click', () => {
   const name = intakeNameInput.value.trim();
   const email = intakeEmailInput.value.trim();
   const phone = intakePhoneInput.value.trim();
@@ -952,19 +959,18 @@ intakeSubmitBtn.addEventListener('click', async () => {
   }
   intakeSubmitBtn.disabled = true;
   intakeFormEl.classList.remove('show');
+  stopListening();
 
-  // Pre-fill the confirm card
   callerName = name; callerEmail = email; callerPhone = phone;
   confirmNameEl.value = name;   confirmNameEl.classList.add('filled');
   confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
   confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
+  confirmNameEl.disabled = false;
+  confirmEmailEl.disabled = false;
+  confirmPhoneEl.disabled = false;
+  confirmActions.style.display = 'flex';
+  awaitingConfirmation = true;
   confirmCard.classList.add('show');
-
-  // Inject as a user turn so the AI can acknowledge and continue
-  const msg = `My name is ${name}, my email is ${email}, and my phone number is ${phone}.`;
-  addMessage('user', msg);
-  stopListening();
-  await sendToAI(msg);
 });
 
 log('App loaded. Ready.', 'ok');
