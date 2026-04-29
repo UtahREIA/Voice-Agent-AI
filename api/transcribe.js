@@ -45,16 +45,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Audio too small: ' + fileBuffer.length + ' bytes' });
     }
 
-    // Use form-data package to send the file as a real multipart upload
+    // Strip codec info — OpenAI rejects content types like "audio/webm;codecs=opus"
+    const cleanMime = (fileMime || 'audio/webm').split(';')[0].trim();
+
     const formData = new FormData();
     formData.append('file', fileBuffer, {
       filename: 'audio.webm',
-      contentType: fileMime || 'audio/webm'
+      contentType: cleanMime
     });
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
 
-    // Use axios to send the form-data stream
     const resp = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
       headers: {
         'Authorization': 'Bearer ' + OPENAI_KEY,
@@ -69,7 +70,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ text: result.text || '' });
   } catch (e) {
-    console.error('Transcribe error:', e.message, e.stack);
-    return res.status(500).json({ error: e.message });
+    const openAIError = e.response?.data;
+    console.error('Transcribe error:', e.message, openAIError || e.stack);
+    return res.status(500).json({ error: e.message, detail: openAIError });
   }
 }

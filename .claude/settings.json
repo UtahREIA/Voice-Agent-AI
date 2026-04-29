@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('axios'\\); require\\('busboy'\\); require\\('form-data'\\); require\\('formidable'\\); console.log\\('All deps OK'\\)\")"
+    ]
+  }
+}
