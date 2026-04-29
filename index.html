@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utah REIA Voice Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1419;--surface:#1a2332;--surface2:#1e2a3a;--border:#1b3a5c;
+    --cyan:#22d3ee;--cyan-dim:#0891b2;--green:#4ade80;--green-dim:#16a34a;
+    --amber:#fbbf24;--red:#f87171;--red-dim:#dc2626;
+    --text:#e8eaed;--muted:#7eb8da;--dim:#4a6b82;
+  }
+  html,body{height:100%;min-height:100%}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding:32px 20px 40px}
+
+  .app{width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:640px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+
+  .header{background:linear-gradient(135deg,#1a2332,#0d1b2a);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .logo{width:36px;height:36px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#0d1b2a}
+  .header-text h1{font-size:15px;font-weight:600;color:#fff}
+  .header-text p{font-size:11px;color:var(--muted);margin-top:1px}
+  .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:13px;color:var(--green);display:none;align-items:center;gap:6px}
+  .call-timer.active{display:flex}
+  .call-timer .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .setup-screen{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center}
+  .setup-screen.hidden{display:none}
+  .setup-icon{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0f3a5c,#0a2640);border:2px solid var(--cyan-dim);display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  .setup-icon svg{width:32px;height:32px;color:var(--cyan)}
+  .setup-title{font-size:20px;font-weight:500;color:#fff}
+  .setup-sub{font-size:13px;color:var(--muted);max-width:420px;line-height:1.6}
+
+  .api-input-wrap{width:100%;max-width:420px;margin-top:8px}
+  .api-label{display:block;text-align:left;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
+  .api-input{width:100%;background:#0d1b2a;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
+  .api-input:focus{outline:none;border-color:var(--cyan-dim)}
+  .api-hint{text-align:left;font-size:11px;color:var(--dim);margin-top:6px}
+  .api-hint a{color:var(--cyan-dim);text-decoration:none}
+
+  .voice-select{width:100%;background:#0d1b2a;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;margin-top:10px;cursor:pointer}
+  .voice-select:focus{outline:none;border-color:var(--cyan-dim)}
+
+  .start-btn{background:linear-gradient(135deg,var(--green-dim),var(--green));border:none;color:#052e12;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px;transition:all .2s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif}
+  .start-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(74,222,128,.25)}
+  .start-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .start-btn svg{width:18px;height:18px}
+
+  .call-screen{flex:1;display:none;flex-direction:column}
+  .call-screen.active{display:flex}
+
+  .transcript-area{flex:1;padding:18px 24px;overflow-y:auto;max-height:420px;display:flex;flex-direction:column;gap:10px}
+
+  .msg{display:flex;gap:10px;animation:fadeIn .3s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .msg.ai{flex-direction:row}
+  .msg.user{flex-direction:row-reverse}
+  .avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;font-weight:600}
+  .ai .avatar{background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));color:#0d1b2a}
+  .user .avatar{background:linear-gradient(135deg,#3b4a5c,#2a3a4c);color:var(--muted)}
+  .bubble{max-width:75%;padding:9px 13px;border-radius:12px;font-size:13.5px;line-height:1.5}
+  .ai .bubble{background:var(--surface2);border:1px solid var(--border);border-radius:4px 12px 12px 12px}
+  .user .bubble{background:linear-gradient(135deg,#1a3a5c,#0f2640);border:1px solid rgba(34,211,238,.2);border-radius:12px 4px 12px 12px}
+  .bubble.interim{opacity:.6;font-style:italic}
+
+  .call-status{background:var(--surface);border-top:1px solid var(--border);padding:18px 24px}
+
+  .status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px}
+  .status-indicator{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:#0d1b2a;border:1px solid var(--border);font-size:12px;color:var(--muted);transition:all .3s}
+  .status-indicator.listening{border-color:var(--cyan-dim);color:var(--cyan);background:rgba(34,211,238,.05)}
+  .status-indicator.thinking{border-color:var(--amber);color:var(--amber);background:rgba(251,191,36,.05)}
+  .status-indicator.speaking{border-color:var(--green-dim);color:var(--green);background:rgba(74,222,128,.05)}
+
+  .voice-bars{display:flex;gap:3px;align-items:center;height:18px}
+  .voice-bars span{width:3px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
+  .voice-bars span:nth-child(1){animation-delay:0s}
+  .voice-bars span:nth-child(2){animation-delay:.1s}
+  .voice-bars span:nth-child(3){animation-delay:.2s}
+  .voice-bars span:nth-child(4){animation-delay:.1s}
+  .voice-bars span:nth-child(5){animation-delay:.0s}
+  @keyframes wave{0%,100%{height:4px}50%{height:16px}}
+
+  .end-btn{background:linear-gradient(135deg,var(--red-dim),var(--red));border:none;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;margin:0 auto;font-family:'DM Sans',sans-serif;transition:all .2s}
+  .end-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(248,113,113,.3)}
+  .end-btn svg{width:16px;height:16px}
+
+  .error-banner{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin:12px 24px 0;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
+  .error-banner.show{display:block}
+
+  .debug-log{background:#000;border-top:1px solid var(--border);padding:10px 14px;font-size:11px;color:#7eb8da;font-family:'DM Mono',monospace;max-height:120px;overflow-y:auto;display:none;line-height:1.5}
+  .debug-log.show{display:block}
+  .debug-log .d-err{color:#f87171}
+  .debug-log .d-ok{color:#4ade80}
+
+  .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
+
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">R</div>
+    <div class="header-text">
+      <h1>Utah REIA Voice Agent</h1>
+      <p>Real-time conversation</p>
+    </div>
+    <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
+  </div>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <div class="setup-screen" id="setupScreen">
+    <div class="setup-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
+      </svg>
+    </div>
+    <div class="setup-title">Before we start</div>
+    <div class="setup-sub">Fill in your details below so we can connect you with the right people and resources inside Utah REIA.</div>
+
+    <div class="api-input-wrap" style="margin-top:4px">
+      <label class="api-label">First Name <span style="color:var(--red);font-size:11px">required</span></label>
+      <input type="text" class="api-input" id="callerName" placeholder="Your first name" autocomplete="given-name" />
+
+      <label class="api-label" style="margin-top:14px">Email <span style="color:var(--red);font-size:11px">required</span></label>
+      <input type="email" class="api-input" id="callerEmail" placeholder="you@example.com" autocomplete="email" />
+
+      <label class="api-label" style="margin-top:14px">Phone Number <span style="color:var(--red);font-size:11px">required</span></label>
+      <input type="tel" class="api-input" id="callerPhone" placeholder="(801) 555-0100" autocomplete="tel" />
+    </div>
+
+    <button class="start-btn" id="startBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
+      </svg>
+      Start Call
+    </button>
+  </div>
+
+  <div class="call-screen" id="callScreen">
+    <div class="transcript-area" id="transcriptArea"></div>
+    <div class="call-status">
+      <div class="status-row">
+        <div class="status-indicator" id="statusInd">
+          <div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+      <button class="end-btn" id="endBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+          <line x1="23" y1="1" x2="1" y2="23"/>
+        </svg>
+        End Call
+      </button>
+      <div class="hint-bar">Just talk naturally. Pause when you're done. You can interrupt anytime by speaking.</div>
+    </div>
+  </div>
+
+  <div class="debug-log" id="debugLog"></div>
+</div>
+
+<script>
+const setupScreen = document.getElementById('setupScreen');
+const callScreen = document.getElementById('callScreen');
+const startBtn = document.getElementById('startBtn');
+const endBtn = document.getElementById('endBtn');
+const transcriptArea = document.getElementById('transcriptArea');
+const statusInd = document.getElementById('statusInd');
+const statusText = document.getElementById('statusText');
+const callTimer = document.getElementById('callTimer');
+const timerText = document.getElementById('timerText');
+const errorBanner = document.getElementById('errorBanner');
+const debugLog = document.getElementById('debugLog');
+
+let callerName = '';
+let callerEmail = '';
+let callerPhone = '';
+let recognition = null;
+let callActive = false;
+let conversationHistory = [];
+let currentAudio = null;
+let isSpeaking = false;
+let callStartTime = 0;
+let timerInterval = null;
+let silenceTimer = null;
+let interimMsgEl = null;
+let pendingTranscript = '';
+let restartTimeout = null;
+
+const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
+
+const systemPrompt = `You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
+
+Utah REIA is not a motivational program. It is not a guru platform. It is a room of experienced investors thinking through real decisions in real time. That is the standard you hold in every sentence.
+
+---
+
+VOICE RULES — NON-NEGOTIABLE:
+- Maximum 2 sentences per response. This is a phone call, not a presentation.
+- Never use lists, bullet points, or any structure. Spoken language only.
+- Use contractions naturally. Sound like a person, not a script.
+- Ask exactly one question per turn. Never stack questions.
+- No hype. No urgency. No motivational language. Not even subtle versions of it.
+- No phrases like: "great question", "absolutely", "that's awesome", "fantastic", "let's get you on the path to success", "game-changer", "wealth-building journey", or anything that sounds like a sales call.
+- Calm, steady, peer-to-peer. You are talking with an investor, not at one.
+- If they seem unsure or vague, give them room. A short follow-up beats a long explanation.
+
+---
+
+YOUR JOB:
+Figure out where this person is and what they actually need — then point them toward the right next step inside Utah REIA.
+
+You are not selling. You are routing. There is a difference. Routing means asking the right questions, listening carefully, and connecting them to something genuinely useful for where they are right now.
+
+---
+
+WHAT YOU NEED TO LEARN (in natural conversation order — do not rush this):
+
+1. ROLE — Are they here as an investor or learner, or as a service provider? If both, which side do they want help with first?
+
+2. STAGE — Where are they in their investing journey?
+   - Exploring: haven't started, just learning
+   - Getting Started: researching their first deal
+   - Active: currently doing deals
+   - Experienced: managing a portfolio, wants to scale
+   - Veteran: been around, strategic, possibly mentoring others
+
+3. STRATEGY — What type of investing interests them? Do not list these — let them tell you. If they are unsure, that is useful information too.
+   Options to listen for: Buy and Hold, Fix and Flip, Wholesaling, BRRRR, Short Term Rental, Creative Financing, Notes and Lending, Commercial, Development, Land, Passive Investing, Raising Capital, Tax Deeds and Liens, Out of State.
+
+4. CURRENT BLOCKER — What is actually in their way right now? Common ones: need capital, need deals, need a team or vendors, need education on a specific strategy, need to run numbers, need to connect with other investors.
+
+5. RESOURCES — What are they working with? Capital available, time per week, and whether they have access to financing. You do not need to ask all of these directly — listen for clues and only ask what matters for their situation.
+
+---
+
+HOW TO ROUTE THEM (once you have enough to go on):
+
+NEW or EXPLORING investors:
+Point them toward an upcoming event as the first step. The room is the education. Also mention the free tools on the site — calculators, market report — so they have something concrete to do before they show up.
+
+GETTING STARTED investors:
+They usually need deal analysis tools and clarity on their strategy. Point them toward the calculator for their strategy of interest and a relevant event or training. If they are stuck on capital or team, flag that you can connect them with lenders or contractors inside the community.
+
+ACTIVE investors:
+They know what they are doing but have a specific problem. Listen for it. Connect them to the right vendor category, deal flow, or community resource. The True Wealth Investment Club may be relevant if they are aggregating capital.
+
+EXPERIENCED or VETERAN investors:
+Peer tone only. They do not need hand-holding. They may want advanced strategy rooms, the Board Member sessions, or involvement at a higher level including mentoring or sponsorship conversations.
+
+SERVICE PROVIDERS:
+Let them know they can be listed as a resource in the vendor directory and connected to investors who need what they offer. Mention the option to explore sponsorship if they want more visibility.
+
+---
+
+CLOSING THE CALL:
+Once you have a clear picture, give them one specific next step. Not two. Not a menu. One thing. Make it concrete — an event, a tool, a connection — and tell them where to find it or what to ask for.
+
+The website is utahreia.org. The community is active and the events are real. Do not oversell either — just point.
+
+---
+
+WHAT UTAH REIA ACTUALLY HAS:
+- Live events and strategy-specific meetups
+- Midday trainings and workshops
+- Event replays and the Investor Academy
+- Calculators: Fix and Flip, BRRRR, Rental, Wholesale, Creative Financing, Mortgage, HELOC, Rehab Estimator, and more
+- Market reports and lead magnets by strategy
+- Vendor directory: lenders, contractors, property managers, attorneys, CPAs, title companies, and more
+- Private community and investor circles by strategy
+- True Wealth Investment Club for capital aggregation
+- Deal Center with property listings
+- Home Depot member rebate and Rent Perfect access
+- Membership tiers from free event access through premium and platinum
+
+Do not invent resources that are not on this list.`;
+
+
+function log(msg, type) {
+  debugLog.classList.add('show');
+  const div = document.createElement('div');
+  div.className = type === 'err' ? 'd-err' : (type === 'ok' ? 'd-ok' : '');
+  const t = new Date().toLocaleTimeString();
+  div.textContent = '[' + t + '] ' + msg;
+  debugLog.appendChild(div);
+  debugLog.scrollTop = debugLog.scrollHeight;
+  console.log('[REIA]', msg);
+}
+
+function showError(msg) {
+  errorBanner.textContent = msg;
+  errorBanner.classList.add('show');
+  log('ERROR: ' + msg, 'err');
+  setTimeout(() => errorBanner.classList.remove('show'), 10000);
+}
+
+function setStatus(state, text) {
+  statusInd.className = 'status-indicator ' + state;
+  statusText.textContent = text;
+}
+
+function addMessage(role, text, interim) {
+  if (interim && interimMsgEl) {
+    interimMsgEl.querySelector('.bubble').textContent = text;
+    transcriptArea.scrollTop = transcriptArea.scrollHeight;
+    return interimMsgEl;
+  }
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + (role === 'assistant' ? 'ai' : 'user');
+  const av = document.createElement('div');
+  av.className = 'avatar';
+  av.textContent = role === 'assistant' ? 'R' : 'U';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble' + (interim ? ' interim' : '');
+  bubble.textContent = text;
+  msg.appendChild(av);
+  msg.appendChild(bubble);
+  transcriptArea.appendChild(msg);
+  transcriptArea.scrollTop = transcriptArea.scrollHeight;
+  if (interim) interimMsgEl = msg;
+  return msg;
+}
+
+function finalizeInterim(finalText) {
+  if (interimMsgEl) {
+    const bubble = interimMsgEl.querySelector('.bubble');
+    bubble.textContent = finalText;
+    bubble.classList.remove('interim');
+    interimMsgEl = null;
+  }
+}
+
+function updateTimer() {
+  const secs = Math.floor((Date.now() - callStartTime) / 1000);
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  timerText.textContent = m + ':' + s;
+}
+
+async function playElevenLabs(text) {
+  try {
+    setStatus('speaking', 'Speaking...');
+    isSpeaking = true;
+    log('Calling ElevenLabs via proxy...');
+    const resp = await fetch('/.netlify/functions/elevenlabs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!resp.ok) {
+      const errTxt = await resp.text();
+      throw new Error('ElevenLabs proxy ' + resp.status + ': ' + errTxt.substring(0, 200));
+    }
+    log('ElevenLabs response OK', 'ok');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = () => {
+      isSpeaking = false;
+      currentAudio = null;
+      URL.revokeObjectURL(url);
+      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+    };
+    currentAudio.onerror = () => {
+      isSpeaking = false;
+      currentAudio = null;
+      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+    };
+    await currentAudio.play();
+  } catch (e) {
+    isSpeaking = false;
+    log('ElevenLabs error — falling back to browser TTS: ' + e.message, 'err');
+    await playBrowserTTS(text);
+  }
+}
+
+function interruptAI() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  isSpeaking = false;
+}
+
+async function sendToAI(userText) {
+  conversationHistory.push({ role: 'user', content: userText });
+  setStatus('thinking', 'Thinking...');
+  stopListening();
+  log('Calling Claude via proxy...');
+  try {
+    const resp = await fetch('/.netlify/functions/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 180,
+        system: systemPrompt,
+        messages: conversationHistory
+      })
+    });
+    if (!resp.ok) {
+      const errTxt = await resp.text();
+      throw new Error('Claude proxy ' + resp.status + ': ' + errTxt.substring(0, 300));
+    }
+    const data = await resp.json();
+    log('Claude response OK', 'ok');
+    if (data.content && data.content[0]) {
+      const aiText = data.content[0].text;
+      conversationHistory.push({ role: 'assistant', content: aiText });
+      addMessage('assistant', aiText);
+      await speak(aiText);
+    } else {
+      throw new Error('No response content from AI');
+    }
+  } catch (e) {
+    showError('AI error: ' + (e.message || 'connection failed'));
+    if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+  }
+}
+
+function handleSilence() {
+  const text = pendingTranscript.trim();
+  if (text && text.length > 1 && callActive) {
+    finalizeInterim(text);
+    pendingTranscript = '';
+    sendToAI(text);
+  }
+}
+
+function startListening() {
+  if (!callActive || isSpeaking) return;
+  if (recognition) { try { recognition.stop(); } catch(e){} }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showError('Speech recognition not supported. Use Chrome or Edge.'); return; }
+
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  recognition.onstart = () => {
+    if (callActive && !isSpeaking) setStatus('listening', 'Listening...');
+    log('Mic listening started');
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+
+    if (isSpeaking && (interim.trim().length > 2 || final.trim().length > 0)) {
+      log('User interrupted AI');
+      interruptAI();
+    }
+
+    if (final) pendingTranscript += final + ' ';
+    const display = (pendingTranscript + interim).trim();
+
+    if (display) {
+      addMessage('user', display, true);
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(handleSilence, 1300);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'not-allowed') {
+      showError('Microphone access denied. Allow mic in browser settings and retry.');
+      endCall();
+    } else if (e.error === 'no-speech' || e.error === 'aborted') {
+      // normal
+    } else {
+      log('Recognition error: ' + e.error, 'err');
+    }
+  };
+
+  recognition.onend = () => {
+    if (callActive && !isSpeaking) {
+      if (restartTimeout) clearTimeout(restartTimeout);
+      restartTimeout = setTimeout(() => {
+        if (callActive && !isSpeaking) {
+          try { recognition.start(); } catch(e) {}
+        }
+      }, 200);
+    }
+  };
+
+  try { recognition.start(); } catch(e) { log('start() threw: ' + e.message, 'err'); }
+}
+
+function stopListening() {
+  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
+  if (recognition) {
+    try { recognition.stop(); } catch(e){}
+  }
+}
+
+function playBrowserTTS(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.95;
+    utt.pitch = 1.0;
+    utt.volume = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      v.name.includes('Samantha') || v.name.includes('Karen') ||
+      v.name.includes('Daniel') || v.name.includes('Google US English') ||
+      v.lang === 'en-US'
+    );
+    if (preferred) utt.voice = preferred;
+    utt.onend = () => {
+      isSpeaking = false;
+      currentAudio = null;
+      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      resolve();
+    };
+    utt.onerror = () => {
+      isSpeaking = false;
+      currentAudio = null;
+      if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
+      resolve();
+    };
+    isSpeaking = true;
+    setStatus('speaking', 'Speaking...');
+    currentAudio = { pause: () => window.speechSynthesis.cancel(), currentTime: 0 };
+    window.speechSynthesis.speak(utt);
+    log('Browser TTS speaking...', 'ok');
+  });
+}
+
+async function speak(text) {
+  await playElevenLabs(text);
+}
+
+async function startCall() {
+  callerName = document.getElementById('callerName').value.trim();
+  callerEmail = document.getElementById('callerEmail').value.trim();
+  callerPhone = document.getElementById('callerPhone').value.trim();
+
+  if (!callerName) { showError('Please enter your first name.'); return; }
+  if (!callerEmail || !callerEmail.includes('@')) { showError('Please enter a valid email address.'); return; }
+  if (!callerPhone) { showError('Please enter your phone number.'); return; }
+
+  log('Requesting mic access...');
+  try {
+    const test = await navigator.mediaDevices.getUserMedia({ audio: true });
+    test.getTracks().forEach(t => t.stop());
+    log('Mic access granted', 'ok');
+  } catch(e) {
+    showError('Microphone access required: ' + e.message);
+    return;
+  }
+
+  if (window.speechSynthesis) window.speechSynthesis.getVoices();
+
+  callActive = true;
+  conversationHistory = [];
+  setupScreen.classList.add('hidden');
+  callScreen.classList.add('active');
+  callStartTime = Date.now();
+  callTimer.classList.add('active');
+  timerInterval = setInterval(updateTimer, 1000);
+  updateTimer();
+
+  const greeting = `Hey ${callerName}, thanks for reaching out to Utah REIA. I'm going to ask you a few questions so I can point you toward the right people and resources — shouldn't take long. What's bringing you to REIA right now?`;
+  conversationHistory.push({ role: 'assistant', content: greeting });
+  addMessage('assistant', greeting);
+  await speak(greeting);
+}
+
+async function syncToGHL() {
+  if (!callerEmail && !callerPhone) return;
+  try {
+    log('Syncing to GHL...');
+    const summary = conversationHistory
+      .filter(m => m.role === 'assistant')
+      .map(m => m.content)
+      .join(' | ');
+
+    const payload = {
+      first_name: callerName,
+      email: callerEmail,
+      phone: callerPhone,
+      tags: ['Voice Agent Lead'],
+      customField: {
+        message: summary.substring(0, 2000)
+      }
+    };
+
+    const resp = await fetch(GHL_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (resp.ok) {
+      log('GHL sync successful', 'ok');
+    } else {
+      log('GHL sync failed: ' + resp.status, 'err');
+    }
+  } catch(e) {
+    log('GHL sync error: ' + e.message, 'err');
+  }
+}
+
+function endCall() {
+  callActive = false;
+  stopListening();
+  interruptAI();
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  callTimer.classList.remove('active');
+  syncToGHL();
+  callScreen.classList.remove('active');
+  setupScreen.classList.remove('hidden');
+  conversationHistory = [];
+  transcriptArea.innerHTML = '';
+  pendingTranscript = '';
+  interimMsgEl = null;
+  log('Call ended');
+}
+
+startBtn.addEventListener('click', startCall);
+endBtn.addEventListener('click', endCall);
+
+log('App loaded. Ready.', 'ok');
+log('Origin: ' + window.location.origin);
+</script>
+</body>
+</html>
