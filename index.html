@@ -258,6 +258,8 @@ let silenceTimer = null;
 let interimMsgEl = null;
 let pendingTranscript = '';
 let restartTimeout = null;
+let callerProfile = {};
+let matchesInjected = false;
 
 const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
 
@@ -366,7 +368,24 @@ WHAT UTAH REIA ACTUALLY HAS:
 - Home Depot member rebate and Rent Perfect access
 - Membership tiers from free event access through premium and platinum
 
-Do not invent resources that are not on this list.`;
+Do not invent resources that are not on this list.
+
+---
+
+PROFILE SIGNAL — REQUIRED:
+Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block at the end of your response (after your spoken text). Emit it exactly ONCE — do not repeat it on subsequent turns.
+
+[PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
+
+Field rules:
+- role: "investor" or "vendor"
+- stage: one of exploring | getting_started | active | experienced | veteran
+- strategies: array using snake_case — buy_and_hold, fix_and_flip, wholesaling, brrrr, short_term_rental, creative_financing, notes_and_lending, commercial, development, land, passive_investing, raising_capital, tax_deeds, out_of_state
+- blocker: one of capital | deals | team | education | numbers | connections
+- goals: brief plain-text summary of what they want to achieve
+- summary: one sentence about this caller for the record
+
+After you emit [PROFILE:...], the system will automatically provide you with real matching vendors and peer investors from the Utah REIA database. When that context arrives, reference those specific people and businesses by name in your response — do not make up names.`;
 
 
 function log(msg, type) {
@@ -556,8 +575,22 @@ async function sendToAI(userText) {
         intakeFormEl.classList.add('show');
       }
 
-      // Strip the metadata tags before displaying/speaking
-      const spokenText = fullText.replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim();
+      // Parse PROFILE signal — triggers Supabase match query
+      const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
+      if (profileMatch && !matchesInjected) {
+        try {
+          callerProfile = JSON.parse(profileMatch[1]);
+          log('Profile signal received — fetching matches...');
+          fetchAndInjectMatches(callerProfile); // async, non-blocking
+        } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
+      }
+
+      // Strip all metadata tags before displaying/speaking
+      const spokenText = fullText
+        .replace(/\[INTAKE:.*?\]/s, '')
+        .replace('[INTAKE_CONFIRMED]', '')
+        .replace(/\[PROFILE:.*?\]/s, '')
+        .trim();
 
       conversationHistory.push({ role: 'assistant', content: fullText });
       addMessage('assistant', spokenText);
@@ -845,38 +878,104 @@ async function startCall() {
   await speak(greeting);
 }
 
+async function fetchAndInjectMatches(profile) {
+  try {
+    const resp = await fetch('/api/supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'matches', profile })
+    });
+    if (!resp.ok) { log('Match fetch failed: ' + resp.status, 'err'); return; }
+    const { vendors = [], investors = [] } = await resp.json();
+
+    if (!vendors.length && !investors.length) {
+      log('No matches found in database');
+      return;
+    }
+
+    matchesInjected = true;
+    log('Matches found — injecting into conversation', 'ok');
+
+    let context = '[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';
+
+    if (vendors.length) {
+      context += '\nMatching vendors/service providers:\n';
+      vendors.forEach(v => {
+        const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
+        const services = (v.service_types || []).join(', ');
+        context += `- ${name}${services ? ' (' + services + ')' : ''}\n`;
+      });
+    }
+
+    if (investors.length) {
+      context += '\nPeer investors to connect with:\n';
+      investors.forEach(i => {
+        const name = i.contacts?.full_name || 'Unknown';
+        const strats = (i.investing_types || []).join(', ');
+        context += `- ${name} — ${i.where_in_journey}${strats ? ', ' + strats : ''}\n`;
+      });
+    }
+
+    conversationHistory.push({ role: 'user', content: context });
+  } catch(e) {
+    log('Match inject error: ' + e.message, 'err');
+  }
+}
+
 async function syncToGHL() {
   if (!callerEmail && !callerPhone) return;
   try {
     log('Syncing to GHL...');
+
     const summary = conversationHistory
       .filter(m => m.role === 'assistant')
-      .map(m => m.content)
+      .map(m => m.content.replace(/\[PROFILE:.*?\]/s, '').replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim())
       .join(' | ');
 
-    const payload = {
-      first_name: callerName,
+    // Build tags from profile
+    const tags = ['Voice Agent Lead'];
+    if (callerProfile.stage)  tags.push(`Stage: ${callerProfile.stage}`);
+    if (callerProfile.role)   tags.push(`Role: ${callerProfile.role}`);
+    if (callerProfile.blocker) tags.push(`Blocker: ${callerProfile.blocker}`);
+    (callerProfile.strategies || []).forEach(s => tags.push(`Strategy: ${s}`));
+
+    const ghlPayload = {
+      first_name: callerName.split(' ')[0] || callerName,
+      last_name: callerName.split(' ').slice(1).join(' ') || '',
       email: callerEmail,
       phone: callerPhone,
-      tags: ['Voice Agent Lead'],
+      tags,
       customField: {
-        message: summary.substring(0, 2000)
+        voice_agent_summary: summary.substring(0, 2000),
+        investing_stage: callerProfile.stage || '',
+        investing_strategies: (callerProfile.strategies || []).join(', '),
+        primary_blocker: callerProfile.blocker || '',
+        investor_goals: callerProfile.goals || '',
       }
     };
 
-    const resp = await fetch(GHL_WEBHOOK, {
+    const ghlResp = await fetch(GHL_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(ghlPayload)
     });
+    log(ghlResp.ok ? 'GHL sync successful' : 'GHL sync failed: ' + ghlResp.status, ghlResp.ok ? 'ok' : 'err');
 
-    if (resp.ok) {
-      log('GHL sync successful', 'ok');
-    } else {
-      log('GHL sync failed: ' + resp.status, 'err');
+    // Upsert to Supabase
+    if (callerEmail) {
+      const sbResp = await fetch('/api/supabase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'upsert',
+          contact: { name: callerName, email: callerEmail, phone: callerPhone },
+          profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) }
+        })
+      });
+      log(sbResp.ok ? 'Supabase upsert successful' : 'Supabase upsert failed: ' + sbResp.status, sbResp.ok ? 'ok' : 'err');
     }
   } catch(e) {
-    log('GHL sync error: ' + e.message, 'err');
+    log('Sync error: ' + e.message, 'err');
   }
 }
 
@@ -894,6 +993,7 @@ function endCall() {
   pendingTranscript = '';
   interimMsgEl = null;
   callerName = ''; callerEmail = ''; callerPhone = '';
+  callerProfile = {}; matchesInjected = false; intakeFormShown = false;
   intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
