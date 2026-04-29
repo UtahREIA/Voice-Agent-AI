@@ -97,6 +97,23 @@
 
   .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
 
+  /* Confirmation card */
+  .confirm-card{margin:0 24px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
+  .confirm-card.show{display:block}
+  .confirm-card-title{font-size:11px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+  .confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .confirm-row:last-child{margin-bottom:0}
+  .confirm-label{font-size:11px;color:var(--muted);width:52px;flex-shrink:0}
+  .confirm-input{flex:1;background:#0d1b2a;border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
+  .confirm-input:focus{outline:none;border-color:var(--cyan-dim)}
+  .confirm-input:disabled{opacity:.4;cursor:not-allowed}
+  .confirm-input.filled{border-color:rgba(34,211,238,.25)}
+  .confirm-actions{display:flex;gap:8px;margin-top:14px}
+  .confirm-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s}
+  .confirm-btn.yes{background:linear-gradient(135deg,var(--green-dim),var(--green));color:#052e12}
+  .confirm-btn.yes:hover{box-shadow:0 4px 12px rgba(74,222,128,.25)}
+  .confirm-btn.edit{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
+  .confirm-btn.edit:hover{border-color:var(--cyan-dim);color:var(--cyan)}
 
 </style>
 </head>
@@ -119,20 +136,8 @@
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
       </svg>
     </div>
-    <div class="setup-title">Before we start</div>
-    <div class="setup-sub">Fill in your details below so we can connect you with the right people and resources inside Utah REIA.</div>
-
-    <div class="api-input-wrap" style="margin-top:4px">
-      <label class="api-label">First Name <span style="color:var(--red);font-size:11px">required</span></label>
-      <input type="text" class="api-input" id="callerName" placeholder="Your first name" autocomplete="given-name" />
-
-      <label class="api-label" style="margin-top:14px">Email <span style="color:var(--red);font-size:11px">required</span></label>
-      <input type="email" class="api-input" id="callerEmail" placeholder="you@example.com" autocomplete="email" />
-
-      <label class="api-label" style="margin-top:14px">Phone Number <span style="color:var(--red);font-size:11px">required</span></label>
-      <input type="tel" class="api-input" id="callerPhone" placeholder="(801) 555-0100" autocomplete="tel" />
-    </div>
-
+    <div class="setup-title">Utah REIA Voice Assistant</div>
+    <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
     <button class="start-btn" id="startBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
@@ -143,6 +148,26 @@
 
   <div class="call-screen" id="callScreen">
     <div class="transcript-area" id="transcriptArea"></div>
+
+    <div class="confirm-card" id="confirmCard">
+      <div class="confirm-card-title">Just to confirm your details</div>
+      <div class="confirm-row">
+        <span class="confirm-label">Name</span>
+        <input type="text" class="confirm-input" id="confirmName" placeholder="—" disabled />
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-label">Email</span>
+        <input type="email" class="confirm-input" id="confirmEmail" placeholder="—" disabled />
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-label">Phone</span>
+        <input type="tel" class="confirm-input" id="confirmPhone" placeholder="—" disabled />
+      </div>
+      <div class="confirm-actions" id="confirmActions" style="display:none">
+        <button class="confirm-btn yes" id="confirmYesBtn">Looks correct</button>
+        <button class="confirm-btn edit" id="confirmEditBtn">Edit details</button>
+      </div>
+    </div>
     <div class="call-status">
       <div class="status-row">
         <div class="status-indicator" id="statusInd">
@@ -176,10 +201,20 @@ const callTimer = document.getElementById('callTimer');
 const timerText = document.getElementById('timerText');
 const errorBanner = document.getElementById('errorBanner');
 const debugLog = document.getElementById('debugLog');
+const confirmCard = document.getElementById('confirmCard');
+const confirmNameEl = document.getElementById('confirmName');
+const confirmEmailEl = document.getElementById('confirmEmail');
+const confirmPhoneEl = document.getElementById('confirmPhone');
+const confirmActions = document.getElementById('confirmActions');
+const confirmYesBtn = document.getElementById('confirmYesBtn');
+const confirmEditBtn = document.getElementById('confirmEditBtn');
 
 let callerName = '';
 let callerEmail = '';
 let callerPhone = '';
+let intakePhase = true;
+let intakeConfirmed = false;
+let awaitingConfirmation = false;
 let recognition = null;
 let callActive = false;
 let conversationHistory = [];
@@ -197,6 +232,26 @@ const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/
 const systemPrompt = `You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
 
 Utah REIA is not a motivational program. It is not a guru platform. It is a room of experienced investors thinking through real decisions in real time. That is the standard you hold in every sentence.
+
+---
+
+INTAKE PHASE — COLLECT CONTACT DETAILS FIRST:
+Before anything else, you must collect the caller's name, email address, and phone number. Do this naturally across three turns — one piece per turn. Do not ask for all three at once.
+
+Order: name first, then email, then phone number.
+
+When you have heard all three, read them back clearly in a single sentence and ask the caller to confirm. For example: "Just to confirm — your name is Sarah, email is sarah at gmail dot com, and phone is 801 555 0123. Does that look right?"
+
+CRITICAL — when you have extracted contact details from what the caller says, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
+[INTAKE:{"name":"...","email":"...","phone":"..."}]
+
+Rules for the JSON block:
+- Include it ONLY when you have newly extracted or updated one or more fields
+- Include all three fields every time you output the block, even if some are still empty strings
+- Use empty string "" for fields not yet collected
+- Phone numbers: extract digits only, format as collected
+- Email: transcribe exactly as spoken, correcting obvious spoken artifacts (e.g. "at" becomes "@", "dot" becomes ".")
+- Once all three are confirmed by the caller, include: [INTAKE_CONFIRMED]
 
 ---
 
@@ -399,7 +454,7 @@ async function sendToAI(userText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 180,
+        max_tokens: 280,
         system: systemPrompt,
         messages: conversationHistory
       })
@@ -411,10 +466,48 @@ async function sendToAI(userText) {
     const data = await resp.json();
     log('Claude response OK', 'ok');
     if (data.content && data.content[0]) {
-      const aiText = data.content[0].text;
-      conversationHistory.push({ role: 'assistant', content: aiText });
-      addMessage('assistant', aiText);
-      await speak(aiText);
+      let fullText = data.content[0].text;
+
+      // Parse intake JSON if present
+      const intakeMatch = fullText.match(/\[INTAKE:({.*?})\]/s);
+      if (intakeMatch) {
+        try {
+          const parsed = JSON.parse(intakeMatch[1]);
+          if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
+          if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
+          if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
+          confirmCard.classList.add('show');
+        } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
+      }
+
+      // Check for confirmation signal
+      if (fullText.includes('[INTAKE_CONFIRMED]')) {
+        intakeConfirmed = true;
+        intakePhase = false;
+        callerName = confirmNameEl.value.trim() || callerName;
+        callerEmail = confirmEmailEl.value.trim() || callerEmail;
+        callerPhone = confirmPhoneEl.value.trim() || callerPhone;
+        confirmActions.style.display = 'none';
+        awaitingConfirmation = false;
+        log('Intake confirmed', 'ok');
+      }
+
+      // Show confirm buttons when all three collected and not yet confirmed
+      if (callerName && callerEmail && callerPhone && !intakeConfirmed && !awaitingConfirmation) {
+        awaitingConfirmation = true;
+        confirmActions.style.display = 'flex';
+        // Disable inputs until user decides
+        confirmNameEl.disabled = true;
+        confirmEmailEl.disabled = true;
+        confirmPhoneEl.disabled = true;
+      }
+
+      // Strip the metadata tags before displaying/speaking
+      const spokenText = fullText.replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim();
+
+      conversationHistory.push({ role: 'assistant', content: fullText });
+      addMessage('assistant', spokenText);
+      await speak(spokenText);
     } else {
       throw new Error('No response content from AI');
     }
@@ -575,7 +668,10 @@ async function startCall() {
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
 
-  const greeting = `Hey ${callerName}, thanks for reaching out to Utah REIA. I'm going to ask you a few questions so I can point you toward the right people and resources — shouldn't take long. What's bringing you to REIA right now?`;
+  const greeting = `Hey, thanks for reaching out to Utah REIA. Before we get into it, what's your name?`;
+  intakePhase = true;
+  intakeConfirmed = false;
+  awaitingConfirmation = false;
   conversationHistory.push({ role: 'assistant', content: greeting });
   addMessage('assistant', greeting);
   await speak(greeting);
@@ -629,11 +725,56 @@ function endCall() {
   transcriptArea.innerHTML = '';
   pendingTranscript = '';
   interimMsgEl = null;
+  callerName = ''; callerEmail = ''; callerPhone = '';
+  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false;
+  confirmCard.classList.remove('show');
+  confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
+  confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
+  confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
+  confirmActions.style.display = 'none';
   log('Call ended');
 }
 
 startBtn.addEventListener('click', startCall);
 endBtn.addEventListener('click', endCall);
+
+confirmYesBtn.addEventListener('click', () => {
+  callerName = confirmNameEl.value.trim() || callerName;
+  callerEmail = confirmEmailEl.value.trim() || callerEmail;
+  callerPhone = confirmPhoneEl.value.trim() || callerPhone;
+  intakeConfirmed = true;
+  intakePhase = false;
+  awaitingConfirmation = false;
+  confirmActions.style.display = 'none';
+  confirmNameEl.disabled = true;
+  confirmEmailEl.disabled = true;
+  confirmPhoneEl.disabled = true;
+  log('Caller confirmed details via button', 'ok');
+  // Tell AI details are confirmed so it continues
+  sendToAI('Yes, those details are correct.');
+});
+
+confirmEditBtn.addEventListener('click', () => {
+  confirmNameEl.disabled = false;
+  confirmEmailEl.disabled = false;
+  confirmPhoneEl.disabled = false;
+  confirmNameEl.focus();
+  confirmActions.innerHTML = '<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';
+  document.getElementById('confirmSaveBtn').addEventListener('click', () => {
+    callerName = confirmNameEl.value.trim();
+    callerEmail = confirmEmailEl.value.trim();
+    callerPhone = confirmPhoneEl.value.trim();
+    confirmNameEl.disabled = true;
+    confirmEmailEl.disabled = true;
+    confirmPhoneEl.disabled = true;
+    intakeConfirmed = true;
+    intakePhase = false;
+    awaitingConfirmation = false;
+    confirmActions.style.display = 'none';
+    log('Caller saved corrected details', 'ok');
+    sendToAI(`I've updated my details. Name is ${callerName}, email is ${callerEmail}, phone is ${callerPhone}. Those are correct now.`);
+  });
+});
 
 log('App loaded. Ready.', 'ok');
 log('Origin: ' + window.location.origin);
