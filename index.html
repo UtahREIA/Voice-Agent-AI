@@ -832,6 +832,8 @@ async function startCall() {
   conversationHistory.push({ role: 'assistant', content: greeting });
   addMessage('assistant', greeting);
   await speak(greeting);
+  intakeFormShown = true;
+  intakeFormEl.classList.add('show');
 }
 
 async function syncToGHL() {
