@@ -1,15 +1,16 @@
-exports.handler = async function(event) {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+export default async (req) => {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  const ANTHROPIC_KEY = Netlify.env.get('ANTHROPIC_API_KEY');
   if (!ANTHROPIC_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Anthropic API key not configured.' }) };
+    return new Response(JSON.stringify({ error: 'Anthropic API key not configured.' }), { status: 500 });
   }
 
   try {
-    const body = JSON.parse(event.body);
+    const body = await req.json();
+
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -21,12 +22,12 @@ exports.handler = async function(event) {
     });
 
     const data = await resp.json();
-    return {
-      statusCode: resp.status,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    };
-  } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
+    return new Response(JSON.stringify(data), {
+      status: resp.status,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 };

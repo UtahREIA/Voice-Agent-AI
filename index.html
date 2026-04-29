@@ -412,7 +412,6 @@ async function playElevenLabs(text) {
     }
     log('ElevenLabs response OK', 'ok');
     const arrayBuffer = await resp.arrayBuffer();
-
     // Use AudioContext instead of Audio element to avoid Chrome mic conflict
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const decoded = await audioCtx.decodeAudioData(arrayBuffer);
@@ -670,7 +669,7 @@ async function transcribeAndSend(blob) {
 
     const resp = await fetch('/.netlify/functions/transcribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'audio/webm' },
       body: arrayBuffer
     });
 

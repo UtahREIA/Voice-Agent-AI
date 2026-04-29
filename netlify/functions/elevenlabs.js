@@ -1,17 +1,18 @@
-exports.handler = async function(event) {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+export default async (req) => {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
-  const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
-  const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
+  const ELEVEN_KEY = Netlify.env.get('ELEVENLABS_API_KEY');
+  const ELEVEN_VOICE_ID = Netlify.env.get('ELEVENLABS_VOICE_ID');
 
   if (!ELEVEN_KEY || !ELEVEN_VOICE_ID) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'ElevenLabs not configured.' }) };
+    return new Response(JSON.stringify({ error: 'ElevenLabs not configured.' }), { status: 500 });
   }
 
   try {
-    const body = JSON.parse(event.body);
+    const body = await req.json();
+
     const resp = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}/stream`,
       {
@@ -31,19 +32,16 @@ exports.handler = async function(event) {
 
     if (!resp.ok) {
       const err = await resp.text();
-      return { statusCode: resp.status, body: JSON.stringify({ error: err }) };
+      return new Response(JSON.stringify({ error: err }), { status: resp.status });
     }
 
     const audioBuffer = await resp.arrayBuffer();
-    const base64Audio = Buffer.from(audioBuffer).toString('base64');
+    return new Response(audioBuffer, {
+      status: 200,
+      headers: { 'Content-Type': 'audio/mpeg' }
+    });
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'audio/mpeg' },
-      body: base64Audio,
-      isBase64Encoded: true
-    };
-  } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 };
