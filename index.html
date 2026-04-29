@@ -590,6 +590,7 @@ let analyser = null;
 let vadInterval = null;
 let silenceCount = 0;
 let speechDetected = false;
+let suppressRestart = false;
 const SILENCE_THRESHOLD = 20;
 const SPEECH_THRESHOLD = 8;  // lower bar — just needs to exceed background noise
 const SILENCE_FRAMES = 20;
@@ -630,6 +631,8 @@ function startListening() {
       isRecording = false;
       stopVAD();
       if (!callActive) return;
+
+      if (suppressRestart) { suppressRestart = false; return; } // intentional stop — don't restart
 
       if (!speechDetected) {
         // No voice activity — restart quietly without hitting Whisper
@@ -755,6 +758,7 @@ async function transcribeAndSend(blob) {
 }
 
 function stopListening() {
+  suppressRestart = true; // prevent onstop from auto-restarting
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
   stopVAD();
@@ -910,10 +914,7 @@ confirmYesBtn.addEventListener('click', () => {
   intakeConfirmed = true;
   intakePhase = false;
   awaitingConfirmation = false;
-  confirmActions.style.display = 'none';
-  confirmNameEl.disabled = true;
-  confirmEmailEl.disabled = true;
-  confirmPhoneEl.disabled = true;
+  confirmCard.classList.remove('show');
   log('Caller confirmed details', 'ok');
   const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
   addMessage('user', msg);
@@ -931,13 +932,10 @@ confirmEditBtn.addEventListener('click', () => {
     callerName = confirmNameEl.value.trim();
     callerEmail = confirmEmailEl.value.trim();
     callerPhone = confirmPhoneEl.value.trim();
-    confirmNameEl.disabled = true;
-    confirmEmailEl.disabled = true;
-    confirmPhoneEl.disabled = true;
     intakeConfirmed = true;
     intakePhase = false;
     awaitingConfirmation = false;
-    confirmActions.style.display = 'none';
+    confirmCard.classList.remove('show');
     log('Caller saved corrected details', 'ok');
     const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
     addMessage('user', msg);
