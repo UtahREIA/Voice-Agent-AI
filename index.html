@@ -639,14 +639,6 @@ async function speak(text) {
 }
 
 async function startCall() {
-  callerName = document.getElementById('callerName').value.trim();
-  callerEmail = document.getElementById('callerEmail').value.trim();
-  callerPhone = document.getElementById('callerPhone').value.trim();
-
-  if (!callerName) { showError('Please enter your first name.'); return; }
-  if (!callerEmail || !callerEmail.includes('@')) { showError('Please enter a valid email address.'); return; }
-  if (!callerPhone) { showError('Please enter your phone number.'); return; }
-
   log('Requesting mic access...');
   try {
     const test = await navigator.mediaDevices.getUserMedia({ audio: true });
