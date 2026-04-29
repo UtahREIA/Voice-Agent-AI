@@ -524,7 +524,7 @@ async function sendToAI(userText) {
           if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
           if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
           if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
-          confirmCard.classList.add('show');
+          if (!intakeConfirmed) confirmCard.classList.add('show');
         } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
       }
 
@@ -610,7 +610,8 @@ async function initMicStream() {
 }
 
 function startListening() {
-  if (!callActive || isSpeaking || isRecording) return;
+  if (!callActive || isSpeaking) return;
+  if (isRecording) { stopRecording(); return; } // stale recording — stop it, onstop will restart
   if (!micStream) { log('No mic stream', 'err'); return; }
 
   try {
@@ -636,14 +637,14 @@ function startListening() {
 
       if (!speechDetected) {
         // No voice activity — restart quietly without hitting Whisper
-        if (callActive && !isSpeaking) setTimeout(startListening, 200);
+        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
         return;
       }
 
       const blob = new Blob(audioChunks, { type: mimeType });
       if (blob.size < 1000) {
         log('Audio too short, restarting...');
-        if (callActive && !isSpeaking) setTimeout(startListening, 200);
+        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
         return;
       }
 
@@ -741,7 +742,7 @@ async function transcribeAndSend(blob) {
 
     if (!text || text.length < 2) {
       log('Empty transcript — restarting');
-      if (callActive && !isSpeaking) setTimeout(startListening, 200);
+      if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
       return;
     }
 
@@ -753,7 +754,7 @@ async function transcribeAndSend(blob) {
 
   } catch(e) {
     log('Transcription error: ' + e.message, 'err');
-    if (callActive && !isSpeaking) setTimeout(startListening, 500);
+    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 500);
   }
 }
 
