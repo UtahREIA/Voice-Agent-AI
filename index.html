@@ -431,10 +431,12 @@ async function playElevenLabs(text) {
         log('ElevenLabs audio ended — waiting to open mic...');
         if (callActive) {
           setTimeout(() => {
-            log('Opening mic now...');
-            setStatus('listening', 'Listening...');
-            startListening();
-          }, 800);
+            if (callActive && !isSpeaking) {
+              log('Opening mic now...');
+              setStatus('listening', 'Listening...');
+              startListening();
+            }
+          }, 1500);
         }
         resolve();
       };
@@ -548,8 +550,8 @@ let audioContext = null;
 let analyser = null;
 let vadInterval = null;
 let silenceCount = 0;
-const SILENCE_THRESHOLD = 8;   // amplitude threshold (0-255)
-const SILENCE_FRAMES = 18;     // ~1.8 seconds of silence at 100ms intervals
+const SILENCE_THRESHOLD = 20;  // higher threshold to ignore residual audio bleed
+const SILENCE_FRAMES = 20;     // ~2 seconds of silence
 
 async function initMicStream() {
   if (micStream) return true;
@@ -602,10 +604,15 @@ function startListening() {
 
     mediaRecorder.start(100); // collect chunks every 100ms
     isRecording = true;
+    audioChunks = []; // clear any chunks collected during drain
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    startVAD();
+    // Short drain — discard first 500ms to flush any residual speaker audio
+    setTimeout(() => {
+      audioChunks = [];
+      startVAD();
+    }, 500);
   } catch(e) {
     log('MediaRecorder error: ' + e.message, 'err');
   }
