@@ -1,17 +1,11 @@
+
+import formidable from 'formidable';
+import fs from 'fs';
 export const config = {
   api: {
-    bodyParser: false  // Required — we need raw binary body for audio
+    bodyParser: false // Required for formidable
   }
 };
-
-function getRawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -19,10 +13,17 @@ export default async function handler(req, res) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OpenAI API key not configured.' });
 
-  try {
-    const audioBuffer = await getRawBody(req);
-    console.log('Audio buffer received:', audioBuffer.length, 'bytes');
-
+  const form = new formidable.IncomingForm();
+  form.parse(req, async (err, fields, files) => {
+    if (err) {
+      console.error('Form parse error:', err);
+      return res.status(400).json({ error: 'Form parse error: ' + err.message });
+    }
+    const file = files.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const audioBuffer = await fs.promises.readFile(file.filepath);
     if (audioBuffer.length < 100) {
       return res.status(400).json({ error: 'Audio too small: ' + audioBuffer.length + ' bytes' });
     }
@@ -61,8 +62,5 @@ export default async function handler(req, res) {
     if (!resp.ok) return res.status(resp.status).json({ error: JSON.stringify(result) });
 
     return res.status(200).json({ text: result.text || '' });
-  } catch(e) {
-    console.error('Transcribe error:', e.message);
-    return res.status(500).json({ error: e.message });
-  }
+  });
 }

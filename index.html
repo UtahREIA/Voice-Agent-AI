@@ -665,12 +665,12 @@ function stopRecording() {
 async function transcribeAndSend(blob) {
   try {
     log('Sending audio for transcription — size: ' + blob.size + ' bytes');
-    const arrayBuffer = await blob.arrayBuffer();
+    const formData = new FormData();
+    formData.append('file', blob, 'audio.webm');
 
     const resp = await fetch('/api/transcribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'audio/webm' },
-      body: arrayBuffer
+      body: formData
     });
 
     if (!resp.ok) {
