@@ -759,7 +759,8 @@ async function transcribeAndSend(blob) {
 }
 
 function stopListening() {
-  suppressRestart = true; // prevent onstop from auto-restarting
+  // Only suppress onstop auto-restart if there's actually a live recording to stop
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') suppressRestart = true;
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
   stopVAD();
