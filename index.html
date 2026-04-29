@@ -666,6 +666,7 @@ function startListening() {
 }
 
 function startVAD() {
+  stopVAD(); // kill any orphaned interval before creating a new one
   if (!micStream) return;
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(micStream);
@@ -681,6 +682,7 @@ function startVAD() {
       stopVAD();
       return;
     }
+    if (!analyser) return; // guard against late-firing intervals
     analyser.getByteTimeDomainData(dataArray);
     const amplitude = Math.max(...dataArray.map(v => Math.abs(v - 128)));
 
