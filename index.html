@@ -412,31 +412,34 @@ async function playElevenLabs(text) {
       throw new Error('ElevenLabs proxy ' + resp.status + ': ' + errTxt.substring(0, 200));
     }
     log('ElevenLabs response OK', 'ok');
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    currentAudio = new Audio(url);
-    currentAudio.onended = () => {
-      isSpeaking = false;
-      currentAudio = null;
-      URL.revokeObjectURL(url);
-      if (callActive) {
-        setTimeout(() => {
-          setStatus('listening', 'Listening...');
-          startListening();
-        }, 300);
-      }
-    };
-    currentAudio.onerror = () => {
-      isSpeaking = false;
-      currentAudio = null;
-      if (callActive) {
-        setTimeout(() => {
-          setStatus('listening', 'Listening...');
-          startListening();
-        }, 300);
-      }
-    };
-    await currentAudio.play();
+    const arrayBuffer = await resp.arrayBuffer();
+
+    // Use AudioContext instead of Audio element to avoid Chrome mic conflict
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const source = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(audioCtx.destination);
+
+    // Store a way to interrupt if needed
+    currentAudio = { pause: () => { try { source.stop(); audioCtx.close(); } catch(e){} }, currentTime: 0 };
+
+    await new Promise((resolve) => {
+      source.onended = () => {
+        isSpeaking = false;
+        currentAudio = null;
+        audioCtx.close();
+        if (callActive) {
+          setTimeout(() => {
+            setStatus('listening', 'Listening...');
+            startListening();
+          }, 300);
+        }
+        resolve();
+      };
+      source.start(0);
+    });
+
   } catch (e) {
     isSpeaking = false;
     log('ElevenLabs error — falling back to browser TTS: ' + e.message, 'err');
@@ -446,8 +449,7 @@ async function playElevenLabs(text) {
 
 function interruptAI() {
   if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
+    try { currentAudio.pause(); } catch(e) {}
     currentAudio = null;
   }
   isSpeaking = false;
