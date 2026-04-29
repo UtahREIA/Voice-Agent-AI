@@ -97,6 +97,15 @@
 
   .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
 
+  /* Intake form */
+  .intake-form{margin:0 24px 16px;background:var(--surface);border:1px solid var(--cyan-dim);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
+  .intake-form.show{display:block}
+  .intake-form-title{font-size:13.5px;font-weight:600;color:#fff;margin-bottom:4px}
+  .intake-form-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6}
+  .intake-submit-btn{width:100%;margin-top:14px;padding:10px;border-radius:8px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border:none;color:#0d1b2a;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
+  .intake-submit-btn:hover{box-shadow:0 4px 14px rgba(34,211,238,.3)}
+  .intake-submit-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+
   /* Confirmation card */
   .confirm-card{margin:0 24px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
   .confirm-card.show{display:block}
@@ -148,6 +157,24 @@
 
   <div class="call-screen" id="callScreen">
     <div class="transcript-area" id="transcriptArea"></div>
+
+    <div class="intake-form" id="intakeForm">
+      <div class="intake-form-title">Please enter your details below</div>
+      <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
+      <div class="confirm-row">
+        <span class="confirm-label">Name</span>
+        <input type="text" class="confirm-input" id="intakeName" placeholder="Full name" autocomplete="name" />
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-label">Email</span>
+        <input type="email" class="confirm-input" id="intakeEmail" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-label">Phone</span>
+        <input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" />
+      </div>
+      <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
+    </div>
 
     <div class="confirm-card" id="confirmCard">
       <div class="confirm-card-title">Just to confirm your details</div>
@@ -208,6 +235,11 @@ const confirmPhoneEl = document.getElementById('confirmPhone');
 const confirmActions = document.getElementById('confirmActions');
 const confirmYesBtn = document.getElementById('confirmYesBtn');
 const confirmEditBtn = document.getElementById('confirmEditBtn');
+const intakeFormEl = document.getElementById('intakeForm');
+const intakeNameInput = document.getElementById('intakeName');
+const intakeEmailInput = document.getElementById('intakeEmail');
+const intakePhoneInput = document.getElementById('intakePhone');
+const intakeSubmitBtn = document.getElementById('intakeSubmitBtn');
 
 let callerName = '';
 let callerEmail = '';
@@ -215,6 +247,7 @@ let callerPhone = '';
 let intakePhase = true;
 let intakeConfirmed = false;
 let awaitingConfirmation = false;
+let intakeFormShown = false;
 let callActive = false;
 let conversationHistory = [];
 let currentAudio = null;
@@ -514,6 +547,12 @@ async function sendToAI(userText) {
         confirmNameEl.disabled = true;
         confirmEmailEl.disabled = true;
         confirmPhoneEl.disabled = true;
+      }
+
+      // Show intake form after the first AI message (welcome/name-request)
+      if (intakePhase && !intakeFormShown && !intakeConfirmed) {
+        intakeFormShown = true;
+        intakeFormEl.classList.add('show');
       }
 
       // Strip the metadata tags before displaying/speaking
@@ -880,6 +919,33 @@ confirmEditBtn.addEventListener('click', () => {
     log('Caller saved corrected details', 'ok');
     sendToAI(`I've updated my details. Name is ${callerName}, email is ${callerEmail}, phone is ${callerPhone}. Those are correct now.`);
   });
+});
+
+intakeSubmitBtn.addEventListener('click', async () => {
+  const name = intakeNameInput.value.trim();
+  const email = intakeEmailInput.value.trim();
+  const phone = intakePhoneInput.value.trim();
+  if (!name || !email || !phone) {
+    intakeNameInput.style.borderColor = name ? '' : 'var(--red)';
+    intakeEmailInput.style.borderColor = email ? '' : 'var(--red)';
+    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red)';
+    return;
+  }
+  intakeSubmitBtn.disabled = true;
+  intakeFormEl.classList.remove('show');
+
+  // Pre-fill the confirm card
+  callerName = name; callerEmail = email; callerPhone = phone;
+  confirmNameEl.value = name;   confirmNameEl.classList.add('filled');
+  confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
+  confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
+  confirmCard.classList.add('show');
+
+  // Inject as a user turn so the AI can acknowledge and continue
+  const msg = `My name is ${name}, my email is ${email}, and my phone number is ${phone}.`;
+  addMessage('user', msg);
+  stopListening();
+  await sendToAI(msg);
 });
 
 log('App loaded. Ready.', 'ok');
