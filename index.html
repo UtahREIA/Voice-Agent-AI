@@ -607,9 +607,9 @@ function startListening() {
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    // Short drain — discard first 500ms to flush any residual speaker audio
+    // Short drain — discard first 500ms of audio but keep chunk[0] (WebM init header)
     setTimeout(() => {
-      audioChunks = [];
+      audioChunks = audioChunks.slice(0, 1);
       startVAD();
     }, 500);
   } catch(e) {
