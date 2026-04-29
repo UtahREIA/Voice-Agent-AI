@@ -825,15 +825,16 @@ async function startCall() {
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
 
-  const greeting = `Hey, welcome to Utah REIA. Please enter your name, email address, and phone number in the form below so we can get started.`;
   intakePhase = true;
   intakeConfirmed = false;
   awaitingConfirmation = false;
+  intakeFormShown = true;
+  intakeFormEl.classList.add('show');
+
+  const greeting = `Hey, welcome to Utah REIA. Please enter your name, email address, and phone number in the form below so we can get started.`;
   conversationHistory.push({ role: 'assistant', content: greeting });
   addMessage('assistant', greeting);
   await speak(greeting);
-  intakeFormShown = true;
-  intakeFormEl.classList.add('show');
 }
 
 async function syncToGHL() {
