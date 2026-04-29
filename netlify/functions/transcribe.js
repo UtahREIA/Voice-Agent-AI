@@ -11,9 +11,22 @@ exports.handler = async function(event) {
   }
 
   try {
-    // Body arrives as base64 string sent from the browser
-    const base64Audio = event.isBase64Encoded ? event.body : event.body;
-    const audioBuffer = Buffer.from(base64Audio, 'base64');
+    // Netlify may or may not base64-encode the body depending on content type
+    // Always decode safely — if it looks like base64, treat it as base64
+    let audioBuffer;
+    if (event.isBase64Encoded) {
+      audioBuffer = Buffer.from(event.body, 'base64');
+    } else {
+      // Body came as raw string — encode it ourselves
+      audioBuffer = Buffer.from(event.body, 'binary');
+    }
+
+    // Log size for debugging
+    console.log('Audio buffer size:', audioBuffer.length, 'isBase64Encoded:', event.isBase64Encoded);
+
+    if (audioBuffer.length < 100) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Audio buffer too small: ' + audioBuffer.length + ' bytes' }) };
+    }
 
     const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
 
@@ -25,11 +38,9 @@ exports.handler = async function(event) {
 
     const tailPart = Buffer.from(
       `\r\n--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="model"\r\n\r\n` +
-      `whisper-1` +
+      `Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1` +
       `\r\n--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="language"\r\n\r\n` +
-      `en` +
+      `Content-Disposition: form-data; name="language"\r\n\r\nen` +
       `\r\n--${boundary}--\r\n`
     );
 
@@ -54,6 +65,8 @@ exports.handler = async function(event) {
       req.write(body);
       req.end();
     });
+
+    console.log('OpenAI response status:', result.status, 'body:', result.body.substring(0, 300));
 
     if (result.status !== 200) {
       return { statusCode: result.status, body: JSON.stringify({ error: result.body }) };

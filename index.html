@@ -665,16 +665,13 @@ function stopRecording() {
 
 async function transcribeAndSend(blob) {
   try {
+    log('Sending audio for transcription — size: ' + blob.size + ' bytes');
     const arrayBuffer = await blob.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    let binary = '';
-    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-    const base64 = btoa(binary);
 
     const resp = await fetch('/.netlify/functions/transcribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
-      body: base64
+      body: arrayBuffer
     });
 
     if (!resp.ok) {
