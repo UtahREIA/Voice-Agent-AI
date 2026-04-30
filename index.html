@@ -703,6 +703,11 @@ function startVAD() {
     }
     const rms = Math.sqrt(sumSq / dataArray.length) * 100;
 
+    // TEMP DEBUG — log RMS every 10 frames so we can tune thresholds
+    if (typeof window._rmsLogCount === "undefined") window._rmsLogCount = 0;
+    window._rmsLogCount++;
+    if (window._rmsLogCount % 10 === 0) log("RMS: " + rms.toFixed(2) + " state:" + vadState);
+
     if (rms > SPEECH_THRESHOLD) {
       // Real voice detected
       vadSpeechDetected = true;
