@@ -17,7 +17,8 @@
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding:32px 20px 40px}
   .app{width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:640px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
   .header{background:linear-gradient(135deg,#1a2332,#0d1b2a);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
-  .logo{width:36px;height:36px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#0d1b2a}
+  .logo{width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .logo img{width:44px;height:44px;object-fit:contain}
   .header-text h1{font-size:15px;font-weight:600;color:#fff}
   .header-text p{font-size:11px;color:var(--muted);margin-top:1px}
   .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:13px;color:var(--green);display:none;align-items:center;gap:6px}
@@ -26,8 +27,9 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .setup-screen{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center}
   .setup-screen.hidden{display:none}
-  .setup-icon{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0f3a5c,#0a2640);border:2px solid var(--cyan-dim);display:flex;align-items:center;justify-content:center;margin-bottom:4px}
-  .setup-icon svg{width:32px;height:32px;color:var(--cyan)}
+  .setup-icon{width:120px;height:120px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  .setup-icon img{width:120px;height:120px;object-fit:contain}
+
   .setup-title{font-size:20px;font-weight:500;color:#fff}
   .setup-sub{font-size:13px;color:var(--muted);max-width:420px;line-height:1.6}
   .start-btn{background:linear-gradient(135deg,var(--green-dim),var(--green));border:none;color:#052e12;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px;transition:all .2s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif}
@@ -100,7 +102,7 @@
 <body>
 <div class="app">
   <div class="header">
-    <div class="logo">R</div>
+    <div class="logo"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
     <div class="header-text">
       <h1>Utah REIA Voice Agent</h1>
       <p>Real-time conversation</p>
@@ -109,11 +111,7 @@
   </div>
   <div class="error-banner" id="errorBanner"></div>
   <div class="setup-screen" id="setupScreen">
-    <div class="setup-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
-      </svg>
-    </div>
+    <div class="setup-icon"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
     <div class="setup-title">Utah REIA Voice Assistant</div>
     <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
     <button class="start-btn" id="startBtn">
@@ -570,7 +568,7 @@ async function sendToAI(userText) {
 //           END_OF_TURN_MS, move to ENDING.
 //
 // ENDING:   Sustained silence confirmed end of turn. Stop recording and
-//           send to Whisper. Only commits if MIN_SPEECH_MS of actual voice
+//           send to Whisper. Only commits if MIN_SPEECH_MS (80ms) of actual voice
 //           was recorded — prevents sending breath/noise as a turn.
 
 let mediaRecorder = null;
@@ -586,9 +584,9 @@ const NOISE_FLOOR      = 2;    // RMS below this = background noise, ignore
 const SPEECH_THRESHOLD = 6;    // RMS above this = real voice
 const SILENCE_THRESHOLD = 4;   // RMS below this after speech = silence/pause
 const SHORT_PAUSE_MS   = 700;  // ms before entering pausing state
-const END_OF_TURN_MS   = 1800; // ms of sustained silence = end of turn
+const END_OF_TURN_MS   = 1200; // ms of sustained silence = end of turn
 const IDLE_RESTART_MS  = 8000; // ms with no speech before quiet restart
-const MIN_SPEECH_MS    = 350;  // minimum speech to bother sending to Whisper
+const MIN_SPEECH_MS    = 80;   // minimum actual speech before sending to Whisper
 const VAD_INTERVAL_MS  = 80;   // sample interval in ms
 
 let vadState           = 'waiting';
@@ -665,11 +663,11 @@ function startListening() {
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    // Drain first 300ms — discard init noise but keep WebM header chunk
+    // Drain first 100ms only — less aggressive, preserves speech onset
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
       startVAD();
-    }, 300);
+    }, 100);
 
   } catch(e) {
     log('MediaRecorder error: ' + e.message, 'err');
