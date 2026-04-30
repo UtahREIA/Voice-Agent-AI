@@ -97,15 +97,6 @@
 
   .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
 
-  /* Intake form */
-  .intake-form{margin:0 24px 16px;background:var(--surface);border:1px solid var(--cyan-dim);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
-  .intake-form.show{display:block}
-  .intake-form-title{font-size:13.5px;font-weight:600;color:#fff;margin-bottom:4px}
-  .intake-form-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6}
-  .intake-submit-btn{width:100%;margin-top:14px;padding:10px;border-radius:8px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border:none;color:#0d1b2a;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .intake-submit-btn:hover{box-shadow:0 4px 14px rgba(34,211,238,.3)}
-  .intake-submit-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-
   /* Confirmation card */
   .confirm-card{margin:0 24px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
   .confirm-card.show{display:block}
@@ -157,24 +148,6 @@
 
   <div class="call-screen" id="callScreen">
     <div class="transcript-area" id="transcriptArea"></div>
-
-    <div class="intake-form" id="intakeForm">
-      <div class="intake-form-title">Please enter your details below</div>
-      <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
-      <div class="confirm-row">
-        <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="intakeName" placeholder="Full name" autocomplete="name" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="intakeEmail" placeholder="you@example.com" autocomplete="email" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" />
-      </div>
-      <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
-    </div>
 
     <div class="confirm-card" id="confirmCard">
       <div class="confirm-card-title">Just to confirm your details</div>
@@ -235,11 +208,6 @@ const confirmPhoneEl = document.getElementById('confirmPhone');
 const confirmActions = document.getElementById('confirmActions');
 const confirmYesBtn = document.getElementById('confirmYesBtn');
 const confirmEditBtn = document.getElementById('confirmEditBtn');
-const intakeFormEl = document.getElementById('intakeForm');
-const intakeNameInput = document.getElementById('intakeName');
-const intakeEmailInput = document.getElementById('intakeEmail');
-const intakePhoneInput = document.getElementById('intakePhone');
-const intakeSubmitBtn = document.getElementById('intakeSubmitBtn');
 
 let callerName = '';
 let callerEmail = '';
@@ -247,7 +215,6 @@ let callerPhone = '';
 let intakePhase = true;
 let intakeConfirmed = false;
 let awaitingConfirmation = false;
-let intakeFormShown = false;
 let callActive = false;
 let conversationHistory = [];
 let currentAudio = null;
@@ -258,8 +225,6 @@ let silenceTimer = null;
 let interimMsgEl = null;
 let pendingTranscript = '';
 let restartTimeout = null;
-let callerProfile = {};
-let matchesInjected = false;
 
 const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
 
@@ -269,24 +234,23 @@ Utah REIA is not a motivational program. It is not a guru platform. It is a room
 
 ---
 
-INTAKE PHASE — CONTACT DETAILS VIA FORM:
-A typed form is shown on screen the moment the call starts. The caller will enter their name, email address, and phone number by typing — you do NOT need to ask for these verbally.
+INTAKE PHASE — COLLECT CONTACT DETAILS FIRST:
+Before anything else, you must collect the caller's name, email address, and phone number. Do this naturally across three turns — one piece per turn. Do not ask for all three at once.
 
-Your FIRST message must be a brief warm welcome only (1–2 sentences). Tell them their details form is on screen and you'll get started once they've filled it in. Example: "Hey, welcome to Utah REIA — go ahead and fill in your details in the form on screen and we'll take it from there."
+Order: name first, then email, then phone number.
 
-When the caller submits the form, you will receive a message in this format:
-"My name is X, my email is Y, and my phone number is Z."
+When you have heard all three, read them back clearly in a single sentence and ask the caller to confirm. For example: "Just to confirm — your name is Sarah, email is sarah at gmail dot com, and phone is 801 555 0123. Does that look right?"
 
-At that point: acknowledge them by their first name, emit the INTAKE JSON block, then move immediately into the conversation. Do not ask them to repeat or confirm anything they just typed — it is already on screen.
-
-CRITICAL — when you receive the typed form submission, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
+CRITICAL — when you have extracted contact details from what the caller says, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
 [INTAKE:{"name":"...","email":"...","phone":"..."}]
 
 Rules for the JSON block:
 - Include it ONLY when you have newly extracted or updated one or more fields
 - Include all three fields every time you output the block, even if some are still empty strings
 - Use empty string "" for fields not yet collected
-- Once all three are present and the caller has not asked to change anything, also include: [INTAKE_CONFIRMED]
+- Phone numbers: extract digits only, format as collected
+- Email: transcribe exactly as spoken, correcting obvious spoken artifacts (e.g. "at" becomes "@", "dot" becomes ".")
+- Once all three are confirmed by the caller, include: [INTAKE_CONFIRMED]
 
 ---
 
@@ -368,24 +332,7 @@ WHAT UTAH REIA ACTUALLY HAS:
 - Home Depot member rebate and Rent Perfect access
 - Membership tiers from free event access through premium and platinum
 
-Do not invent resources that are not on this list.
-
----
-
-PROFILE SIGNAL — REQUIRED:
-Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block at the end of your response (after your spoken text). Emit it exactly ONCE — do not repeat it on subsequent turns.
-
-[PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
-
-Field rules:
-- role: "investor" or "vendor"
-- stage: one of exploring | getting_started | active | experienced | veteran
-- strategies: array using snake_case — buy_and_hold, fix_and_flip, wholesaling, brrrr, short_term_rental, creative_financing, notes_and_lending, commercial, development, land, passive_investing, raising_capital, tax_deeds, out_of_state
-- blocker: one of capital | deals | team | education | numbers | connections
-- goals: brief plain-text summary of what they want to achieve
-- summary: one sentence about this caller for the record
-
-After you emit [PROFILE:...], the system will automatically provide you with real matching vendors and peer investors from the Utah REIA database. When that context arrives, reference those specific people and businesses by name in your response — do not make up names.`;
+Do not invent resources that are not on this list.`;
 
 
 function log(msg, type) {
@@ -488,7 +435,7 @@ async function playElevenLabs(text) {
               setStatus('listening', 'Listening...');
               startListening();
             }
-          }, 400);
+          }, 1500);
         }
         resolve();
       };
@@ -543,7 +490,7 @@ async function sendToAI(userText) {
           if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
           if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
           if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
-          if (!intakeConfirmed) confirmCard.classList.add('show');
+          confirmCard.classList.add('show');
         } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
       }
 
@@ -569,28 +516,8 @@ async function sendToAI(userText) {
         confirmPhoneEl.disabled = true;
       }
 
-      // Show intake form after the first AI message (welcome/name-request)
-      if (intakePhase && !intakeFormShown && !intakeConfirmed) {
-        intakeFormShown = true;
-        intakeFormEl.classList.add('show');
-      }
-
-      // Parse PROFILE signal — triggers Supabase match query
-      const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
-      if (profileMatch && !matchesInjected) {
-        try {
-          callerProfile = JSON.parse(profileMatch[1]);
-          log('Profile signal received — fetching matches...');
-          fetchAndInjectMatches(callerProfile); // async, non-blocking
-        } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
-      }
-
-      // Strip all metadata tags before displaying/speaking
-      const spokenText = fullText
-        .replace(/\[INTAKE:.*?\]/s, '')
-        .replace('[INTAKE_CONFIRMED]', '')
-        .replace(/\[PROFILE:.*?\]/s, '')
-        .trim();
+      // Strip the metadata tags before displaying/speaking
+      const spokenText = fullText.replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim();
 
       conversationHistory.push({ role: 'assistant', content: fullText });
       addMessage('assistant', spokenText);
@@ -616,23 +543,38 @@ function handleSilence() {
 let mediaRecorder = null;
 let audioChunks = [];
 let micStream = null;
-let vadTimer = null;
 let isRecording = false;
 let audioContext = null;
 let analyser = null;
 let vadInterval = null;
-let silenceCount = 0;
-let speechDetected = false;
-let suppressRestart = false;
-const SILENCE_THRESHOLD = 20;
-const SPEECH_THRESHOLD = 8;
-const SILENCE_FRAMES = 10; // 1 second of silence to stop (was 2s)
+
+// SuperWhisper-style VAD — two-phase silence detection
+// Phase 1: short pause (thinking gap) — do NOT cut off
+// Phase 2: sustained silence after real speech — end the turn
+const NOISE_FLOOR        = 4;    // below this = background noise, ignore entirely
+const SPEECH_THRESHOLD   = 12;   // above this = actual voice detected
+const SILENCE_THRESHOLD  = 8;    // below this = silence (but above noise floor)
+const SHORT_PAUSE_MS     = 800;  // ms of silence before entering "pause" state
+const END_OF_TURN_MS     = 1800; // ms of silence to confirm end of turn
+const MIN_SPEECH_MS      = 400;  // minimum speech duration before we send to Whisper
+const VAD_INTERVAL_MS    = 80;   // how often we sample amplitude (ms)
+
+// VAD state
+let vadSpeechDetected   = false; // has any real speech been heard this session?
+let vadSpeechDuration   = 0;     // cumulative ms of detected speech
+let vadSilenceDuration  = 0;     // consecutive ms of silence since last speech
+let vadState            = 'waiting'; // waiting | speaking | pausing | ending
 
 async function initMicStream() {
   if (micStream) return true;
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 16000
+      }
     });
     log('Mic stream acquired', 'ok');
     return true;
@@ -643,13 +585,15 @@ async function initMicStream() {
 }
 
 function startListening() {
-  if (!callActive || isSpeaking) return;
-  if (isRecording) { stopRecording(); return; } // stale recording — stop it, onstop will restart
+  if (!callActive || isSpeaking || isRecording) return;
   if (!micStream) { log('No mic stream', 'err'); return; }
 
   try {
     audioChunks = [];
-    silenceCount = 0;
+    vadSpeechDetected = false;
+    vadSpeechDuration = 0;
+    vadSilenceDuration = 0;
+    vadState = 'waiting';
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
@@ -666,18 +610,17 @@ function startListening() {
       stopVAD();
       if (!callActive) return;
 
-      if (suppressRestart) { suppressRestart = false; return; } // intentional stop — don't restart
-
-      if (!speechDetected) {
-        // No voice activity — restart quietly without hitting Whisper
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
+      // If no real speech detected or too short, restart quietly
+      if (!vadSpeechDetected || vadSpeechDuration < MIN_SPEECH_MS) {
+        log('No speech detected — restarting mic');
+        if (callActive && !isSpeaking) setTimeout(startListening, 150);
         return;
       }
 
       const blob = new Blob(audioChunks, { type: mimeType });
-      if (blob.size < 1000) {
-        log('Audio too short, restarting...');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
+      if (blob.size < 1500) {
+        log('Audio too short — restarting');
+        if (callActive && !isSpeaking) setTimeout(startListening, 150);
         return;
       }
 
@@ -685,61 +628,107 @@ function startListening() {
       await transcribeAndSend(blob);
     };
 
-    mediaRecorder.start(100); // collect chunks every 100ms
+    mediaRecorder.start(80);
     isRecording = true;
-    audioChunks = []; // clear any chunks collected during drain
+    audioChunks = [];
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    // Short drain — discard first 200ms of audio but keep chunk[0] (WebM init header)
+    // Drain first 300ms — discard init header bleed, keep WebM init chunk
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
-      speechDetected = false;
       startVAD();
-    }, 200);
+    }, 300);
+
   } catch(e) {
     log('MediaRecorder error: ' + e.message, 'err');
   }
 }
 
 function startVAD() {
-  stopVAD(); // kill any orphaned interval before creating a new one
+  stopVAD();
   if (!micStream) return;
+
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(micStream);
   analyser = audioContext.createAnalyser();
-  analyser.fftSize = 512;
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.3;
   source.connect(analyser);
 
   const dataArray = new Uint8Array(analyser.fftSize);
-  silenceCount = 0;
 
   vadInterval = setInterval(() => {
-    if (!isRecording || !callActive || isSpeaking) {
-      stopVAD();
-      return;
-    }
-    if (!analyser) return; // guard against late-firing intervals
+    if (!isRecording || !callActive || isSpeaking) { stopVAD(); return; }
+    if (!analyser) return;
+
     analyser.getByteTimeDomainData(dataArray);
-    const amplitude = Math.max(...dataArray.map(v => Math.abs(v - 128)));
 
-    if (amplitude >= SPEECH_THRESHOLD) speechDetected = true;
+    // RMS amplitude — more accurate than peak for natural speech
+    let sumSq = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const v = (dataArray[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / dataArray.length) * 100;
 
-    if (amplitude < SILENCE_THRESHOLD) {
-      silenceCount++;
-      if (silenceCount >= SILENCE_FRAMES) {
-        if (!speechDetected) {
-          stopRecording(); // restart quietly — no voice heard
-        } else {
-          log('Silence detected — stopping recording');
+    if (rms > SPEECH_THRESHOLD) {
+      // Active speech
+      vadSpeechDetected = true;
+      vadSpeechDuration += VAD_INTERVAL_MS;
+      vadSilenceDuration = 0;
+      vadState = 'speaking';
+      setStatus('listening', 'Listening...');
+
+    } else if (rms > NOISE_FLOOR) {
+      // Low level — could be breath, trailing off, or thinking pause
+      vadSilenceDuration += VAD_INTERVAL_MS;
+
+      if (vadState === 'speaking') {
+        if (vadSilenceDuration >= SHORT_PAUSE_MS && vadSilenceDuration < END_OF_TURN_MS) {
+          vadState = 'pausing';
+          setStatus('listening', 'Listening...');
+        } else if (vadSilenceDuration >= END_OF_TURN_MS) {
+          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
+            log('End of turn detected (' + Math.round(vadSilenceDuration) + 'ms silence after speech)');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'pausing') {
+        if (vadSilenceDuration >= END_OF_TURN_MS) {
+          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
+            log('End of turn confirmed after pause');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'waiting') {
+        // Not yet spoken — if long silence, restart to avoid sending empty audio
+        if (vadSilenceDuration >= 8000) {
+          log('No speech for 8s — restarting mic quietly');
           stopRecording();
         }
       }
     } else {
-      silenceCount = 0;
-      if (!isSpeaking) setStatus('listening', 'Listening...');
+      // True background noise floor — only increment silence if speech was already heard
+      if (vadSpeechDetected) {
+        vadSilenceDuration += VAD_INTERVAL_MS;
+        if (vadState === 'speaking' || vadState === 'pausing') {
+          if (vadSilenceDuration >= END_OF_TURN_MS) {
+            log('End of turn — silence after speech');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'waiting') {
+        vadSilenceDuration += VAD_INTERVAL_MS;
+        if (vadSilenceDuration >= 8000) {
+          stopRecording(); // restart quietly
+        }
+      }
     }
-  }, 100);
+  }, VAD_INTERVAL_MS);
 }
 
 function stopVAD() {
@@ -757,12 +746,12 @@ function stopRecording() {
 async function transcribeAndSend(blob) {
   try {
     log('Sending audio for transcription — size: ' + blob.size + ' bytes');
-    const formData = new FormData();
-    formData.append('file', blob, 'audio.webm');
+    const arrayBuffer = await blob.arrayBuffer();
 
     const resp = await fetch('/api/transcribe', {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': 'audio/webm' },
+      body: arrayBuffer
     });
 
     if (!resp.ok) {
@@ -775,7 +764,7 @@ async function transcribeAndSend(blob) {
 
     if (!text || text.length < 2) {
       log('Empty transcript — restarting');
-      if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
+      if (callActive && !isSpeaking) setTimeout(startListening, 200);
       return;
     }
 
@@ -787,13 +776,11 @@ async function transcribeAndSend(blob) {
 
   } catch(e) {
     log('Transcription error: ' + e.message, 'err');
-    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 500);
+    if (callActive && !isSpeaking) setTimeout(startListening, 500);
   }
 }
 
 function stopListening() {
-  // Only suppress onstop auto-restart if there's actually a live recording to stop
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') suppressRestart = true;
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
   stopVAD();
@@ -866,116 +853,47 @@ async function startCall() {
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
 
+  const greeting = `Hey, thanks for reaching out to Utah REIA. Before we get into it, what's your name?`;
   intakePhase = true;
   intakeConfirmed = false;
   awaitingConfirmation = false;
-  intakeFormShown = true;
-  intakeFormEl.classList.add('show');
-
-  const greeting = `Hey, welcome to Utah REIA. Please enter your name, email address, and phone number in the form below so we can get started.`;
   conversationHistory.push({ role: 'assistant', content: greeting });
   addMessage('assistant', greeting);
   await speak(greeting);
-}
-
-async function fetchAndInjectMatches(profile) {
-  try {
-    const resp = await fetch('/api/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'matches', profile })
-    });
-    if (!resp.ok) { log('Match fetch failed: ' + resp.status, 'err'); return; }
-    const { vendors = [], investors = [] } = await resp.json();
-
-    if (!vendors.length && !investors.length) {
-      log('No matches found in database');
-      return;
-    }
-
-    matchesInjected = true;
-    log('Matches found — injecting into conversation', 'ok');
-
-    let context = '[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';
-
-    if (vendors.length) {
-      context += '\nMatching vendors/service providers:\n';
-      vendors.forEach(v => {
-        const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
-        const services = (v.service_types || []).join(', ');
-        context += `- ${name}${services ? ' (' + services + ')' : ''}\n`;
-      });
-    }
-
-    if (investors.length) {
-      context += '\nPeer investors to connect with:\n';
-      investors.forEach(i => {
-        const name = i.contacts?.full_name || 'Unknown';
-        const strats = (i.investing_types || []).join(', ');
-        context += `- ${name} — ${i.where_in_journey}${strats ? ', ' + strats : ''}\n`;
-      });
-    }
-
-    conversationHistory.push({ role: 'user', content: context });
-  } catch(e) {
-    log('Match inject error: ' + e.message, 'err');
-  }
 }
 
 async function syncToGHL() {
   if (!callerEmail && !callerPhone) return;
   try {
     log('Syncing to GHL...');
-
     const summary = conversationHistory
       .filter(m => m.role === 'assistant')
-      .map(m => m.content.replace(/\[PROFILE:.*?\]/s, '').replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim())
+      .map(m => m.content)
       .join(' | ');
 
-    // Build tags from profile
-    const tags = ['Voice Agent Lead'];
-    if (callerProfile.stage)  tags.push(`Stage: ${callerProfile.stage}`);
-    if (callerProfile.role)   tags.push(`Role: ${callerProfile.role}`);
-    if (callerProfile.blocker) tags.push(`Blocker: ${callerProfile.blocker}`);
-    (callerProfile.strategies || []).forEach(s => tags.push(`Strategy: ${s}`));
-
-    const ghlPayload = {
-      first_name: callerName.split(' ')[0] || callerName,
-      last_name: callerName.split(' ').slice(1).join(' ') || '',
+    const payload = {
+      first_name: callerName,
       email: callerEmail,
       phone: callerPhone,
-      tags,
+      tags: ['Voice Agent Lead'],
       customField: {
-        voice_agent_summary: summary.substring(0, 2000),
-        investing_stage: callerProfile.stage || '',
-        investing_strategies: (callerProfile.strategies || []).join(', '),
-        primary_blocker: callerProfile.blocker || '',
-        investor_goals: callerProfile.goals || '',
+        message: summary.substring(0, 2000)
       }
     };
 
-    const ghlResp = await fetch(GHL_WEBHOOK, {
+    const resp = await fetch(GHL_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ghlPayload)
+      body: JSON.stringify(payload)
     });
-    log(ghlResp.ok ? 'GHL sync successful' : 'GHL sync failed: ' + ghlResp.status, ghlResp.ok ? 'ok' : 'err');
 
-    // Upsert to Supabase
-    if (callerEmail) {
-      const sbResp = await fetch('/api/supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'upsert',
-          contact: { name: callerName, email: callerEmail, phone: callerPhone },
-          profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) }
-        })
-      });
-      log(sbResp.ok ? 'Supabase upsert successful' : 'Supabase upsert failed: ' + sbResp.status, sbResp.ok ? 'ok' : 'err');
+    if (resp.ok) {
+      log('GHL sync successful', 'ok');
+    } else {
+      log('GHL sync failed: ' + resp.status, 'err');
     }
   } catch(e) {
-    log('Sync error: ' + e.message, 'err');
+    log('GHL sync error: ' + e.message, 'err');
   }
 }
 
@@ -993,7 +911,6 @@ function endCall() {
   pendingTranscript = '';
   interimMsgEl = null;
   callerName = ''; callerEmail = ''; callerPhone = '';
-  callerProfile = {}; matchesInjected = false; intakeFormShown = false;
   intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
@@ -1008,7 +925,6 @@ function endCall() {
 startBtn.addEventListener('click', startCall);
 endBtn.addEventListener('click', endCall);
 
-// "Looks correct" — only fires AFTER the user has reviewed the confirm card
 confirmYesBtn.addEventListener('click', () => {
   callerName = confirmNameEl.value.trim() || callerName;
   callerEmail = confirmEmailEl.value.trim() || callerEmail;
@@ -1016,12 +932,13 @@ confirmYesBtn.addEventListener('click', () => {
   intakeConfirmed = true;
   intakePhase = false;
   awaitingConfirmation = false;
-  confirmCard.classList.remove('show');
-  log('Caller confirmed details', 'ok');
-  const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
-  addMessage('user', msg);
-  stopListening();
-  sendToAI(msg);
+  confirmActions.style.display = 'none';
+  confirmNameEl.disabled = true;
+  confirmEmailEl.disabled = true;
+  confirmPhoneEl.disabled = true;
+  log('Caller confirmed details via button', 'ok');
+  // Tell AI details are confirmed so it continues
+  sendToAI('Yes, those details are correct.');
 });
 
 confirmEditBtn.addEventListener('click', () => {
@@ -1034,43 +951,16 @@ confirmEditBtn.addEventListener('click', () => {
     callerName = confirmNameEl.value.trim();
     callerEmail = confirmEmailEl.value.trim();
     callerPhone = confirmPhoneEl.value.trim();
+    confirmNameEl.disabled = true;
+    confirmEmailEl.disabled = true;
+    confirmPhoneEl.disabled = true;
     intakeConfirmed = true;
     intakePhase = false;
     awaitingConfirmation = false;
-    confirmCard.classList.remove('show');
+    confirmActions.style.display = 'none';
     log('Caller saved corrected details', 'ok');
-    const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
-    addMessage('user', msg);
-    stopListening();
-    sendToAI(msg);
+    sendToAI(`I've updated my details. Name is ${callerName}, email is ${callerEmail}, phone is ${callerPhone}. Those are correct now.`);
   });
-});
-
-// "Submit my details" — show confirm card for review, do NOT send to AI yet
-intakeSubmitBtn.addEventListener('click', () => {
-  const name = intakeNameInput.value.trim();
-  const email = intakeEmailInput.value.trim();
-  const phone = intakePhoneInput.value.trim();
-  if (!name || !email || !phone) {
-    intakeNameInput.style.borderColor = name ? '' : 'var(--red)';
-    intakeEmailInput.style.borderColor = email ? '' : 'var(--red)';
-    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red)';
-    return;
-  }
-  intakeSubmitBtn.disabled = true;
-  intakeFormEl.classList.remove('show');
-  stopListening();
-
-  callerName = name; callerEmail = email; callerPhone = phone;
-  confirmNameEl.value = name;   confirmNameEl.classList.add('filled');
-  confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
-  confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
-  confirmNameEl.disabled = false;
-  confirmEmailEl.disabled = false;
-  confirmPhoneEl.disabled = false;
-  confirmActions.style.display = 'flex';
-  awaitingConfirmation = true;
-  confirmCard.classList.add('show');
 });
 
 log('App loaded. Ready.', 'ok');
