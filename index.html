@@ -223,6 +223,7 @@ let pendingTranscript = '';
 let restartTimeout = null;
 let callerProfile = {};
 let matchesInjected = false;
+let liveContext = null;
 
 const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
 
@@ -320,19 +321,22 @@ The website is utahreia.org. The community is active and the events are real. Do
 ---
 
 WHAT UTAH REIA ACTUALLY HAS:
-- Live events and strategy-specific meetups
+
+PLATFORM RESOURCES (always available):
+- Live events and strategy-specific meetups held monthly
 - Midday trainings and workshops
 - Event replays and the Investor Academy
-- Calculators: Fix and Flip, BRRRR, Rental, Wholesale, Creative Financing, Mortgage, HELOC, Rehab Estimator, and more
+- Calculators: Fix and Flip, BRRRR, Rental, Wholesale, Creative Financing, Mortgage, HELOC, Rehab Estimator
 - Market reports and lead magnets by strategy
-- Vendor directory: lenders, contractors, property managers, attorneys, CPAs, title companies, and more
+- Vendor directory: lenders, contractors, property managers, attorneys, CPAs, title companies
 - Private community and investor circles by strategy
 - True Wealth Investment Club for capital aggregation
 - Deal Center with property listings
 - Home Depot member rebate and Rent Perfect access
-- Membership tiers from free event access through premium and platinum
 
-Do not invent resources that are not on this list.
+{{LIVE_CONTEXT}}
+
+Do not invent people, companies, or events that are not in the above lists. If you are asked about something not covered, say you can connect them with the right person at Utah Ria directly.
 
 ---
 
@@ -480,7 +484,7 @@ async function sendToAI(userText) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 280,
-        system: systemPrompt,
+        system: window._dynamicSystemPrompt || systemPrompt,
         messages: conversationHistory
       })
     });
@@ -868,11 +872,78 @@ function normalizeForSpeech(text) {
 
 async function speak(text) { await playElevenLabs(normalizeForSpeech(text)); }
 
+async function fetchContext() {
+  try {
+    log('Fetching live Utah Ria knowledge...');
+    const resp = await fetch('/api/supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'context' })
+    });
+    if (!resp.ok) { log('Context fetch failed: ' + resp.status, 'err'); return null; }
+    const data = await resp.json();
+    liveContext = data;
+
+    let block = '';
+
+    if (data.boardMembers && data.boardMembers.length > 0) {
+      block += 'BOARD MEMBERS & LEADERSHIP (these are the real people who run Utah Ria):\n';
+      data.boardMembers.forEach(function(b) {
+        block += '- ' + b.name + (b.specialties ? ' — ' + b.specialties : '') + '\n';
+      });
+      block += '\n';
+    }
+
+    if (data.vendors && data.vendors.length > 0) {
+      block += 'ACTIVE VENDORS & SERVICE PROVIDERS IN THE COMMUNITY:\n';
+      data.vendors.forEach(function(v) {
+        const who = (v.contact && v.contact !== v.name) ? v.name + ' (contact: ' + v.contact + ')' : v.name;
+        const svcs = v.services.join(', ');
+        const specs = (v.specialties && v.specialties.length > 0) ? ' — specialties: ' + v.specialties.join(', ') : '';
+        block += '- ' + who + ': ' + svcs + specs + '\n';
+      });
+      block += '\n';
+    }
+
+    if (data.recentEvents && data.recentEvents.length > 0) {
+      block += 'RECENT EVENTS (topics Utah Ria has taught — shows depth and range):\n';
+      data.recentEvents.forEach(function(e) {
+        block += '- ' + e.date + ': ' + e.title + '\n';
+      });
+      block += '\n';
+    }
+
+    if (data.membershipTiers && data.membershipTiers.length > 0) {
+      block += 'MEMBERSHIP TIERS:\n';
+      data.membershipTiers.forEach(function(t) {
+        block += '- ' + t.tier + ': ' + t.description + '\n';
+      });
+    }
+
+    log('Live context loaded — ' + (data.boardMembers ? data.boardMembers.length : 0) + ' board members, ' + (data.vendors ? data.vendors.length : 0) + ' vendors, ' + (data.recentEvents ? data.recentEvents.length : 0) + ' events', 'ok');
+    return block.trim();
+  } catch(e) {
+    log('Context fetch error: ' + e.message, 'err');
+    return null;
+  }
+}
+
+
 async function startCall() {
   log('Requesting mic access...');
   const micOk = await initMicStream();
   if (!micOk) return;
   if (window.speechSynthesis) window.speechSynthesis.getVoices();
+
+  // Fetch live Utah Ria knowledge and inject into system prompt
+  const contextBlock = await fetchContext();
+  if (contextBlock) {
+    // Inject live context into the system prompt by replacing the placeholder
+    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', contextBlock);
+  } else {
+    // Fallback — remove placeholder cleanly if fetch failed
+    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', '(Live community data temporarily unavailable — use general knowledge about Utah Ria)');
+  }
 
   callActive = true;
   conversationHistory = [];
