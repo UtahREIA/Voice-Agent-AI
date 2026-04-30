@@ -582,19 +582,33 @@ let analyser = null;
 let vadInterval = null;
 let suppressRestart = false;
 
-const NOISE_FLOOR      = 1.0;  // RMS below this = background noise, ignore
-const SPEECH_THRESHOLD = 1.4;  // RMS above this = real voice (calibrated to headset)
-const SILENCE_THRESHOLD = 1.2; // RMS below this after speech = silence/pause
-const SHORT_PAUSE_MS   = 700;  // ms before entering pausing state
-const END_OF_TURN_MS   = 1200; // ms of sustained silence = end of turn
-const IDLE_RESTART_MS  = 8000; // ms with no speech before quiet restart
-const MIN_SPEECH_MS    = 80;   // minimum actual speech before sending to Whisper
+// VAD constants — calibrated to headset RMS output
+// Ambient noise floor: ~1.0-1.1 RMS
+// Normal speaking voice: ~1.4-1.7 RMS
+// Loud speaking voice: ~11-12 RMS
+//
+// Super Whisper-style behaviour:
+// - SPEAKING zone: above SPEECH_THRESHOLD — accumulates speech duration
+// - HOLDING zone: between HOLD_FLOOR and SPEECH_THRESHOLD — we stay in speaking state,
+//   treating this as a natural thinking pause mid-sentence. The silence timer does NOT
+//   start here. This is the key difference from a simple threshold check.
+// - SILENCE zone: below HOLD_FLOOR — silence timer starts
+// - Only commits when silence timer reaches END_OF_TURN_MS after real speech
+
+const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
+const SPEECH_THRESHOLD = 1.4;  // above this = real voice
+const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
+                                // silence timer does NOT run here — prevents mid-sentence cutoffs
+const END_OF_TURN_MS   = 1400; // ms of true silence (below HOLD_FLOOR) before committing
+const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
+const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
 const VAD_INTERVAL_MS  = 80;   // sample interval in ms
 
-let vadState           = 'waiting';
+let vadState           = 'waiting'; // waiting | speaking | ending
 let vadSpeechDetected  = false;
 let vadSpeechDuration  = 0;
 let vadSilenceDuration = 0;
+let vadIdleDuration    = 0;
 
 async function initMicStream() {
   if (micStream) return true;
@@ -706,70 +720,53 @@ function startVAD() {
     // TEMP DEBUG — log RMS every 10 frames so we can tune thresholds
     if (typeof window._rmsLogCount === "undefined") window._rmsLogCount = 0;
     window._rmsLogCount++;
-    if (window._rmsLogCount % 10 === 0) log("RMS: " + rms.toFixed(2) + " state:" + vadState);
+    if (window._rmsLogCount % 10 === 0) { const zone = rms >= SPEECH_THRESHOLD ? "SPEECH" : rms >= HOLD_FLOOR ? "HOLD" : "silence"; log("RMS: " + rms.toFixed(2) + " zone:" + zone + " state:" + vadState); }
 
-    if (rms > SPEECH_THRESHOLD) {
-      // Real voice detected
+    if (rms >= SPEECH_THRESHOLD) {
+      // ── SPEECH ZONE — real voice ──────────────────────────────────────────
       vadSpeechDetected = true;
       vadSpeechDuration += VAD_INTERVAL_MS;
       vadSilenceDuration = 0;
-      vadState = 'speaking';
-
-    } else if (rms > NOISE_FLOOR) {
-      // Low level sound — breath, trailing off, thinking pause
-      vadSilenceDuration += VAD_INTERVAL_MS;
-
-      if (vadState === 'speaking') {
-        if (vadSilenceDuration >= SHORT_PAUSE_MS && vadSilenceDuration < END_OF_TURN_MS) {
-          vadState = 'pausing';
-          log('Brief pause — holding...');
-        } else if (vadSilenceDuration >= END_OF_TURN_MS) {
-          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
-            log('End of turn (' + Math.round(vadSilenceDuration) + 'ms silence)');
-            vadState = 'ending';
-            stopRecording();
-          }
-        }
-      } else if (vadState === 'pausing') {
-        if (vadSilenceDuration >= END_OF_TURN_MS) {
-          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
-            log('End of turn confirmed after pause');
-            vadState = 'ending';
-            stopRecording();
-          }
-        }
-      } else if (vadState === 'waiting') {
-        if (vadSilenceDuration >= IDLE_RESTART_MS) {
-          log('Idle for 8s — restarting mic quietly');
-          stopRecording();
-        }
+      vadIdleDuration = 0;
+      if (vadState !== 'speaking') {
+        vadState = 'speaking';
       }
 
+    } else if (rms >= HOLD_FLOOR) {
+      // ── HOLD ZONE — between noise floor and speech threshold ──────────────
+      // Natural mid-sentence pause, breath, trailing syllable, thinking gap.
+      // We stay in whatever state we're in and do NOT start the silence timer.
+      // This is the "Super Whisper" behaviour — the system waits patiently here
+      // rather than immediately starting the end-of-turn countdown.
+      vadIdleDuration = 0;
+      if (vadState === 'waiting') {
+        // Still waiting for first speech — treat hold zone as idle
+        vadIdleDuration += VAD_INTERVAL_MS;
+      }
+      // Importantly: vadSilenceDuration does NOT increment here
+
     } else {
-      // True noise floor — only count silence if speech was already heard
-      if (vadSpeechDetected) {
+      // ── SILENCE ZONE — true silence below noise floor ─────────────────────
+      // Only now do we start counting toward end of turn
+      if (vadState === 'speaking') {
         vadSilenceDuration += VAD_INTERVAL_MS;
-        if (vadState === 'speaking' || vadState === 'pausing') {
-          if (vadSilenceDuration >= END_OF_TURN_MS) {
-            log('End of turn — silence after speech');
+        if (vadSilenceDuration >= END_OF_TURN_MS) {
+          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
+            log('End of turn — ' + Math.round(vadSilenceDuration) + 'ms silence after speech');
             vadState = 'ending';
+            stopRecording();
+          } else {
+            // Timed out but not enough speech — restart quietly
             stopRecording();
           }
         }
       } else if (vadState === 'waiting') {
-        vadSilenceDuration += VAD_INTERVAL_MS;
-        if (vadSilenceDuration >= IDLE_RESTART_MS) {
+        vadIdleDuration += VAD_INTERVAL_MS;
+        if (vadIdleDuration >= IDLE_RESTART_MS) {
           log('No speech for 8s — restarting mic');
           stopRecording();
         }
       }
-    }
-
-    // If voice comes back after a pause — reset and continue recording
-    if (rms > SPEECH_THRESHOLD && (vadState === 'pausing')) {
-      vadState = 'speaking';
-      vadSilenceDuration = 0;
-      log('Voice resumed after pause — continuing');
     }
 
   }, VAD_INTERVAL_MS);
