@@ -263,7 +263,9 @@ VOICE RULES — NON-NEGOTIABLE:
 - No phrases like: "great question", "absolutely", "that's awesome", "fantastic", "let's get you on the path to success", "game-changer", "wealth-building journey", or anything that sounds like a sales call.
 - Calm, steady, peer-to-peer. You are talking with an investor, not at one.
 - If they seem unsure or vague, give them room. A short follow-up beats a long explanation.
-- PRONUNCIATION: Always write "Utah Ria" (not "Utah REIA") in your responses so the voice reads it correctly as REE-ah.
+- PRONUNCIATION: Always write "Utah REIA" normally in your responses. The system handles pronunciation automatically.
+- NO MARKDOWN: Never use markdown formatting of any kind. No links like [text](url), no bold **text**, no bullet points, no headers. This is spoken audio — plain sentences only.
+- NO RAW JSON: Never let any signal block like [PROFILE:...] or [INTAKE:...] appear in your conversational text. Those blocks must only appear at the very end of the response, after your spoken sentence.
 
 ---
 
@@ -336,7 +338,7 @@ PLATFORM RESOURCES (always available):
 
 {{LIVE_CONTEXT}}
 
-Do not invent people, companies, or events that are not in the above lists. If you are asked about something not covered, say you can connect them with the right person at Utah Ria directly.
+Do not invent people, companies, or events that are not in the above lists. If you are asked about something not covered, say you can connect them with the right person at Utah REIA directly.
 
 ---
 
@@ -535,10 +537,24 @@ async function sendToAI(userText) {
           fetchAndInjectMatches(callerProfile);
         } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
       }
+      // Strip all signal blocks and markdown before displaying or speaking
       const spokenText = fullText
-        .replace(/\[INTAKE:.*?\]/s, '')
+        // Remove PROFILE signal — use greedy match to handle multiline JSON
+        .replace(/\[PROFILE:[\s\S]*?\]/g, '')
+        // Remove INTAKE signal
+        .replace(/\[INTAKE:[\s\S]*?\]/g, '')
         .replace('[INTAKE_CONFIRMED]', '')
-        .replace(/\[PROFILE:.*?\]/s, '')
+        // Strip markdown links [text](url) -> just the text
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        // Strip bare markdown URLs like http://... inside angle brackets <url>
+        .replace(/<https?:\/\/[^>]+>/g, '')
+        // Strip bold **text** -> text
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        // Strip italic *text* -> text
+        .replace(/\*([^*]+)\*/g, '$1')
+        // Clean up any leftover bracket artifacts
+        .replace(/\[\]/g, '')
+        .replace(/\(\)/g, '')
         .trim();
       conversationHistory.push({ role: 'assistant', content: fullText });
       addMessage('assistant', spokenText);
