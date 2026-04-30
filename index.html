@@ -15,9 +15,7 @@
   }
   html,body{height:100%;min-height:100%}
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding:32px 20px 40px}
-
   .app{width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:640px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-
   .header{background:linear-gradient(135deg,#1a2332,#0d1b2a);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
   .logo{width:36px;height:36px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#0d1b2a}
   .header-text h1{font-size:15px;font-weight:600;color:#fff}
@@ -26,34 +24,19 @@
   .call-timer.active{display:flex}
   .call-timer .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
   .setup-screen{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center}
   .setup-screen.hidden{display:none}
   .setup-icon{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0f3a5c,#0a2640);border:2px solid var(--cyan-dim);display:flex;align-items:center;justify-content:center;margin-bottom:4px}
   .setup-icon svg{width:32px;height:32px;color:var(--cyan)}
   .setup-title{font-size:20px;font-weight:500;color:#fff}
   .setup-sub{font-size:13px;color:var(--muted);max-width:420px;line-height:1.6}
-
-  .api-input-wrap{width:100%;max-width:420px;margin-top:8px}
-  .api-label{display:block;text-align:left;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
-  .api-input{width:100%;background:#0d1b2a;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
-  .api-input:focus{outline:none;border-color:var(--cyan-dim)}
-  .api-hint{text-align:left;font-size:11px;color:var(--dim);margin-top:6px}
-  .api-hint a{color:var(--cyan-dim);text-decoration:none}
-
-  .voice-select{width:100%;background:#0d1b2a;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;margin-top:10px;cursor:pointer}
-  .voice-select:focus{outline:none;border-color:var(--cyan-dim)}
-
   .start-btn{background:linear-gradient(135deg,var(--green-dim),var(--green));border:none;color:#052e12;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px;transition:all .2s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif}
   .start-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(74,222,128,.25)}
   .start-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
   .start-btn svg{width:18px;height:18px}
-
   .call-screen{flex:1;display:none;flex-direction:column}
   .call-screen.active{display:flex}
-
   .transcript-area{flex:1;padding:18px 24px;overflow-y:auto;max-height:420px;display:flex;flex-direction:column;gap:10px}
-
   .msg{display:flex;gap:10px;animation:fadeIn .3s ease}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .msg.ai{flex-direction:row}
@@ -65,15 +48,12 @@
   .ai .bubble{background:var(--surface2);border:1px solid var(--border);border-radius:4px 12px 12px 12px}
   .user .bubble{background:linear-gradient(135deg,#1a3a5c,#0f2640);border:1px solid rgba(34,211,238,.2);border-radius:12px 4px 12px 12px}
   .bubble.interim{opacity:.6;font-style:italic}
-
   .call-status{background:var(--surface);border-top:1px solid var(--border);padding:18px 24px}
-
   .status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px}
   .status-indicator{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:#0d1b2a;border:1px solid var(--border);font-size:12px;color:var(--muted);transition:all .3s}
   .status-indicator.listening{border-color:var(--cyan-dim);color:var(--cyan);background:rgba(34,211,238,.05)}
   .status-indicator.thinking{border-color:var(--amber);color:var(--amber);background:rgba(251,191,36,.05)}
   .status-indicator.speaking{border-color:var(--green-dim);color:var(--green);background:rgba(74,222,128,.05)}
-
   .voice-bars{display:flex;gap:3px;align-items:center;height:18px}
   .voice-bars span{width:3px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
   .voice-bars span:nth-child(1){animation-delay:0s}
@@ -82,22 +62,16 @@
   .voice-bars span:nth-child(4){animation-delay:.1s}
   .voice-bars span:nth-child(5){animation-delay:.0s}
   @keyframes wave{0%,100%{height:4px}50%{height:16px}}
-
   .end-btn{background:linear-gradient(135deg,var(--red-dim),var(--red));border:none;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;margin:0 auto;font-family:'DM Sans',sans-serif;transition:all .2s}
   .end-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(248,113,113,.3)}
   .end-btn svg{width:16px;height:16px}
-
   .error-banner{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin:12px 24px 0;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
   .error-banner.show{display:block}
-
   .debug-log{background:#000;border-top:1px solid var(--border);padding:10px 14px;font-size:11px;color:#7eb8da;font-family:'DM Mono',monospace;max-height:120px;overflow-y:auto;display:none;line-height:1.5}
   .debug-log.show{display:block}
   .debug-log .d-err{color:#f87171}
   .debug-log .d-ok{color:#4ade80}
-
   .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
-
-  /* Intake form */
   .intake-form{margin:0 24px 16px;background:var(--surface);border:1px solid var(--cyan-dim);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
   .intake-form.show{display:block}
   .intake-form-title{font-size:13.5px;font-weight:600;color:#fff;margin-bottom:4px}
@@ -105,8 +79,6 @@
   .intake-submit-btn{width:100%;margin-top:14px;padding:10px;border-radius:8px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border:none;color:#0d1b2a;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
   .intake-submit-btn:hover{box-shadow:0 4px 14px rgba(34,211,238,.3)}
   .intake-submit-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-
-  /* Confirmation card */
   .confirm-card{margin:0 24px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
   .confirm-card.show{display:block}
   .confirm-card-title{font-size:11px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
@@ -123,7 +95,6 @@
   .confirm-btn.yes:hover{box-shadow:0 4px 12px rgba(74,222,128,.25)}
   .confirm-btn.edit{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
   .confirm-btn.edit:hover{border-color:var(--cyan-dim);color:var(--cyan)}
-
 </style>
 </head>
 <body>
@@ -136,9 +107,7 @@
     </div>
     <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
   </div>
-
   <div class="error-banner" id="errorBanner"></div>
-
   <div class="setup-screen" id="setupScreen">
     <div class="setup-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -154,10 +123,8 @@
       Start Call
     </button>
   </div>
-
   <div class="call-screen" id="callScreen">
     <div class="transcript-area" id="transcriptArea"></div>
-
     <div class="intake-form" id="intakeForm">
       <div class="intake-form-title">Please enter your details below</div>
       <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
@@ -175,20 +142,19 @@
       </div>
       <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
     </div>
-
     <div class="confirm-card" id="confirmCard">
       <div class="confirm-card-title">Just to confirm your details</div>
       <div class="confirm-row">
         <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="confirmName" placeholder="—" disabled />
+        <input type="text" class="confirm-input" id="confirmName" placeholder="---" disabled />
       </div>
       <div class="confirm-row">
         <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="confirmEmail" placeholder="—" disabled />
+        <input type="email" class="confirm-input" id="confirmEmail" placeholder="---" disabled />
       </div>
       <div class="confirm-row">
         <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="confirmPhone" placeholder="—" disabled />
+        <input type="tel" class="confirm-input" id="confirmPhone" placeholder="---" disabled />
       </div>
       <div class="confirm-actions" id="confirmActions" style="display:none">
         <button class="confirm-btn yes" id="confirmYesBtn">Looks correct</button>
@@ -212,10 +178,8 @@
       <div class="hint-bar">Just talk naturally. Pause when you're done. You can interrupt anytime by speaking.</div>
     </div>
   </div>
-
   <div class="debug-log" id="debugLog"></div>
 </div>
-
 <script>
 const setupScreen = document.getElementById('setupScreen');
 const callScreen = document.getElementById('callScreen');
@@ -272,7 +236,7 @@ Utah REIA is not a motivational program. It is not a guru platform. It is a room
 INTAKE PHASE — CONTACT DETAILS VIA FORM:
 A typed form is shown on screen the moment the call starts. The caller will enter their name, email address, and phone number by typing — you do NOT need to ask for these verbally.
 
-Your FIRST message must be a brief warm welcome only (1–2 sentences). Tell them their details form is on screen and you'll get started once they've filled it in. Example: "Hey, welcome to Utah REIA — go ahead and fill in your details in the form on screen and we'll take it from there."
+Your FIRST message must be a brief warm welcome only (1-2 sentences). Tell them their details form is on screen and you'll get started once they've filled it in. Example: "Hey, welcome to Utah REIA — go ahead and fill in your details in the form on screen and we'll take it from there."
 
 When the caller submits the form, you will receive a message in this format:
 "My name is X, my email is Y, and my phone number is Z."
@@ -387,7 +351,6 @@ Field rules:
 
 After you emit [PROFILE:...], the system will automatically provide you with real matching vendors and peer investors from the Utah REIA database. When that context arrives, reference those specific people and businesses by name in your response — do not make up names.`;
 
-
 function log(msg, type) {
   debugLog.classList.add('show');
   const div = document.createElement('div');
@@ -465,16 +428,12 @@ async function playElevenLabs(text) {
     }
     log('ElevenLabs response OK', 'ok');
     const arrayBuffer = await resp.arrayBuffer();
-    // Use AudioContext instead of Audio element to avoid Chrome mic conflict
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const decoded = await audioCtx.decodeAudioData(arrayBuffer);
     const source = audioCtx.createBufferSource();
     source.buffer = decoded;
     source.connect(audioCtx.destination);
-
-    // Store a way to interrupt if needed
     currentAudio = { pause: () => { try { source.stop(); audioCtx.close(); } catch(e){} }, currentTime: 0 };
-
     await new Promise((resolve) => {
       source.onended = () => {
         isSpeaking = false;
@@ -494,7 +453,6 @@ async function playElevenLabs(text) {
       };
       source.start(0);
     });
-
   } catch (e) {
     isSpeaking = false;
     log('ElevenLabs error — falling back to browser TTS: ' + e.message, 'err');
@@ -534,8 +492,6 @@ async function sendToAI(userText) {
     log('Claude response OK', 'ok');
     if (data.content && data.content[0]) {
       let fullText = data.content[0].text;
-
-      // Parse intake JSON if present
       const intakeMatch = fullText.match(/\[INTAKE:({.*?})\]/s);
       if (intakeMatch) {
         try {
@@ -546,8 +502,6 @@ async function sendToAI(userText) {
           if (!intakeConfirmed) confirmCard.classList.add('show');
         } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
       }
-
-      // Check for confirmation signal
       if (fullText.includes('[INTAKE_CONFIRMED]')) {
         intakeConfirmed = true;
         intakePhase = false;
@@ -558,40 +512,30 @@ async function sendToAI(userText) {
         awaitingConfirmation = false;
         log('Intake confirmed', 'ok');
       }
-
-      // Show confirm buttons when all three collected and not yet confirmed
       if (callerName && callerEmail && callerPhone && !intakeConfirmed && !awaitingConfirmation) {
         awaitingConfirmation = true;
         confirmActions.style.display = 'flex';
-        // Disable inputs until user decides
         confirmNameEl.disabled = true;
         confirmEmailEl.disabled = true;
         confirmPhoneEl.disabled = true;
       }
-
-      // Show intake form after the first AI message (welcome/name-request)
       if (intakePhase && !intakeFormShown && !intakeConfirmed) {
         intakeFormShown = true;
         intakeFormEl.classList.add('show');
       }
-
-      // Parse PROFILE signal — triggers Supabase match query
       const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
       if (profileMatch && !matchesInjected) {
         try {
           callerProfile = JSON.parse(profileMatch[1]);
           log('Profile signal received — fetching matches...');
-          fetchAndInjectMatches(callerProfile); // async, non-blocking
+          fetchAndInjectMatches(callerProfile);
         } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
       }
-
-      // Strip all metadata tags before displaying/speaking
       const spokenText = fullText
         .replace(/\[INTAKE:.*?\]/s, '')
         .replace('[INTAKE_CONFIRMED]', '')
         .replace(/\[PROFILE:.*?\]/s, '')
         .trim();
-
       conversationHistory.push({ role: 'assistant', content: fullText });
       addMessage('assistant', spokenText);
       await speak(spokenText);
@@ -604,35 +548,64 @@ async function sendToAI(userText) {
   }
 }
 
-function handleSilence() {
-  const text = pendingTranscript.trim();
-  if (text && text.length > 1 && callActive) {
-    finalizeInterim(text);
-    pendingTranscript = '';
-    sendToAI(text);
-  }
-}
+// ─── IMPROVED VAD — Super Whisper style four-state machine ───────────────────
+//
+// States: waiting -> speaking -> pausing -> ending
+//
+// WAITING:  Mic is open. We haven't heard real speech yet.
+//           Background noise below NOISE_FLOOR is ignored entirely.
+//           Low-level sounds (breath, ambient) above NOISE_FLOOR but below
+//           SPEECH_THRESHOLD don't trigger speech detection.
+//           After IDLE_RESTART_MS with nothing, we restart the recorder to
+//           flush the buffer and avoid sending stale audio.
+//
+// SPEAKING: Real voice detected (RMS > SPEECH_THRESHOLD). Silence counter
+//           starts when amplitude drops. Short pauses under SHORT_PAUSE_MS
+//           are tolerated — the counter resets if voice resumes.
+//           This lets people say "I want to do... fix and flip" without
+//           getting cut off mid-thought.
+//
+// PAUSING:  Silence has lasted SHORT_PAUSE_MS. Still waiting to see if
+//           voice resumes. If it does, back to SPEAKING. If silence reaches
+//           END_OF_TURN_MS, move to ENDING.
+//
+// ENDING:   Sustained silence confirmed end of turn. Stop recording and
+//           send to Whisper. Only commits if MIN_SPEECH_MS of actual voice
+//           was recorded — prevents sending breath/noise as a turn.
 
 let mediaRecorder = null;
 let audioChunks = [];
 let micStream = null;
-let vadTimer = null;
 let isRecording = false;
 let audioContext = null;
 let analyser = null;
 let vadInterval = null;
-let silenceCount = 0;
-let speechDetected = false;
 let suppressRestart = false;
-const SILENCE_THRESHOLD = 20;
-const SPEECH_THRESHOLD = 8;
-const SILENCE_FRAMES = 10; // 1 second of silence to stop (was 2s)
+
+const NOISE_FLOOR      = 2;    // RMS below this = background noise, ignore
+const SPEECH_THRESHOLD = 6;    // RMS above this = real voice
+const SILENCE_THRESHOLD = 4;   // RMS below this after speech = silence/pause
+const SHORT_PAUSE_MS   = 700;  // ms before entering pausing state
+const END_OF_TURN_MS   = 1800; // ms of sustained silence = end of turn
+const IDLE_RESTART_MS  = 8000; // ms with no speech before quiet restart
+const MIN_SPEECH_MS    = 350;  // minimum speech to bother sending to Whisper
+const VAD_INTERVAL_MS  = 80;   // sample interval in ms
+
+let vadState           = 'waiting';
+let vadSpeechDetected  = false;
+let vadSpeechDuration  = 0;
+let vadSilenceDuration = 0;
 
 async function initMicStream() {
   if (micStream) return true;
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 16000
+      }
     });
     log('Mic stream acquired', 'ok');
     return true;
@@ -643,13 +616,15 @@ async function initMicStream() {
 }
 
 function startListening() {
-  if (!callActive || isSpeaking) return;
-  if (isRecording) { stopRecording(); return; } // stale recording — stop it, onstop will restart
+  if (!callActive || isSpeaking || isRecording) return;
   if (!micStream) { log('No mic stream', 'err'); return; }
 
   try {
     audioChunks = [];
-    silenceCount = 0;
+    vadState = 'waiting';
+    vadSpeechDetected = false;
+    vadSpeechDuration = 0;
+    vadSilenceDuration = 0;
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
@@ -665,19 +640,18 @@ function startListening() {
       isRecording = false;
       stopVAD();
       if (!callActive) return;
+      if (suppressRestart) { suppressRestart = false; return; }
 
-      if (suppressRestart) { suppressRestart = false; return; } // intentional stop — don't restart
-
-      if (!speechDetected) {
-        // No voice activity — restart quietly without hitting Whisper
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
+      if (!vadSpeechDetected || vadSpeechDuration < MIN_SPEECH_MS) {
+        log('No real speech detected (' + Math.round(vadSpeechDuration) + 'ms) — restarting mic');
+        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
         return;
       }
 
       const blob = new Blob(audioChunks, { type: mimeType });
-      if (blob.size < 1000) {
-        log('Audio too short, restarting...');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
+      if (blob.size < 1500) {
+        log('Audio blob too small — restarting');
+        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
         return;
       }
 
@@ -685,61 +659,115 @@ function startListening() {
       await transcribeAndSend(blob);
     };
 
-    mediaRecorder.start(100); // collect chunks every 100ms
+    mediaRecorder.start(80);
     isRecording = true;
-    audioChunks = []; // clear any chunks collected during drain
+    audioChunks = [];
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
-    // Short drain — discard first 200ms of audio but keep chunk[0] (WebM init header)
+    // Drain first 300ms — discard init noise but keep WebM header chunk
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
-      speechDetected = false;
       startVAD();
-    }, 200);
+    }, 300);
+
   } catch(e) {
     log('MediaRecorder error: ' + e.message, 'err');
   }
 }
 
 function startVAD() {
-  stopVAD(); // kill any orphaned interval before creating a new one
+  stopVAD();
   if (!micStream) return;
+
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(micStream);
   analyser = audioContext.createAnalyser();
-  analyser.fftSize = 512;
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.3; // smooth amplitude, reduces spikes
   source.connect(analyser);
 
   const dataArray = new Uint8Array(analyser.fftSize);
-  silenceCount = 0;
 
   vadInterval = setInterval(() => {
-    if (!isRecording || !callActive || isSpeaking) {
-      stopVAD();
-      return;
-    }
-    if (!analyser) return; // guard against late-firing intervals
+    if (!isRecording || !callActive || isSpeaking) { stopVAD(); return; }
+    if (!analyser) return;
+
     analyser.getByteTimeDomainData(dataArray);
-    const amplitude = Math.max(...dataArray.map(v => Math.abs(v - 128)));
 
-    if (amplitude >= SPEECH_THRESHOLD) speechDetected = true;
+    // RMS amplitude — far more stable than peak for real speech detection
+    let sumSq = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const v = (dataArray[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / dataArray.length) * 100;
 
-    if (amplitude < SILENCE_THRESHOLD) {
-      silenceCount++;
-      if (silenceCount >= SILENCE_FRAMES) {
-        if (!speechDetected) {
-          stopRecording(); // restart quietly — no voice heard
-        } else {
-          log('Silence detected — stopping recording');
+    if (rms > SPEECH_THRESHOLD) {
+      // Real voice detected
+      vadSpeechDetected = true;
+      vadSpeechDuration += VAD_INTERVAL_MS;
+      vadSilenceDuration = 0;
+      vadState = 'speaking';
+
+    } else if (rms > NOISE_FLOOR) {
+      // Low level sound — breath, trailing off, thinking pause
+      vadSilenceDuration += VAD_INTERVAL_MS;
+
+      if (vadState === 'speaking') {
+        if (vadSilenceDuration >= SHORT_PAUSE_MS && vadSilenceDuration < END_OF_TURN_MS) {
+          vadState = 'pausing';
+          log('Brief pause — holding...');
+        } else if (vadSilenceDuration >= END_OF_TURN_MS) {
+          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
+            log('End of turn (' + Math.round(vadSilenceDuration) + 'ms silence)');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'pausing') {
+        if (vadSilenceDuration >= END_OF_TURN_MS) {
+          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
+            log('End of turn confirmed after pause');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'waiting') {
+        if (vadSilenceDuration >= IDLE_RESTART_MS) {
+          log('Idle for 8s — restarting mic quietly');
           stopRecording();
         }
       }
+
     } else {
-      silenceCount = 0;
-      if (!isSpeaking) setStatus('listening', 'Listening...');
+      // True noise floor — only count silence if speech was already heard
+      if (vadSpeechDetected) {
+        vadSilenceDuration += VAD_INTERVAL_MS;
+        if (vadState === 'speaking' || vadState === 'pausing') {
+          if (vadSilenceDuration >= END_OF_TURN_MS) {
+            log('End of turn — silence after speech');
+            vadState = 'ending';
+            stopRecording();
+          }
+        }
+      } else if (vadState === 'waiting') {
+        vadSilenceDuration += VAD_INTERVAL_MS;
+        if (vadSilenceDuration >= IDLE_RESTART_MS) {
+          log('No speech for 8s — restarting mic');
+          stopRecording();
+        }
+      }
     }
-  }, 100);
+
+    // If voice comes back after a pause — reset and continue recording
+    if (rms > SPEECH_THRESHOLD && (vadState === 'pausing')) {
+      vadState = 'speaking';
+      vadSilenceDuration = 0;
+      log('Voice resumed after pause — continuing');
+    }
+
+  }, VAD_INTERVAL_MS);
 }
 
 function stopVAD() {
@@ -780,7 +808,6 @@ async function transcribeAndSend(blob) {
     }
 
     log('Transcript: ' + text, 'ok');
-    pendingTranscript = text;
     addMessage('user', text, false);
     pendingTranscript = '';
     await sendToAI(text);
@@ -792,7 +819,6 @@ async function transcribeAndSend(blob) {
 }
 
 function stopListening() {
-  // Only suppress onstop auto-restart if there's actually a live recording to stop
   if (mediaRecorder && mediaRecorder.state !== 'inactive') suppressRestart = true;
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
@@ -806,9 +832,7 @@ function playBrowserTTS(text) {
     if (!window.speechSynthesis) { resolve(); return; }
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 0.95;
-    utt.pitch = 1.0;
-    utt.volume = 1.0;
+    utt.rate = 0.95; utt.pitch = 1.0; utt.volume = 1.0;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v =>
       v.name.includes('Samantha') || v.name.includes('Karen') ||
@@ -816,28 +840,12 @@ function playBrowserTTS(text) {
       v.lang === 'en-US'
     );
     if (preferred) utt.voice = preferred;
-    utt.onend = () => {
-      isSpeaking = false;
-      currentAudio = null;
-      if (callActive) {
-        setTimeout(() => {
-          setStatus('listening', 'Listening...');
-          startListening();
-        }, 300);
-      }
+    const done = () => {
+      isSpeaking = false; currentAudio = null;
+      if (callActive) { setTimeout(() => { setStatus('listening', 'Listening...'); startListening(); }, 300); }
       resolve();
     };
-    utt.onerror = () => {
-      isSpeaking = false;
-      currentAudio = null;
-      if (callActive) {
-        setTimeout(() => {
-          setStatus('listening', 'Listening...');
-          startListening();
-        }, 300);
-      }
-      resolve();
-    };
+    utt.onend = done; utt.onerror = done;
     isSpeaking = true;
     setStatus('speaking', 'Speaking...');
     currentAudio = { pause: () => window.speechSynthesis.cancel(), currentTime: 0 };
@@ -846,15 +854,12 @@ function playBrowserTTS(text) {
   });
 }
 
-async function speak(text) {
-  await playElevenLabs(text);
-}
+async function speak(text) { await playElevenLabs(text); }
 
 async function startCall() {
   log('Requesting mic access...');
   const micOk = await initMicStream();
   if (!micOk) return;
-
   if (window.speechSynthesis) window.speechSynthesis.getVoices();
 
   callActive = true;
@@ -887,64 +892,47 @@ async function fetchAndInjectMatches(profile) {
     });
     if (!resp.ok) { log('Match fetch failed: ' + resp.status, 'err'); return; }
     const { vendors = [], investors = [] } = await resp.json();
-
-    if (!vendors.length && !investors.length) {
-      log('No matches found in database');
-      return;
-    }
-
+    if (!vendors.length && !investors.length) { log('No matches found in database'); return; }
     matchesInjected = true;
     log('Matches found — injecting into conversation', 'ok');
-
     let context = '[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';
-
     if (vendors.length) {
       context += '\nMatching vendors/service providers:\n';
       vendors.forEach(v => {
         const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
         const services = (v.service_types || []).join(', ');
-        context += `- ${name}${services ? ' (' + services + ')' : ''}\n`;
+        context += '- ' + name + (services ? ' (' + services + ')' : '') + '\n';
       });
     }
-
     if (investors.length) {
       context += '\nPeer investors to connect with:\n';
       investors.forEach(i => {
         const name = i.contacts?.full_name || 'Unknown';
         const strats = (i.investing_types || []).join(', ');
-        context += `- ${name} — ${i.where_in_journey}${strats ? ', ' + strats : ''}\n`;
+        context += '- ' + name + ' — ' + i.where_in_journey + (strats ? ', ' + strats : '') + '\n';
       });
     }
-
     conversationHistory.push({ role: 'user', content: context });
-  } catch(e) {
-    log('Match inject error: ' + e.message, 'err');
-  }
+  } catch(e) { log('Match inject error: ' + e.message, 'err'); }
 }
 
 async function syncToGHL() {
   if (!callerEmail && !callerPhone) return;
   try {
     log('Syncing to GHL...');
-
     const summary = conversationHistory
       .filter(m => m.role === 'assistant')
       .map(m => m.content.replace(/\[PROFILE:.*?\]/s, '').replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim())
       .join(' | ');
-
-    // Build tags from profile
     const tags = ['Voice Agent Lead'];
-    if (callerProfile.stage)  tags.push(`Stage: ${callerProfile.stage}`);
-    if (callerProfile.role)   tags.push(`Role: ${callerProfile.role}`);
-    if (callerProfile.blocker) tags.push(`Blocker: ${callerProfile.blocker}`);
-    (callerProfile.strategies || []).forEach(s => tags.push(`Strategy: ${s}`));
-
+    if (callerProfile.stage)   tags.push('Stage: ' + callerProfile.stage);
+    if (callerProfile.role)    tags.push('Role: ' + callerProfile.role);
+    if (callerProfile.blocker) tags.push('Blocker: ' + callerProfile.blocker);
+    (callerProfile.strategies || []).forEach(s => tags.push('Strategy: ' + s));
     const ghlPayload = {
       first_name: callerName.split(' ')[0] || callerName,
       last_name: callerName.split(' ').slice(1).join(' ') || '',
-      email: callerEmail,
-      phone: callerPhone,
-      tags,
+      email: callerEmail, phone: callerPhone, tags,
       customField: {
         voice_agent_summary: summary.substring(0, 2000),
         investing_stage: callerProfile.stage || '',
@@ -953,30 +941,16 @@ async function syncToGHL() {
         investor_goals: callerProfile.goals || '',
       }
     };
-
-    const ghlResp = await fetch(GHL_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ghlPayload)
-    });
+    const ghlResp = await fetch(GHL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ghlPayload) });
     log(ghlResp.ok ? 'GHL sync successful' : 'GHL sync failed: ' + ghlResp.status, ghlResp.ok ? 'ok' : 'err');
-
-    // Upsert to Supabase
     if (callerEmail) {
       const sbResp = await fetch('/api/supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'upsert',
-          contact: { name: callerName, email: callerEmail, phone: callerPhone },
-          profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) }
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upsert', contact: { name: callerName, email: callerEmail, phone: callerPhone }, profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) } })
       });
       log(sbResp.ok ? 'Supabase upsert successful' : 'Supabase upsert failed: ' + sbResp.status, sbResp.ok ? 'ok' : 'err');
     }
-  } catch(e) {
-    log('Sync error: ' + e.message, 'err');
-  }
+  } catch(e) { log('Sync error: ' + e.message, 'err'); }
 }
 
 function endCall() {
@@ -988,65 +962,52 @@ function endCall() {
   syncToGHL();
   callScreen.classList.remove('active');
   setupScreen.classList.remove('hidden');
-  conversationHistory = [];
-  transcriptArea.innerHTML = '';
-  pendingTranscript = '';
-  interimMsgEl = null;
+  conversationHistory = []; transcriptArea.innerHTML = '';
+  pendingTranscript = ''; interimMsgEl = null;
   callerName = ''; callerEmail = ''; callerPhone = '';
   callerProfile = {}; matchesInjected = false; intakeFormShown = false;
   intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
-  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   confirmCard.classList.remove('show');
   confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
   confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
   confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
   confirmActions.style.display = 'none';
+  intakeFormEl.classList.remove('show');
+  intakeSubmitBtn.disabled = false;
   log('Call ended');
 }
 
 startBtn.addEventListener('click', startCall);
 endBtn.addEventListener('click', endCall);
 
-// "Looks correct" — only fires AFTER the user has reviewed the confirm card
 confirmYesBtn.addEventListener('click', () => {
   callerName = confirmNameEl.value.trim() || callerName;
   callerEmail = confirmEmailEl.value.trim() || callerEmail;
   callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-  intakeConfirmed = true;
-  intakePhase = false;
-  awaitingConfirmation = false;
+  intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
   confirmCard.classList.remove('show');
   log('Caller confirmed details', 'ok');
-  const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
+  const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
   addMessage('user', msg);
   stopListening();
   sendToAI(msg);
 });
 
 confirmEditBtn.addEventListener('click', () => {
-  confirmNameEl.disabled = false;
-  confirmEmailEl.disabled = false;
-  confirmPhoneEl.disabled = false;
+  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
   confirmNameEl.focus();
   confirmActions.innerHTML = '<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';
   document.getElementById('confirmSaveBtn').addEventListener('click', () => {
-    callerName = confirmNameEl.value.trim();
-    callerEmail = confirmEmailEl.value.trim();
-    callerPhone = confirmPhoneEl.value.trim();
-    intakeConfirmed = true;
-    intakePhase = false;
-    awaitingConfirmation = false;
+    callerName = confirmNameEl.value.trim(); callerEmail = confirmEmailEl.value.trim(); callerPhone = confirmPhoneEl.value.trim();
+    intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
     confirmCard.classList.remove('show');
     log('Caller saved corrected details', 'ok');
-    const msg = `My name is ${callerName}, my email is ${callerEmail}, and my phone number is ${callerPhone}.`;
-    addMessage('user', msg);
-    stopListening();
-    sendToAI(msg);
+    const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
+    addMessage('user', msg); stopListening(); sendToAI(msg);
   });
 });
 
-// "Submit my details" — show confirm card for review, do NOT send to AI yet
 intakeSubmitBtn.addEventListener('click', () => {
   const name = intakeNameInput.value.trim();
   const email = intakeEmailInput.value.trim();
@@ -1060,14 +1021,11 @@ intakeSubmitBtn.addEventListener('click', () => {
   intakeSubmitBtn.disabled = true;
   intakeFormEl.classList.remove('show');
   stopListening();
-
   callerName = name; callerEmail = email; callerPhone = phone;
-  confirmNameEl.value = name;   confirmNameEl.classList.add('filled');
+  confirmNameEl.value = name; confirmNameEl.classList.add('filled');
   confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
   confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
-  confirmNameEl.disabled = false;
-  confirmEmailEl.disabled = false;
-  confirmPhoneEl.disabled = false;
+  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
   confirmActions.style.display = 'flex';
   awaitingConfirmation = true;
   confirmCard.classList.add('show');
