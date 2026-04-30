@@ -599,7 +599,7 @@ const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
 const SPEECH_THRESHOLD = 1.4;  // above this = real voice
 const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
                                 // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 1400; // ms of true silence (below HOLD_FLOOR) before committing
+const END_OF_TURN_MS   = 3000; // ms of silence before committing — 3 seconds
 const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
 const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
 const VAD_INTERVAL_MS  = 80;   // sample interval in ms
