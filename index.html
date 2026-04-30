@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png">
 <title>Utah REIA Voice Agent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -580,9 +581,9 @@ let analyser = null;
 let vadInterval = null;
 let suppressRestart = false;
 
-const NOISE_FLOOR      = 2;    // RMS below this = background noise, ignore
-const SPEECH_THRESHOLD = 6;    // RMS above this = real voice
-const SILENCE_THRESHOLD = 4;   // RMS below this after speech = silence/pause
+const NOISE_FLOOR      = 1.0;  // RMS below this = background noise, ignore
+const SPEECH_THRESHOLD = 1.4;  // RMS above this = real voice (calibrated to headset)
+const SILENCE_THRESHOLD = 1.2; // RMS below this after speech = silence/pause
 const SHORT_PAUSE_MS   = 700;  // ms before entering pausing state
 const END_OF_TURN_MS   = 1200; // ms of sustained silence = end of turn
 const IDLE_RESTART_MS  = 8000; // ms with no speech before quiet restart
