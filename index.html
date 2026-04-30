@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/png" href="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png">
+<link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -18,8 +18,8 @@
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding:32px 20px 40px}
   .app{width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:640px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
   .header{background:linear-gradient(135deg,#1a2332,#0d1b2a);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
-  .logo{width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .logo img{width:44px;height:44px;object-fit:contain}
+  .logo{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .logo img{width:56px;height:56px;object-fit:contain}
   .header-text h1{font-size:15px;font-weight:600;color:#fff}
   .header-text p{font-size:11px;color:var(--muted);margin-top:1px}
   .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:13px;color:var(--green);display:none;align-items:center;gap:6px}
@@ -28,8 +28,8 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .setup-screen{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center}
   .setup-screen.hidden{display:none}
-  .setup-icon{width:120px;height:120px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
-  .setup-icon img{width:120px;height:120px;object-fit:contain}
+  .setup-icon{width:160px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  .setup-icon img{width:160px;height:160px;object-fit:contain}
 
   .setup-title{font-size:20px;font-weight:500;color:#fff}
   .setup-sub{font-size:13px;color:var(--muted);max-width:420px;line-height:1.6}
@@ -262,6 +262,7 @@ VOICE RULES — NON-NEGOTIABLE:
 - No phrases like: "great question", "absolutely", "that's awesome", "fantastic", "let's get you on the path to success", "game-changer", "wealth-building journey", or anything that sounds like a sales call.
 - Calm, steady, peer-to-peer. You are talking with an investor, not at one.
 - If they seem unsure or vague, give them room. A short follow-up beats a long explanation.
+- PRONUNCIATION: Always write "Utah Ria" (not "Utah REIA") in your responses so the voice reads it correctly as REE-ah.
 
 ---
 
@@ -858,7 +859,17 @@ function playBrowserTTS(text) {
   });
 }
 
-async function speak(text) { await playElevenLabs(text); }
+function normalizeForSpeech(text) {
+  // Force correct pronunciation of REIA as "REE-ah" (not "RAY-ah" or spelled out)
+  // ElevenLabs reads "Ria" as REE-ah reliably
+  return text
+    .replace(/REIA/g, 'Ria')
+    .replace(/R\.E\.I\.A\./g, 'Ria')
+    .replace(/Utah REIA/g, 'Utah Ria')
+    .replace(/utah reia/gi, 'Utah Ria');
+}
+
+async function speak(text) { await playElevenLabs(normalizeForSpeech(text)); }
 
 async function startCall() {
   log('Requesting mic access...');
