@@ -350,7 +350,12 @@ Do not invent people, companies, or events that are not in the above lists. If y
 ---
 
 PROFILE SIGNAL — REQUIRED:
-Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block at the end of your response (after your spoken text). Emit it exactly ONCE — do not repeat it on subsequent turns.
+Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block. CRITICAL RULES FOR THE JSON BLOCK:
+- It MUST appear on its own line at the very end of your response, after all spoken text is complete
+- There must be a line break between your last spoken sentence and the JSON block
+- Never embed it mid-sentence or mid-paragraph
+- The spoken text and the JSON block must be completely separate — a reader should be able to cut everything after the last period and get clean spoken text
+- Emit it exactly ONCE — do not repeat it on subsequent turns
 
 [PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
 
@@ -545,12 +550,16 @@ async function sendToAI(userText) {
         } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
       }
       // Strip all signal blocks and markdown before displaying or speaking
-      const spokenText = fullText
-        // Remove PROFILE signal — use greedy match to handle multiline JSON
-        .replace(/\[PROFILE:[\s\S]*?\]/g, '')
-        // Remove INTAKE signal
-        .replace(/\[INTAKE:[\s\S]*?\]/g, '')
-        .replace('[INTAKE_CONFIRMED]', '')
+const spokenText = fullText
+  // Remove PROFILE signal — greedy match, handles multiline/nested JSON
+  .replace(/\[PROFILE:[\s\S]*?\]\s*/g, '')
+  // Catch any JSON tail that leaked out (e.g. ,"blocker":"..."} leftover)
+  .replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g, '')
+  // Remove INTAKE signal
+  .replace(/\[INTAKE:[\s\S]*?\]\s*/g, '')
+  .replace('[INTAKE_CONFIRMED]', '')
+  // Remove any remaining signal-looking fragments
+  .replace(/\[[A-Z_]+:[\s\S]*?\]/g, '')
         // Strip markdown links [text](url) -> just the text
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
         // Strip bare markdown URLs like http://... inside angle brackets <url>
