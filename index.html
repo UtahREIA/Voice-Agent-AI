@@ -6,101 +6,121 @@
 <link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0}
-  :root{
-    --bg:#0f1419;--surface:#1a2332;--surface2:#1e2a3a;--border:#1b3a5c;
-    --cyan:#22d3ee;--cyan-dim:#0891b2;--green:#4ade80;--green-dim:#16a34a;
-    --amber:#fbbf24;--red:#f87171;--red-dim:#dc2626;
-    --text:#e8eaed;--muted:#7eb8da;--dim:#4a6b82;
-  }
-  html,body{height:100%;min-height:100%}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding:32px 20px 40px}
-  .app{width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:640px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-  .header{background:linear-gradient(135deg,#1a2332,#0d1b2a);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
-  .logo{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .logo img{width:56px;height:56px;object-fit:contain}
-  .header-text h1{font-size:15px;font-weight:600;color:#fff}
-  .header-text p{font-size:11px;color:var(--muted);margin-top:1px}
-  .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:13px;color:var(--green);display:none;align-items:center;gap:6px}
-  .call-timer.active{display:flex}
-  .call-timer .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-  .setup-screen{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center}
-  .setup-screen.hidden{display:none}
-  .setup-icon{width:160px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
-  .setup-icon img{width:160px;height:160px;object-fit:contain}
-
-  .setup-title{font-size:20px;font-weight:500;color:#fff}
-  .setup-sub{font-size:13px;color:var(--muted);max-width:420px;line-height:1.6}
-  .start-btn{background:linear-gradient(135deg,var(--green-dim),var(--green));border:none;color:#052e12;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px;transition:all .2s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif}
-  .start-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(74,222,128,.25)}
-  .start-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
-  .start-btn svg{width:18px;height:18px}
-  .call-screen{flex:1;display:none;flex-direction:column}
-  .call-screen.active{display:flex}
-  .transcript-area{flex:1;padding:18px 24px;overflow-y:auto;max-height:420px;display:flex;flex-direction:column;gap:10px}
-  .msg{display:flex;gap:10px;animation:fadeIn .3s ease}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  .msg.ai{flex-direction:row}
-  .msg.user{flex-direction:row-reverse}
-  .avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;font-weight:600}
-  .ai .avatar{background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));color:#0d1b2a}
-  .user .avatar{background:linear-gradient(135deg,#3b4a5c,#2a3a4c);color:var(--muted)}
-  .bubble{max-width:75%;padding:9px 13px;border-radius:12px;font-size:13.5px;line-height:1.5}
-  .ai .bubble{background:var(--surface2);border:1px solid var(--border);border-radius:4px 12px 12px 12px}
-  .user .bubble{background:linear-gradient(135deg,#1a3a5c,#0f2640);border:1px solid rgba(34,211,238,.2);border-radius:12px 4px 12px 12px}
-  .bubble.interim{opacity:.6;font-style:italic}
-  .call-status{background:var(--surface);border-top:1px solid var(--border);padding:18px 24px}
-  .status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px}
-  .status-indicator{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:#0d1b2a;border:1px solid var(--border);font-size:12px;color:var(--muted);transition:all .3s}
-  .status-indicator.listening{border-color:var(--cyan-dim);color:var(--cyan);background:rgba(34,211,238,.05)}
-  .status-indicator.thinking{border-color:var(--amber);color:var(--amber);background:rgba(251,191,36,.05)}
-  .status-indicator.speaking{border-color:var(--green-dim);color:var(--green);background:rgba(74,222,128,.05)}
-  .voice-bars{display:flex;gap:3px;align-items:center;height:18px}
-  .voice-bars span{width:3px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
-  .voice-bars span:nth-child(1){animation-delay:0s}
-  .voice-bars span:nth-child(2){animation-delay:.1s}
-  .voice-bars span:nth-child(3){animation-delay:.2s}
-  .voice-bars span:nth-child(4){animation-delay:.1s}
-  .voice-bars span:nth-child(5){animation-delay:.0s}
-  @keyframes wave{0%,100%{height:4px}50%{height:16px}}
-  .end-btn{background:linear-gradient(135deg,var(--red-dim),var(--red));border:none;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;margin:0 auto;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .end-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(248,113,113,.3)}
-  .end-btn svg{width:16px;height:16px}
-  .error-banner{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin:12px 24px 0;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
-  .error-banner.show{display:block}
-  .debug-log{background:#000;border-top:1px solid var(--border);padding:10px 14px;font-size:11px;color:#7eb8da;font-family:'DM Mono',monospace;max-height:120px;overflow-y:auto;display:none;line-height:1.5}
-  .debug-log.show{display:block}
-  .debug-log .d-err{color:#f87171}
-  .debug-log .d-ok{color:#4ade80}
-  .hint-bar{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
-  .intake-form{margin:0 24px 16px;background:var(--surface);border:1px solid var(--cyan-dim);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
-  .intake-form.show{display:block}
-  .intake-form-title{font-size:13.5px;font-weight:600;color:#fff;margin-bottom:4px}
-  .intake-form-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6}
-  .intake-submit-btn{width:100%;margin-top:14px;padding:10px;border-radius:8px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));border:none;color:#0d1b2a;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .intake-submit-btn:hover{box-shadow:0 4px 14px rgba(34,211,238,.3)}
-  .intake-submit-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-  .confirm-card{margin:0 24px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;animation:fadeIn .3s ease}
-  .confirm-card.show{display:block}
-  .confirm-card-title{font-size:11px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
-  .confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .confirm-row:last-child{margin-bottom:0}
-  .confirm-label{font-size:11px;color:var(--muted);width:52px;flex-shrink:0}
-  .confirm-input{flex:1;background:#0d1b2a;border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
-  .confirm-input:focus{outline:none;border-color:var(--cyan-dim)}
-  .confirm-input:disabled{opacity:.4;cursor:not-allowed}
-  .confirm-input.filled{border-color:rgba(34,211,238,.25)}
-  .confirm-actions{display:flex;gap:8px;margin-top:14px}
-  .confirm-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .confirm-btn.yes{background:linear-gradient(135deg,var(--green-dim),var(--green));color:#052e12}
-  .confirm-btn.yes:hover{box-shadow:0 4px 12px rgba(74,222,128,.25)}
-  .confirm-btn.edit{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
-  .confirm-btn.edit:hover{border-color:var(--cyan-dim);color:var(--cyan)}
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;min-height:100%}
+body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-content:center;min-height:100vh;position:relative;overflow-x:hidden}
+.scene{position:fixed;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%, #f5e8c8 0%, #e8c88a 25%, #c8934a 55%, #8a4a1a 80%, #3a1a08 100%);z-index:0}
+.scene-overlay{position:fixed;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 100%, rgba(30,10,0,.5) 0%, transparent 60%);z-index:0}
+.grain{position:fixed;inset:0;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;z-index:0;pointer-events:none}
+.light-halo{position:fixed;width:500px;height:300px;border-radius:50%;background:radial-gradient(ellipse, rgba(255,240,180,.3) 0%, transparent 70%);top:10%;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
+.horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top, rgba(80,20,0,.6) 0%, transparent 100%);pointer-events:none;z-index:0}
+.app{width:100%;max-width:640px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1}
+.header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo img{width:44px;height:44px;object-fit:contain}
+.header-text h1{font-size:14px;font-weight:500;color:rgba(255,235,190,.85);letter-spacing:.3px}
+.header-text p{font-size:11px;color:rgba(255,210,150,.45);margin-top:1px;letter-spacing:1px;text-transform:uppercase}
+.call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:rgba(160,240,130,.7);display:none;align-items:center;gap:6px}
+.call-timer.active{display:flex}
+.call-timer .dot{width:6px;height:6px;border-radius:50%;background:rgba(160,240,130,.8);animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.error-banner{background:rgba(255,100,80,.12);border:1px solid rgba(255,120,80,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(255,160,120,.9);margin:0 24px 0;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
+.error-banner.show{display:block}
+.setup-screen{flex:1;padding:20px 24px 40px;display:flex;flex-direction:column;gap:20px;align-items:center;justify-content:center;text-align:center}
+.setup-screen.hidden{display:none}
+.setup-icon{width:180px;height:180px;display:flex;align-items:center;justify-content:center}
+.orb-wrap{position:relative;width:180px;height:180px;display:flex;align-items:center;justify-content:center}
+.orb-ring-outer{position:absolute;width:180px;height:180px;border-radius:50%;border:1px solid rgba(180,100,20,.2);animation:ringBreath 4s ease-in-out infinite}
+.orb-ring-mid{position:absolute;width:144px;height:144px;border-radius:50%;border:1px solid rgba(180,100,20,.3);animation:ringBreath 4s ease-in-out infinite .6s}
+.orb-ring-inner{position:absolute;width:108px;height:108px;border-radius:50%;border:1px solid rgba(200,120,20,.4);animation:ringBreath 4s ease-in-out infinite 1.2s}
+.orb-glow{position:absolute;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle, rgba(240,180,60,.5) 0%, rgba(200,120,30,.3) 50%, transparent 70%);animation:glowPulse 4s ease-in-out infinite;filter:blur(10px)}
+.orb-core{width:80px;height:80px;border-radius:50%;background:radial-gradient(circle at 38% 35%, rgba(255,220,100,.95) 0%, rgba(220,140,30,.9) 45%, rgba(160,70,10,.9) 100%);box-shadow:0 0 40px rgba(220,140,30,.6),0 0 80px rgba(180,90,10,.4),inset 0 1px 0 rgba(255,250,200,.5);animation:coreBreath 4s ease-in-out infinite;position:relative;z-index:2}
+.orb-core::after{content:'';position:absolute;top:10px;left:12px;width:22px;height:14px;border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,.5) 0%, transparent 70%);transform:rotate(-30deg)}
+.setup-title{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;font-style:italic;color:rgba(255,235,190,.85);letter-spacing:.5px;text-shadow:0 1px 8px rgba(0,0,0,.3)}
+.setup-sub{font-size:13px;color:rgba(255,210,150,.55);max-width:380px;line-height:1.7;font-weight:300}
+.start-btn{background:rgba(0,0,0,.2);border:1px solid rgba(255,210,130,.4);color:rgba(255,225,165,.8);padding:13px 36px;border-radius:2px;font-size:12px;font-weight:300;cursor:pointer;margin-top:8px;transition:all .25s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif;letter-spacing:3px;text-transform:uppercase}
+.start-btn:hover{border-color:rgba(255,210,130,.7);color:rgba(255,240,200,.95);background:rgba(0,0,0,.3);transform:translateY(-1px)}
+.start-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.start-btn svg{width:16px;height:16px}
+.call-screen{flex:1;display:none;flex-direction:column}
+.call-screen.active{display:flex}
+.transcript-area{flex:1;padding:16px 24px;overflow-y:auto;max-height:380px;display:flex;flex-direction:column;gap:10px}
+.msg{display:flex;gap:10px;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.ai{flex-direction:row}
+.msg.user{flex-direction:row-reverse}
+.avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;font-weight:500;background:rgba(0,0,0,.25);border:1px solid rgba(255,200,120,.2)}
+.ai .avatar{color:rgba(255,220,150,.8)}
+.user .avatar{color:rgba(160,240,130,.7)}
+.bubble{max-width:75%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.55;background:rgba(0,0,0,.2);border:1px solid rgba(255,200,100,.12)}
+.ai .bubble{color:rgba(255,230,170,.85);border-radius:4px 12px 12px 12px}
+.user .bubble{color:rgba(160,240,130,.8);border-radius:12px 4px 12px 12px;border-color:rgba(120,200,80,.15)}
+.bubble.interim{opacity:.55;font-style:italic}
+.intake-form{margin:0 24px 14px;background:rgba(0,0,0,.25);border:1px solid rgba(255,200,100,.25);border-radius:10px;padding:16px;display:none;animation:fadeIn .3s ease}
+.intake-form.show{display:block}
+.intake-form-title{font-size:13px;font-weight:500;color:rgba(255,235,180,.85);margin-bottom:4px}
+.intake-form-sub{font-size:12px;color:rgba(255,210,150,.5);margin-bottom:14px;line-height:1.6;font-weight:300}
+.intake-submit-btn{width:100%;margin-top:14px;padding:10px;border-radius:6px;background:rgba(200,130,20,.5);border:1px solid rgba(255,200,80,.4);color:rgba(255,235,160,.9);font-size:13px;font-weight:400;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:.5px}
+.intake-submit-btn:hover{background:rgba(200,130,20,.7);border-color:rgba(255,210,100,.6)}
+.intake-submit-btn:disabled{opacity:.4;cursor:not-allowed}
+.confirm-card{margin:0 24px 14px;background:rgba(0,0,0,.25);border:1px solid rgba(255,200,100,.2);border-radius:10px;padding:16px;display:none;animation:fadeIn .3s ease}
+.confirm-card.show{display:block}
+.confirm-card-title{font-size:11px;font-weight:500;color:rgba(255,210,120,.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+.confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.confirm-row:last-child{margin-bottom:0}
+.confirm-label{font-size:11px;color:rgba(255,200,130,.5);width:52px;flex-shrink:0;font-weight:300}
+.confirm-input{flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(255,200,100,.2);border-radius:6px;padding:7px 10px;color:rgba(255,230,170,.85);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
+.confirm-input:focus{outline:none;border-color:rgba(255,200,100,.5)}
+.confirm-input:disabled{opacity:.35;cursor:not-allowed}
+.confirm-input.filled{border-color:rgba(255,180,60,.35)}
+.confirm-input::placeholder{color:rgba(255,200,130,.25)}
+.confirm-actions{display:flex;gap:8px;margin-top:14px}
+.confirm-btn{flex:1;padding:9px;border-radius:6px;font-size:12px;font-weight:400;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:.5px}
+.confirm-btn.yes{background:rgba(80,160,50,.4);border:1px solid rgba(120,200,80,.3);color:rgba(160,240,130,.85)}
+.confirm-btn.yes:hover{background:rgba(80,160,50,.6);border-color:rgba(120,200,80,.5)}
+.confirm-btn.edit{background:rgba(0,0,0,.2);border:1px solid rgba(255,200,100,.2);color:rgba(255,210,150,.55)}
+.confirm-btn.edit:hover{border-color:rgba(255,200,100,.4);color:rgba(255,220,170,.8)}
+.call-status{background:rgba(0,0,0,.2);border-top:1px solid rgba(255,200,100,.1);padding:16px 24px}
+.status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px}
+.status-indicator{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:rgba(0,0,0,.25);border:1px solid rgba(255,200,100,.15);font-size:12px;color:rgba(255,210,150,.5);transition:all .3s;font-weight:300}
+.status-indicator.listening{border-color:rgba(120,200,80,.35);color:rgba(160,240,130,.75);background:rgba(60,140,30,.1)}
+.status-indicator.thinking{border-color:rgba(220,160,30,.35);color:rgba(255,200,80,.75);background:rgba(160,100,10,.1)}
+.status-indicator.speaking{border-color:rgba(220,120,50,.35);color:rgba(255,160,100,.75);background:rgba(160,70,20,.1)}
+.voice-bars{display:flex;gap:3px;align-items:center;height:16px}
+.voice-bars span{width:2.5px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
+.voice-bars span:nth-child(1){animation-delay:0s}
+.voice-bars span:nth-child(2){animation-delay:.1s}
+.voice-bars span:nth-child(3){animation-delay:.2s}
+.voice-bars span:nth-child(4){animation-delay:.1s}
+.voice-bars span:nth-child(5){animation-delay:0s}
+@keyframes wave{0%,100%{height:3px}50%{height:14px}}
+.end-btn{background:rgba(0,0,0,.2);border:1px solid rgba(255,120,80,.3);color:rgba(255,150,110,.65);padding:11px 24px;border-radius:2px;font-size:11px;font-weight:300;cursor:pointer;display:flex;align-items:center;gap:8px;margin:0 auto;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:3px;text-transform:uppercase}
+.end-btn:hover{border-color:rgba(255,120,80,.6);color:rgba(255,170,140,.9);transform:translateY(-1px)}
+.end-btn svg{width:14px;height:14px}
+.toggle-btn{background:rgba(0,0,0,.18);border:1px solid rgba(255,210,130,.22);cursor:pointer;padding:6px 14px;border-radius:2px;display:flex;align-items:center;gap:8px;transition:all .25s;margin:10px auto 0}
+.toggle-btn:hover{background:rgba(0,0,0,.3);border-color:rgba(255,210,130,.45)}
+.eye-icon{width:16px;height:14px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.eye-oval{width:16px;height:10px;border:1.5px solid rgba(255,220,150,.7);border-radius:50%;position:absolute}
+.eye-pupil{width:5px;height:5px;border-radius:50%;background:rgba(255,220,150,.7);position:absolute}
+.eye-slash{width:19px;height:1.5px;background:rgba(255,220,150,.7);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
+.toggle-label{font-size:10px;color:rgba(255,220,150,.7);letter-spacing:2px;text-transform:uppercase;font-weight:300}
+.hint-bar{font-size:11px;color:rgba(255,200,130,.3);text-align:center;margin-top:10px;font-weight:300;letter-spacing:.5px}
+.debug-log{background:rgba(0,0,0,.6);border-top:1px solid rgba(255,200,100,.1);padding:10px 14px;font-size:11px;color:rgba(180,220,255,.6);font-family:'DM Mono',monospace;max-height:120px;overflow-y:auto;display:none;line-height:1.5}
+.debug-log.show{display:block}
+.debug-log .d-err{color:rgba(255,140,100,.8)}
+.debug-log .d-ok{color:rgba(140,220,100,.8)}
+@keyframes ringBreath{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
+@keyframes glowPulse{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes coreBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 </style>
 </head>
 <body>
+<div class="scene"></div>
+<div class="scene-overlay"></div>
+<div class="grain"></div>
+<div class="light-halo"></div>
+<div class="horizon-glow"></div>
 <div class="app">
   <div class="header">
     <div class="logo"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
@@ -112,8 +132,16 @@
   </div>
   <div class="error-banner" id="errorBanner"></div>
   <div class="setup-screen" id="setupScreen">
-    <div class="setup-icon"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
-    <div class="setup-title">Utah REIA Voice Assistant</div>
+    <div class="setup-icon">
+      <div class="orb-wrap">
+        <div class="orb-ring-outer"></div>
+        <div class="orb-ring-mid"></div>
+        <div class="orb-ring-inner"></div>
+        <div class="orb-glow"></div>
+        <div class="orb-core"></div>
+      </div>
+    </div>
+    <div class="setup-title">Begin your journey</div>
     <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
     <button class="start-btn" id="startBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -127,34 +155,16 @@
     <div class="intake-form" id="intakeForm">
       <div class="intake-form-title">Please enter your details below</div>
       <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
-      <div class="confirm-row">
-        <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="intakeName" placeholder="Full name" autocomplete="name" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="intakeEmail" placeholder="you@example.com" autocomplete="email" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" />
-      </div>
+      <div class="confirm-row"><span class="confirm-label">Name</span><input type="text" class="confirm-input" id="intakeName" placeholder="Full name" autocomplete="name" /></div>
+      <div class="confirm-row"><span class="confirm-label">Email</span><input type="email" class="confirm-input" id="intakeEmail" placeholder="you@example.com" autocomplete="email" /></div>
+      <div class="confirm-row"><span class="confirm-label">Phone</span><input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" /></div>
       <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
     </div>
     <div class="confirm-card" id="confirmCard">
       <div class="confirm-card-title">Just to confirm your details</div>
-      <div class="confirm-row">
-        <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="confirmName" placeholder="---" disabled />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="confirmEmail" placeholder="---" disabled />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="confirmPhone" placeholder="---" disabled />
-      </div>
+      <div class="confirm-row"><span class="confirm-label">Name</span><input type="text" class="confirm-input" id="confirmName" placeholder="---" disabled /></div>
+      <div class="confirm-row"><span class="confirm-label">Email</span><input type="email" class="confirm-input" id="confirmEmail" placeholder="---" disabled /></div>
+      <div class="confirm-row"><span class="confirm-label">Phone</span><input type="tel" class="confirm-input" id="confirmPhone" placeholder="---" disabled /></div>
       <div class="confirm-actions" id="confirmActions" style="display:none">
         <button class="confirm-btn yes" id="confirmYesBtn">Looks correct</button>
         <button class="confirm-btn edit" id="confirmEditBtn">Edit details</button>
@@ -174,60 +184,33 @@
         </svg>
         End Call
       </button>
+      <button class="toggle-btn" id="toggleBtn">
+        <div class="eye-icon"><div class="eye-oval"></div><div class="eye-pupil" id="eyePupil"></div><div class="eye-slash" id="eyeSlash"></div></div>
+        <span class="toggle-label" id="toggleLabel">Text</span>
+      </button>
       <div class="hint-bar">Just talk naturally. Pause when you're done. You can interrupt anytime by speaking.</div>
     </div>
   </div>
   <div class="debug-log" id="debugLog"></div>
 </div>
 <script>
-const setupScreen = document.getElementById('setupScreen');
-const callScreen = document.getElementById('callScreen');
-const startBtn = document.getElementById('startBtn');
-const endBtn = document.getElementById('endBtn');
-const transcriptArea = document.getElementById('transcriptArea');
-const statusInd = document.getElementById('statusInd');
-const statusText = document.getElementById('statusText');
-const callTimer = document.getElementById('callTimer');
-const timerText = document.getElementById('timerText');
-const errorBanner = document.getElementById('errorBanner');
-const debugLog = document.getElementById('debugLog');
-const confirmCard = document.getElementById('confirmCard');
-const confirmNameEl = document.getElementById('confirmName');
-const confirmEmailEl = document.getElementById('confirmEmail');
-const confirmPhoneEl = document.getElementById('confirmPhone');
-const confirmActions = document.getElementById('confirmActions');
-const confirmYesBtn = document.getElementById('confirmYesBtn');
-const confirmEditBtn = document.getElementById('confirmEditBtn');
-const intakeFormEl = document.getElementById('intakeForm');
-const intakeNameInput = document.getElementById('intakeName');
-const intakeEmailInput = document.getElementById('intakeEmail');
-const intakePhoneInput = document.getElementById('intakePhone');
-const intakeSubmitBtn = document.getElementById('intakeSubmitBtn');
-
-let callerName = '';
-let callerEmail = '';
-let callerPhone = '';
-let intakePhase = true;
-let intakeConfirmed = false;
-let awaitingConfirmation = false;
-let intakeFormShown = false;
-let callActive = false;
-let conversationHistory = [];
-let currentAudio = null;
-let isSpeaking = false;
-let callStartTime = 0;
-let timerInterval = null;
-let silenceTimer = null;
-let interimMsgEl = null;
-let pendingTranscript = '';
-let restartTimeout = null;
-let callerProfile = {};
-let matchesInjected = false;
-let liveContext = null;
-
-const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
-
-const systemPrompt = `You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
+const toggleBtn=document.getElementById('toggleBtn'),toggleLabel=document.getElementById('toggleLabel'),eyePupil=document.getElementById('eyePupil'),eyeSlash=document.getElementById('eyeSlash'),transcriptAreaEl=document.getElementById('transcriptArea');
+let transcriptVisible=false;
+transcriptAreaEl.style.opacity='0';transcriptAreaEl.style.pointerEvents='none';transcriptAreaEl.style.transition='opacity .4s';
+toggleBtn.addEventListener('click',()=>{
+  transcriptVisible=!transcriptVisible;
+  transcriptAreaEl.style.opacity=transcriptVisible?'1':'0';
+  transcriptAreaEl.style.pointerEvents=transcriptVisible?'auto':'none';
+  toggleLabel.textContent=transcriptVisible?'Hide':'Text';
+  eyeSlash.style.display=transcriptVisible?'block':'none';
+  eyePupil.style.display=transcriptVisible?'none':'block';
+});
+</script>
+<script>
+const setupScreen=document.getElementById('setupScreen'),callScreen=document.getElementById('callScreen'),startBtn=document.getElementById('startBtn'),endBtn=document.getElementById('endBtn'),transcriptArea=document.getElementById('transcriptArea'),statusInd=document.getElementById('statusInd'),statusText=document.getElementById('statusText'),callTimer=document.getElementById('callTimer'),timerText=document.getElementById('timerText'),errorBanner=document.getElementById('errorBanner'),debugLog=document.getElementById('debugLog'),confirmCard=document.getElementById('confirmCard'),confirmNameEl=document.getElementById('confirmName'),confirmEmailEl=document.getElementById('confirmEmail'),confirmPhoneEl=document.getElementById('confirmPhone'),confirmActions=document.getElementById('confirmActions'),confirmYesBtn=document.getElementById('confirmYesBtn'),confirmEditBtn=document.getElementById('confirmEditBtn'),intakeFormEl=document.getElementById('intakeForm'),intakeNameInput=document.getElementById('intakeName'),intakeEmailInput=document.getElementById('intakeEmail'),intakePhoneInput=document.getElementById('intakePhone'),intakeSubmitBtn=document.getElementById('intakeSubmitBtn');
+let callerName='',callerEmail='',callerPhone='',intakePhase=true,intakeConfirmed=false,awaitingConfirmation=false,intakeFormShown=false,callActive=false,conversationHistory=[],currentAudio=null,isSpeaking=false,callStartTime=0,timerInterval=null,silenceTimer=null,interimMsgEl=null,pendingTranscript='',restartTimeout=null,callerProfile={},matchesInjected=false,liveContext=null;
+const GHL_WEBHOOK='https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
+const systemPrompt=`You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
 
 Utah REIA is not a motivational program. It is not a guru platform. It is a room of experienced investors thinking through real decisions in real time. That is the standard you hold in every sentence.
 
@@ -259,19 +242,33 @@ VOICE AND PERSONALITY — NON-NEGOTIABLE:
 You are warm, direct, and real. You think out loud. You sound like a person who has been in the room when deals go sideways — not a bot, not a coach, not a salesperson.
 
 Aloha is the signature greeting of Utah REIA and Harmonie Borden. Use it to open and to re-warm the conversation when it fits naturally. Mahalo is how we close — use it when wrapping up or when someone shares something real with you.
+
 Maximum 2 sentences per response. This is a phone call, not a presentation. Get to the point fast, then stop.
+
 Never use lists, bullet points, or any structure. Spoken language only. Short, punchy sentences. No long wind-ups.
+
 Use contractions naturally — I'm, you're, let's, we've, they're. Sound like a person talking, not a corporate press release.
+
 Ask exactly one question per turn. Give them room to answer. A short follow-up beats a long explanation every time.
+
 Mirror back what they say before moving forward. Show you actually heard them. Something like: "Yeah, so you're about six months in and looking at your first flip — that makes sense."
+
 Use observational language, not instructional language. "Here's what I've seen..." or "Most investors we talk to..." — never "You should..." or "Let me teach you..."
+
 Light natural filler when it genuinely fits: "yeah, totally", "that makes sense", "okay so..." — sparingly, and only when it's real.
+
 No hype. No urgency. No motivational language. Not even subtle versions. You are calm, steady, and you've seen the cycle before.
+
 Never say: "great question", "absolutely", "that's awesome", "fantastic", "I'd be happy to help", "let's get you on the path to success", "game-changer", "wealth-building journey", "financial freedom", "passive income", or anything that sounds like a sales call or a real estate guru.
+
 If someone shares a struggle, a mistake, or a hesitation — acknowledge it plainly and move forward. No over-the-top empathy performance. Warmth is real here, not performed.
+
 If they seem unsure or vague, give them room. Silence is fine. A short follow-up beats a long explanation.
+
 PRONUNCIATION: Always write "Utah REIA" normally in your responses. The system handles pronunciation automatically.
+
 NO MARKDOWN: Never use markdown formatting of any kind. No links like [text](url), no bold **text**, no bullet points, no headers. This is spoken audio — plain sentences only.
+
 NO RAW JSON: Never let any signal block like [PROFILE:...] or [INTAKE:...] appear in your conversational text. Those blocks must only appear at the very end of the response, after your spoken sentence.
 
 ---
@@ -368,786 +365,40 @@ Field rules:
 - summary: one sentence about this caller for the record
 
 After you emit [PROFILE:...], the system will automatically provide you with real matching vendors and peer investors from the Utah REIA database. When that context arrives, reference those specific people and businesses by name in your response — do not make up names.`;
-
-function log(msg, type) {
-  debugLog.classList.add('show');
-  const div = document.createElement('div');
-  div.className = type === 'err' ? 'd-err' : (type === 'ok' ? 'd-ok' : '');
-  const t = new Date().toLocaleTimeString();
-  div.textContent = '[' + t + '] ' + msg;
-  debugLog.appendChild(div);
-  debugLog.scrollTop = debugLog.scrollHeight;
-  console.log('[REIA]', msg);
-}
-
-function showError(msg) {
-  errorBanner.textContent = msg;
-  errorBanner.classList.add('show');
-  log('ERROR: ' + msg, 'err');
-  setTimeout(() => errorBanner.classList.remove('show'), 10000);
-}
-
-function setStatus(state, text) {
-  statusInd.className = 'status-indicator ' + state;
-  statusText.textContent = text;
-}
-
-function addMessage(role, text, interim) {
-  if (interim && interimMsgEl) {
-    interimMsgEl.querySelector('.bubble').textContent = text;
-    transcriptArea.scrollTop = transcriptArea.scrollHeight;
-    return interimMsgEl;
-  }
-  const msg = document.createElement('div');
-  msg.className = 'msg ' + (role === 'assistant' ? 'ai' : 'user');
-  const av = document.createElement('div');
-  av.className = 'avatar';
-  av.textContent = role === 'assistant' ? 'R' : 'U';
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble' + (interim ? ' interim' : '');
-  bubble.textContent = text;
-  msg.appendChild(av);
-  msg.appendChild(bubble);
-  transcriptArea.appendChild(msg);
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
-  if (interim) interimMsgEl = msg;
-  return msg;
-}
-
-function finalizeInterim(finalText) {
-  if (interimMsgEl) {
-    const bubble = interimMsgEl.querySelector('.bubble');
-    bubble.textContent = finalText;
-    bubble.classList.remove('interim');
-    interimMsgEl = null;
-  }
-}
-
-function updateTimer() {
-  const secs = Math.floor((Date.now() - callStartTime) / 1000);
-  const m = String(Math.floor(secs / 60)).padStart(2, '0');
-  const s = String(secs % 60).padStart(2, '0');
-  timerText.textContent = m + ':' + s;
-}
-
-async function playElevenLabs(text) {
-  try {
-    setStatus('speaking', 'Speaking...');
-    isSpeaking = true;
-    log('Calling ElevenLabs via proxy...');
-    const resp = await fetch('/api/elevenlabs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (!resp.ok) {
-      const errTxt = await resp.text();
-      throw new Error('ElevenLabs proxy ' + resp.status + ': ' + errTxt.substring(0, 200));
-    }
-    log('ElevenLabs response OK', 'ok');
-    const arrayBuffer = await resp.arrayBuffer();
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-    const source = audioCtx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(audioCtx.destination);
-    currentAudio = { pause: () => { try { source.stop(); audioCtx.close(); } catch(e){} }, currentTime: 0 };
-    await new Promise((resolve) => {
-      source.onended = () => {
-        isSpeaking = false;
-        currentAudio = null;
-        audioCtx.close();
-        log('ElevenLabs audio ended — waiting to open mic...');
-        if (callActive) {
-          setTimeout(() => {
-            if (callActive && !isSpeaking) {
-              log('Opening mic now...');
-              setStatus('listening', 'Listening...');
-              startListening();
-            }
-          }, 400);
-        }
-        resolve();
-      };
-      source.start(0);
-    });
-  } catch (e) {
-    isSpeaking = false;
-    log('ElevenLabs error — falling back to browser TTS: ' + e.message, 'err');
-    await playBrowserTTS(text);
-  }
-}
-
-function interruptAI() {
-  if (currentAudio) {
-    try { currentAudio.pause(); } catch(e) {}
-    currentAudio = null;
-  }
-  isSpeaking = false;
-}
-
-async function sendToAI(userText) {
-  conversationHistory.push({ role: 'user', content: userText });
-  setStatus('thinking', 'Thinking...');
-  stopListening();
-  log('Calling Claude via proxy...');
-  try {
-    const resp = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 280,
-        system: window._dynamicSystemPrompt || systemPrompt,
-        messages: conversationHistory
-      })
-    });
-    if (!resp.ok) {
-      const errTxt = await resp.text();
-      throw new Error('Claude proxy ' + resp.status + ': ' + errTxt.substring(0, 300));
-    }
-    const data = await resp.json();
-    log('Claude response OK', 'ok');
-    if (data.content && data.content[0]) {
-      let fullText = data.content[0].text;
-      const intakeMatch = fullText.match(/\[INTAKE:({.*?})\]/s);
-      if (intakeMatch) {
-        try {
-          const parsed = JSON.parse(intakeMatch[1]);
-          if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
-          if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
-          if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
-          if (!intakeConfirmed) confirmCard.classList.add('show');
-        } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
-      }
-      if (fullText.includes('[INTAKE_CONFIRMED]')) {
-        intakeConfirmed = true;
-        intakePhase = false;
-        callerName = confirmNameEl.value.trim() || callerName;
-        callerEmail = confirmEmailEl.value.trim() || callerEmail;
-        callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-        confirmActions.style.display = 'none';
-        awaitingConfirmation = false;
-        log('Intake confirmed', 'ok');
-      }
-      if (callerName && callerEmail && callerPhone && !intakeConfirmed && !awaitingConfirmation) {
-        awaitingConfirmation = true;
-        confirmActions.style.display = 'flex';
-        confirmNameEl.disabled = true;
-        confirmEmailEl.disabled = true;
-        confirmPhoneEl.disabled = true;
-      }
-      if (intakePhase && !intakeFormShown && !intakeConfirmed) {
-        intakeFormShown = true;
-        intakeFormEl.classList.add('show');
-      }
-      const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
-      if (profileMatch && !matchesInjected) {
-        try {
-          callerProfile = JSON.parse(profileMatch[1]);
-          log('Profile signal received — fetching matches...');
-          fetchAndInjectMatches(callerProfile);
-        } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
-      }
-      // Strip all signal blocks and markdown before displaying or speaking
-const spokenText = fullText
-  // Remove PROFILE signal — greedy match, handles multiline/nested JSON
-  .replace(/\[PROFILE:[\s\S]*?\]\s*/g, '')
-  // Catch any JSON tail that leaked out (e.g. ,"blocker":"..."} leftover)
-  .replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g, '')
-  // Remove INTAKE signal
-  .replace(/\[INTAKE:[\s\S]*?\]\s*/g, '')
-  .replace('[INTAKE_CONFIRMED]', '')
-  // Remove any remaining signal-looking fragments
-  .replace(/\[[A-Z_]+:[\s\S]*?\]/g, '')
-        // Strip markdown links [text](url) -> just the text
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        // Strip bare markdown URLs like http://... inside angle brackets <url>
-        .replace(/<https?:\/\/[^>]+>/g, '')
-        // Strip bold **text** -> text
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        // Strip italic *text* -> text
-        .replace(/\*([^*]+)\*/g, '$1')
-        // Clean up any leftover bracket artifacts
-        .replace(/\[\]/g, '')
-        .replace(/\(\)/g, '')
-        .trim();
-      conversationHistory.push({ role: 'assistant', content: fullText });
-      addMessage('assistant', spokenText);
-      await speak(spokenText);
-    } else {
-      throw new Error('No response content from AI');
-    }
-  } catch (e) {
-    showError('AI error: ' + (e.message || 'connection failed'));
-    if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
-  }
-}
-
-// ─── IMPROVED VAD — Super Whisper style four-state machine ───────────────────
-//
-// States: waiting -> speaking -> pausing -> ending
-//
-// WAITING:  Mic is open. We haven't heard real speech yet.
-//           Background noise below NOISE_FLOOR is ignored entirely.
-//           Low-level sounds (breath, ambient) above NOISE_FLOOR but below
-//           SPEECH_THRESHOLD don't trigger speech detection.
-//           After IDLE_RESTART_MS with nothing, we restart the recorder to
-//           flush the buffer and avoid sending stale audio.
-//
-// SPEAKING: Real voice detected (RMS > SPEECH_THRESHOLD). Silence counter
-//           starts when amplitude drops. Short pauses under SHORT_PAUSE_MS
-//           are tolerated — the counter resets if voice resumes.
-//           This lets people say "I want to do... fix and flip" without
-//           getting cut off mid-thought.
-//
-// PAUSING:  Silence has lasted SHORT_PAUSE_MS. Still waiting to see if
-//           voice resumes. If it does, back to SPEAKING. If silence reaches
-//           END_OF_TURN_MS, move to ENDING.
-//
-// ENDING:   Sustained silence confirmed end of turn. Stop recording and
-//           send to Whisper. Only commits if MIN_SPEECH_MS (80ms) of actual voice
-//           was recorded — prevents sending breath/noise as a turn.
-
-let mediaRecorder = null;
-let audioChunks = [];
-let micStream = null;
-let isRecording = false;
-let audioContext = null;
-let analyser = null;
-let vadInterval = null;
-let suppressRestart = false;
-
-// VAD constants — calibrated to headset RMS output
-// Ambient noise floor: ~1.0-1.1 RMS
-// Normal speaking voice: ~1.4-1.7 RMS
-// Loud speaking voice: ~11-12 RMS
-//
-// Super Whisper-style behaviour:
-// - SPEAKING zone: above SPEECH_THRESHOLD — accumulates speech duration
-// - HOLDING zone: between HOLD_FLOOR and SPEECH_THRESHOLD — we stay in speaking state,
-//   treating this as a natural thinking pause mid-sentence. The silence timer does NOT
-//   start here. This is the key difference from a simple threshold check.
-// - SILENCE zone: below HOLD_FLOOR — silence timer starts
-// - Only commits when silence timer reaches END_OF_TURN_MS after real speech
-
-const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
-const SPEECH_THRESHOLD = 1.4;  // above this = real voice
-const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
-                                // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 3000; // ms of silence before committing — 3 seconds
-const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
-const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
-const VAD_INTERVAL_MS  = 80;   // sample interval in ms
-
-let vadState           = 'waiting'; // waiting | speaking | ending
-let vadSpeechDetected  = false;
-let vadSpeechDuration  = 0;
-let vadSilenceDuration = 0;
-let vadIdleDuration    = 0;
-
-async function initMicStream() {
-  if (micStream) return true;
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: 16000
-      }
-    });
-    log('Mic stream acquired', 'ok');
-    return true;
-  } catch(e) {
-    showError('Microphone access required: ' + e.message);
-    return false;
-  }
-}
-
-function startListening() {
-  if (!callActive || isSpeaking || isRecording) return;
-  if (!micStream) { log('No mic stream', 'err'); return; }
-
-  try {
-    audioChunks = [];
-    vadState = 'waiting';
-    vadSpeechDetected = false;
-    vadSpeechDuration = 0;
-    vadSilenceDuration = 0;
-
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
-
-    mediaRecorder = new MediaRecorder(micStream, { mimeType });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-      isRecording = false;
-      stopVAD();
-      if (!callActive) return;
-      if (suppressRestart) { suppressRestart = false; return; }
-
-      if (!vadSpeechDetected || vadSpeechDuration < MIN_SPEECH_MS) {
-        log('No real speech detected (' + Math.round(vadSpeechDuration) + 'ms) — restarting mic');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
-        return;
-      }
-
-      const blob = new Blob(audioChunks, { type: mimeType });
-      if (blob.size < 1500) {
-        log('Audio blob too small — restarting');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
-        return;
-      }
-
-      setStatus('thinking', 'Transcribing...');
-      await transcribeAndSend(blob);
-    };
-
-    mediaRecorder.start(80);
-    isRecording = true;
-    audioChunks = [];
-    setStatus('listening', 'Listening...');
-    log('Mic recording started');
-
-    // Drain first 100ms only — less aggressive, preserves speech onset
-    setTimeout(() => {
-      audioChunks = audioChunks.slice(0, 1);
-      startVAD();
-    }, 100);
-
-  } catch(e) {
-    log('MediaRecorder error: ' + e.message, 'err');
-  }
-}
-
-function startVAD() {
-  stopVAD();
-  if (!micStream) return;
-
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaStreamSource(micStream);
-  analyser = audioContext.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.3; // smooth amplitude, reduces spikes
-  source.connect(analyser);
-
-  const dataArray = new Uint8Array(analyser.fftSize);
-
-  vadInterval = setInterval(() => {
-    if (!isRecording || !callActive || isSpeaking) { stopVAD(); return; }
-    if (!analyser) return;
-
-    analyser.getByteTimeDomainData(dataArray);
-
-    // RMS amplitude — far more stable than peak for real speech detection
-    let sumSq = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      const v = (dataArray[i] - 128) / 128;
-      sumSq += v * v;
-    }
-    const rms = Math.sqrt(sumSq / dataArray.length) * 100;
-
-    // TEMP DEBUG — log RMS every 10 frames so we can tune thresholds
-    if (typeof window._rmsLogCount === "undefined") window._rmsLogCount = 0;
-    window._rmsLogCount++;
-    if (window._rmsLogCount % 10 === 0) { const zone = rms >= SPEECH_THRESHOLD ? "SPEECH" : rms >= HOLD_FLOOR ? "HOLD" : "silence"; log("RMS: " + rms.toFixed(2) + " zone:" + zone + " state:" + vadState); }
-
-    if (rms >= SPEECH_THRESHOLD) {
-      // ── SPEECH ZONE — real voice ──────────────────────────────────────────
-      vadSpeechDetected = true;
-      vadSpeechDuration += VAD_INTERVAL_MS;
-      vadSilenceDuration = 0;
-      vadIdleDuration = 0;
-      if (vadState !== 'speaking') {
-        vadState = 'speaking';
-      }
-
-    } else if (rms >= HOLD_FLOOR) {
-      // ── HOLD ZONE — between noise floor and speech threshold ──────────────
-      // Natural mid-sentence pause, breath, trailing syllable, thinking gap.
-      // We stay in whatever state we're in and do NOT start the silence timer.
-      // This is the "Super Whisper" behaviour — the system waits patiently here
-      // rather than immediately starting the end-of-turn countdown.
-      vadIdleDuration = 0;
-      if (vadState === 'waiting') {
-        // Still waiting for first speech — treat hold zone as idle
-        vadIdleDuration += VAD_INTERVAL_MS;
-      }
-      // Importantly: vadSilenceDuration does NOT increment here
-
-    } else {
-      // ── SILENCE ZONE — true silence below noise floor ─────────────────────
-      // Only now do we start counting toward end of turn
-      if (vadState === 'speaking') {
-        vadSilenceDuration += VAD_INTERVAL_MS;
-        if (vadSilenceDuration >= END_OF_TURN_MS) {
-          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
-            log('End of turn — ' + Math.round(vadSilenceDuration) + 'ms silence after speech');
-            vadState = 'ending';
-            stopRecording();
-          } else {
-            // Timed out but not enough speech — restart quietly
-            stopRecording();
-          }
-        }
-      } else if (vadState === 'waiting') {
-        vadIdleDuration += VAD_INTERVAL_MS;
-        if (vadIdleDuration >= IDLE_RESTART_MS) {
-          log('No speech for 8s — restarting mic');
-          stopRecording();
-        }
-      }
-    }
-
-  }, VAD_INTERVAL_MS);
-}
-
-function stopVAD() {
-  if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
-  if (audioContext) { try { audioContext.close(); } catch(e){} audioContext = null; }
-  analyser = null;
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    try { mediaRecorder.stop(); } catch(e) {}
-  }
-}
-
-async function transcribeAndSend(blob) {
-  try {
-    log('Sending audio for transcription — size: ' + blob.size + ' bytes');
-    const formData = new FormData();
-    formData.append('file', blob, 'audio.webm');
-
-    const resp = await fetch('/api/transcribe', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error('Transcribe error ' + resp.status + ': ' + err.substring(0, 200));
-    }
-
-    const data = await resp.json();
-    const text = (data.text || '').trim();
-
-    if (!text || text.length < 2) {
-      log('Empty transcript — restarting');
-      if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
-      return;
-    }
-
-    log('Transcript: ' + text, 'ok');
-    addMessage('user', text, false);
-    pendingTranscript = '';
-    await sendToAI(text);
-
-  } catch(e) {
-    log('Transcription error: ' + e.message, 'err');
-    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 500);
-  }
-}
-
-function stopListening() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') suppressRestart = true;
-  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-  if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
-  stopVAD();
-  stopRecording();
-  isRecording = false;
-}
-
-function playBrowserTTS(text) {
-  return new Promise((resolve) => {
-    if (!window.speechSynthesis) { resolve(); return; }
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 0.95; utt.pitch = 1.0; utt.volume = 1.0;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v =>
-      v.name.includes('Samantha') || v.name.includes('Karen') ||
-      v.name.includes('Daniel') || v.name.includes('Google US English') ||
-      v.lang === 'en-US'
-    );
-    if (preferred) utt.voice = preferred;
-    const done = () => {
-      isSpeaking = false; currentAudio = null;
-      if (callActive) { setTimeout(() => { setStatus('listening', 'Listening...'); startListening(); }, 300); }
-      resolve();
-    };
-    utt.onend = done; utt.onerror = done;
-    isSpeaking = true;
-    setStatus('speaking', 'Speaking...');
-    currentAudio = { pause: () => window.speechSynthesis.cancel(), currentTime: 0 };
-    window.speechSynthesis.speak(utt);
-    log('Browser TTS speaking...', 'ok');
-  });
-}
-
-function normalizeForSpeech(text) {
-  // Force correct pronunciation of REIA as "REE-ah" (not "RAY-ah" or spelled out)
-  // ElevenLabs reads "Ria" as REE-ah reliably
-  return text
-    .replace(/REIA/g, 'Ria')
-    .replace(/R\.E\.I\.A\./g, 'Ria')
-    .replace(/Utah REIA/g, 'Utah Ria')
-    .replace(/utah reia/gi, 'Utah Ria');
-}
-
-async function speak(text) { await playElevenLabs(normalizeForSpeech(text)); }
-
-async function fetchContext() {
-  try {
-    log('Fetching live Utah Ria knowledge...');
-    const resp = await fetch('/api/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'context' })
-    });
-    if (!resp.ok) { log('Context fetch failed: ' + resp.status, 'err'); return null; }
-    const data = await resp.json();
-    liveContext = data;
-
-    let block = '';
-
-    if (data.boardMembers && data.boardMembers.length > 0) {
-      block += 'BOARD MEMBERS & LEADERSHIP (these are the real people who run Utah Ria):\n';
-      data.boardMembers.forEach(function(b) {
-        block += '- ' + b.name + (b.specialties ? ' — ' + b.specialties : '') + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.vendors && data.vendors.length > 0) {
-      block += 'ACTIVE VENDORS & SERVICE PROVIDERS IN THE COMMUNITY:\n';
-      data.vendors.forEach(function(v) {
-        const who = (v.contact && v.contact !== v.name) ? v.name + ' (contact: ' + v.contact + ')' : v.name;
-        const svcs = v.services.join(', ');
-        const specs = (v.specialties && v.specialties.length > 0) ? ' — specialties: ' + v.specialties.join(', ') : '';
-        block += '- ' + who + ': ' + svcs + specs + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.recentEvents && data.recentEvents.length > 0) {
-      block += 'RECENT EVENTS (topics Utah Ria has taught — shows depth and range):\n';
-      data.recentEvents.forEach(function(e) {
-        block += '- ' + e.date + ': ' + e.title + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.membershipTiers && data.membershipTiers.length > 0) {
-      block += 'MEMBERSHIP TIERS:\n';
-      data.membershipTiers.forEach(function(t) {
-        block += '- ' + t.tier + ': ' + t.description + '\n';
-      });
-    }
-
-    log('Live context loaded — ' + (data.boardMembers ? data.boardMembers.length : 0) + ' board members, ' + (data.vendors ? data.vendors.length : 0) + ' vendors, ' + (data.recentEvents ? data.recentEvents.length : 0) + ' events', 'ok');
-    return block.trim();
-  } catch(e) {
-    log('Context fetch error: ' + e.message, 'err');
-    return null;
-  }
-}
-
-
-async function startCall() {
-  log('Requesting mic access...');
-  const micOk = await initMicStream();
-  if (!micOk) return;
-  if (window.speechSynthesis) window.speechSynthesis.getVoices();
-
-  // Fetch live Utah Ria knowledge and inject into system prompt
-  const contextBlock = await fetchContext();
-  if (contextBlock) {
-    // Inject live context into the system prompt by replacing the placeholder
-    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', contextBlock);
-  } else {
-    // Fallback — remove placeholder cleanly if fetch failed
-    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', '(Live community data temporarily unavailable — use general knowledge about Utah Ria)');
-  }
-
-  callActive = true;
-  conversationHistory = [];
-  setupScreen.classList.add('hidden');
-  callScreen.classList.add('active');
-  callStartTime = Date.now();
-  callTimer.classList.add('active');
-  timerInterval = setInterval(updateTimer, 1000);
-  updateTimer();
-
-  intakePhase = true;
-  intakeConfirmed = false;
-  awaitingConfirmation = false;
-  intakeFormShown = true;
-  intakeFormEl.classList.add('show');
-
-  const greeting = `Aloha! So glad you joined. Go ahead and fill in your name, email, and phone number in the form below — once you do that, let's talk.`;
-  conversationHistory.push({ role: 'assistant', content: greeting });
-  addMessage('assistant', greeting);
-  await speak(greeting);
-}
-
-async function fetchAndInjectMatches(profile) {
-  try {
-    const resp = await fetch('/api/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'matches', profile })
-    });
-    if (!resp.ok) { log('Match fetch failed: ' + resp.status, 'err'); return; }
-    const { vendors = [], investors = [] } = await resp.json();
-    if (!vendors.length && !investors.length) { log('No matches found in database'); return; }
-    matchesInjected = true;
-    log('Matches found — injecting into conversation', 'ok');
-    let context = '[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';
-    if (vendors.length) {
-      context += '\nMatching vendors/service providers:\n';
-      vendors.forEach(v => {
-        const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
-        const services = (v.service_types || []).join(', ');
-        context += '- ' + name + (services ? ' (' + services + ')' : '') + '\n';
-      });
-    }
-    if (investors.length) {
-      context += '\nPeer investors to connect with:\n';
-      investors.forEach(i => {
-        const name = i.contacts?.full_name || 'Unknown';
-        const strats = (i.investing_types || []).join(', ');
-        context += '- ' + name + ' — ' + i.where_in_journey + (strats ? ', ' + strats : '') + '\n';
-      });
-    }
-    conversationHistory.push({ role: 'user', content: context });
-  } catch(e) { log('Match inject error: ' + e.message, 'err'); }
-}
-
-async function syncToGHL() {
-  if (!callerEmail && !callerPhone) return;
-  try {
-    log('Syncing to GHL...');
-    const summary = conversationHistory
-      .filter(m => m.role === 'assistant')
-      .map(m => m.content.replace(/\[PROFILE:.*?\]/s, '').replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim())
-      .join(' | ');
-    const tags = ['Voice Agent Lead'];
-    if (callerProfile.stage)   tags.push('Stage: ' + callerProfile.stage);
-    if (callerProfile.role)    tags.push('Role: ' + callerProfile.role);
-    if (callerProfile.blocker) tags.push('Blocker: ' + callerProfile.blocker);
-    (callerProfile.strategies || []).forEach(s => tags.push('Strategy: ' + s));
-    const ghlPayload = {
-      first_name: callerName.split(' ')[0] || callerName,
-      last_name: callerName.split(' ').slice(1).join(' ') || '',
-      email: callerEmail, phone: callerPhone, tags,
-      customField: {
-        voice_agent_summary: summary.substring(0, 2000),
-        investing_stage: callerProfile.stage || '',
-        investing_strategies: (callerProfile.strategies || []).join(', '),
-        primary_blocker: callerProfile.blocker || '',
-        investor_goals: callerProfile.goals || '',
-      }
-    };
-    const ghlResp = await fetch(GHL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ghlPayload) });
-    log(ghlResp.ok ? 'GHL sync successful' : 'GHL sync failed: ' + ghlResp.status, ghlResp.ok ? 'ok' : 'err');
-    if (callerEmail) {
-      const sbResp = await fetch('/api/supabase', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upsert', contact: { name: callerName, email: callerEmail, phone: callerPhone }, profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) } })
-      });
-      log(sbResp.ok ? 'Supabase upsert successful' : 'Supabase upsert failed: ' + sbResp.status, sbResp.ok ? 'ok' : 'err');
-    }
-  } catch(e) { log('Sync error: ' + e.message, 'err'); }
-}
-
-function endCall() {
-  callActive = false;
-  stopListening();
-  interruptAI();
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  callTimer.classList.remove('active');
-  syncToGHL();
-  callScreen.classList.remove('active');
-  setupScreen.classList.remove('hidden');
-  conversationHistory = []; transcriptArea.innerHTML = '';
-  pendingTranscript = ''; interimMsgEl = null;
-  callerName = ''; callerEmail = ''; callerPhone = '';
-  callerProfile = {}; matchesInjected = false; intakeFormShown = false;
-  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
-  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-  confirmCard.classList.remove('show');
-  confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
-  confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
-  confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
-  confirmActions.style.display = 'none';
-  intakeFormEl.classList.remove('show');
-  intakeSubmitBtn.disabled = false;
-  log('Call ended');
-}
-
-startBtn.addEventListener('click', startCall);
-endBtn.addEventListener('click', endCall);
-
-confirmYesBtn.addEventListener('click', () => {
-  callerName = confirmNameEl.value.trim() || callerName;
-  callerEmail = confirmEmailEl.value.trim() || callerEmail;
-  callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-  intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
-  confirmCard.classList.remove('show');
-  log('Caller confirmed details', 'ok');
-  const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
-  addMessage('user', msg);
-  stopListening();
-  sendToAI(msg);
-});
-
-confirmEditBtn.addEventListener('click', () => {
-  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
-  confirmNameEl.focus();
-  confirmActions.innerHTML = '<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';
-  document.getElementById('confirmSaveBtn').addEventListener('click', () => {
-    callerName = confirmNameEl.value.trim(); callerEmail = confirmEmailEl.value.trim(); callerPhone = confirmPhoneEl.value.trim();
-    intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
-    confirmCard.classList.remove('show');
-    log('Caller saved corrected details', 'ok');
-    const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
-    addMessage('user', msg); stopListening(); sendToAI(msg);
-  });
-});
-
-intakeSubmitBtn.addEventListener('click', () => {
-  const name = intakeNameInput.value.trim();
-  const email = intakeEmailInput.value.trim();
-  const phone = intakePhoneInput.value.trim();
-  if (!name || !email || !phone) {
-    intakeNameInput.style.borderColor = name ? '' : 'var(--red)';
-    intakeEmailInput.style.borderColor = email ? '' : 'var(--red)';
-    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red)';
-    return;
-  }
-  intakeSubmitBtn.disabled = true;
-  intakeFormEl.classList.remove('show');
-  stopListening();
-  callerName = name; callerEmail = email; callerPhone = phone;
-  confirmNameEl.value = name; confirmNameEl.classList.add('filled');
-  confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
-  confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
-  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
-  confirmActions.style.display = 'flex';
-  awaitingConfirmation = true;
-  confirmCard.classList.add('show');
-});
-
-log('App loaded. Ready.', 'ok');
-log('Origin: ' + window.location.origin);
+function log(msg,type){debugLog.classList.add('show');const div=document.createElement('div');div.className=type==='err'?'d-err':(type==='ok'?'d-ok':'');const t=new Date().toLocaleTimeString();div.textContent='['+t+'] '+msg;debugLog.appendChild(div);debugLog.scrollTop=debugLog.scrollHeight;console.log('[REIA]',msg);}
+function showError(msg){errorBanner.textContent=msg;errorBanner.classList.add('show');log('ERROR: '+msg,'err');setTimeout(()=>errorBanner.classList.remove('show'),10000);}
+function setStatus(state,text){statusInd.className='status-indicator '+state;statusText.textContent=text;}
+function addMessage(role,text,interim){if(interim&&interimMsgEl){interimMsgEl.querySelector('.bubble').textContent=text;transcriptArea.scrollTop=transcriptArea.scrollHeight;return interimMsgEl;}const msg=document.createElement('div');msg.className='msg '+(role==='assistant'?'ai':'user');const av=document.createElement('div');av.className='avatar';av.textContent=role==='assistant'?'R':'U';const bubble=document.createElement('div');bubble.className='bubble'+(interim?' interim':'');bubble.textContent=text;msg.appendChild(av);msg.appendChild(bubble);transcriptArea.appendChild(msg);transcriptArea.scrollTop=transcriptArea.scrollHeight;if(interim)interimMsgEl=msg;return msg;}
+function finalizeInterim(finalText){if(interimMsgEl){const bubble=interimMsgEl.querySelector('.bubble');bubble.textContent=finalText;bubble.classList.remove('interim');interimMsgEl=null;}}
+function updateTimer(){const secs=Math.floor((Date.now()-callStartTime)/1000);const m=String(Math.floor(secs/60)).padStart(2,'0');const s=String(secs%60).padStart(2,'0');timerText.textContent=m+':'+s;}
+async function playElevenLabs(text){try{setStatus('speaking','Speaking...');isSpeaking=true;log('Calling ElevenLabs via proxy...');const resp=await fetch('/api/elevenlabs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});if(!resp.ok){const errTxt=await resp.text();throw new Error('ElevenLabs proxy '+resp.status+': '+errTxt.substring(0,200));}log('ElevenLabs response OK','ok');const arrayBuffer=await resp.arrayBuffer();const audioCtx=new(window.AudioContext||window.webkitAudioContext)();const decoded=await audioCtx.decodeAudioData(arrayBuffer);const source=audioCtx.createBufferSource();source.buffer=decoded;source.connect(audioCtx.destination);currentAudio={pause:()=>{try{source.stop();audioCtx.close();}catch(e){}},currentTime:0};await new Promise((resolve)=>{source.onended=()=>{isSpeaking=false;currentAudio=null;audioCtx.close();log('ElevenLabs audio ended — waiting to open mic...');if(callActive){setTimeout(()=>{if(callActive&&!isSpeaking){log('Opening mic now...');setStatus('listening','Listening...');startListening();}},400);}resolve();};source.start(0);});}catch(e){isSpeaking=false;log('ElevenLabs error — falling back to browser TTS: '+e.message,'err');await playBrowserTTS(text);}}
+function interruptAI(){if(currentAudio){try{currentAudio.pause();}catch(e){}currentAudio=null;}isSpeaking=false;}
+async function sendToAI(userText){conversationHistory.push({role:'user',content:userText});setStatus('thinking','Thinking...');stopListening();log('Calling Claude via proxy...');try{const resp=await fetch('/api/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:280,system:window._dynamicSystemPrompt||systemPrompt,messages:conversationHistory})});if(!resp.ok){const errTxt=await resp.text();throw new Error('Claude proxy '+resp.status+': '+errTxt.substring(0,300));}const data=await resp.json();log('Claude response OK','ok');if(data.content&&data.content[0]){let fullText=data.content[0].text;const intakeMatch=fullText.match(/\[INTAKE:({.*?})\]/s);if(intakeMatch){try{const parsed=JSON.parse(intakeMatch[1]);if(parsed.name){callerName=parsed.name;confirmNameEl.value=parsed.name;confirmNameEl.classList.add('filled');}if(parsed.email){callerEmail=parsed.email;confirmEmailEl.value=parsed.email;confirmEmailEl.classList.add('filled');}if(parsed.phone){callerPhone=parsed.phone;confirmPhoneEl.value=parsed.phone;confirmPhoneEl.classList.add('filled');}if(!intakeConfirmed)confirmCard.classList.add('show');}catch(e){log('Intake parse error: '+e.message,'err');}}if(fullText.includes('[INTAKE_CONFIRMED]')){intakeConfirmed=true;intakePhase=false;callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;confirmActions.style.display='none';awaitingConfirmation=false;log('Intake confirmed','ok');}if(callerName&&callerEmail&&callerPhone&&!intakeConfirmed&&!awaitingConfirmation){awaitingConfirmation=true;confirmActions.style.display='flex';confirmNameEl.disabled=true;confirmEmailEl.disabled=true;confirmPhoneEl.disabled=true;}if(intakePhase&&!intakeFormShown&&!intakeConfirmed){intakeFormShown=true;intakeFormEl.classList.add('show');}const profileMatch=fullText.match(/\[PROFILE:({.*?})\]/s);if(profileMatch&&!matchesInjected){try{callerProfile=JSON.parse(profileMatch[1]);log('Profile signal received — fetching matches...');fetchAndInjectMatches(callerProfile);}catch(e){log('Profile parse error: '+e.message,'err');}}const spokenText=fullText.replace(/\[PROFILE:[\s\S]*?\]\s*/g,'').replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g,'').replace(/\[INTAKE:[\s\S]*?\]\s*/g,'').replace('[INTAKE_CONFIRMED]','').replace(/\[[A-Z_]+:[\s\S]*?\]/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/<https?:\/\/[^>]+>/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/\[\]/g,'').replace(/\(\)/g,'').trim();conversationHistory.push({role:'assistant',content:fullText});addMessage('assistant',spokenText);await speak(spokenText);}else{throw new Error('No response content from AI');}}catch(e){showError('AI error: '+(e.message||'connection failed'));if(callActive){setStatus('listening','Listening...');startListening();}}}
+let mediaRecorder=null,audioChunks=[],micStream=null,isRecording=false,audioContext=null,analyser=null,vadInterval=null,suppressRestart=false;
+const NOISE_FLOOR=1.0,SPEECH_THRESHOLD=1.4,HOLD_FLOOR=1.15,END_OF_TURN_MS=3000,IDLE_RESTART_MS=8000,MIN_SPEECH_MS=80,VAD_INTERVAL_MS=80;
+let vadState='waiting',vadSpeechDetected=false,vadSpeechDuration=0,vadSilenceDuration=0,vadIdleDuration=0;
+async function initMicStream(){if(micStream)return true;try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,sampleRate:16000}});log('Mic stream acquired','ok');return true;}catch(e){showError('Microphone access required: '+e.message);return false;}}
+function startListening(){if(!callActive||isSpeaking||isRecording)return;if(!micStream){log('No mic stream','err');return;}try{audioChunks=[];vadState='waiting';vadSpeechDetected=false;vadSpeechDuration=0;vadSilenceDuration=0;const mimeType=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';mediaRecorder=new MediaRecorder(micStream,{mimeType});mediaRecorder.ondataavailable=(e)=>{if(e.data.size>0)audioChunks.push(e.data);};mediaRecorder.onstop=async()=>{isRecording=false;stopVAD();if(!callActive)return;if(suppressRestart){suppressRestart=false;return;}if(!vadSpeechDetected||vadSpeechDuration<MIN_SPEECH_MS){log('No real speech detected ('+Math.round(vadSpeechDuration)+'ms) — restarting mic');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}const blob=new Blob(audioChunks,{type:mimeType});if(blob.size<1500){log('Audio blob too small — restarting');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}setStatus('thinking','Transcribing...');await transcribeAndSend(blob);};mediaRecorder.start(80);isRecording=true;audioChunks=[];setStatus('listening','Listening...');log('Mic recording started');setTimeout(()=>{audioChunks=audioChunks.slice(0,1);startVAD();},100);}catch(e){log('MediaRecorder error: '+e.message,'err');}}
+function startVAD(){stopVAD();if(!micStream)return;audioContext=new(window.AudioContext||window.webkitAudioContext)();const source=audioContext.createMediaStreamSource(micStream);analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.3;source.connect(analyser);const dataArray=new Uint8Array(analyser.fftSize);vadInterval=setInterval(()=>{if(!isRecording||!callActive||isSpeaking){stopVAD();return;}if(!analyser)return;analyser.getByteTimeDomainData(dataArray);let sumSq=0;for(let i=0;i<dataArray.length;i++){const v=(dataArray[i]-128)/128;sumSq+=v*v;}const rms=Math.sqrt(sumSq/dataArray.length)*100;if(typeof window._rmsLogCount==="undefined")window._rmsLogCount=0;window._rmsLogCount++;if(window._rmsLogCount%10===0){const zone=rms>=SPEECH_THRESHOLD?"SPEECH":rms>=HOLD_FLOOR?"HOLD":"silence";log("RMS: "+rms.toFixed(2)+" zone:"+zone+" state:"+vadState);}if(rms>=SPEECH_THRESHOLD){vadSpeechDetected=true;vadSpeechDuration+=VAD_INTERVAL_MS;vadSilenceDuration=0;vadIdleDuration=0;if(vadState!=='speaking')vadState='speaking';}else if(rms>=HOLD_FLOOR){vadIdleDuration=0;if(vadState==='waiting')vadIdleDuration+=VAD_INTERVAL_MS;}else{if(vadState==='speaking'){vadSilenceDuration+=VAD_INTERVAL_MS;if(vadSilenceDuration>=END_OF_TURN_MS){if(vadSpeechDetected&&vadSpeechDuration>=MIN_SPEECH_MS){log('End of turn — '+Math.round(vadSilenceDuration)+'ms silence after speech');vadState='ending';stopRecording();}else{stopRecording();}}}else if(vadState==='waiting'){vadIdleDuration+=VAD_INTERVAL_MS;if(vadIdleDuration>=IDLE_RESTART_MS){log('No speech for 8s — restarting mic');stopRecording();}}}},VAD_INTERVAL_MS);}
+function stopVAD(){if(vadInterval){clearInterval(vadInterval);vadInterval=null;}if(audioContext){try{audioContext.close();}catch(e){}audioContext=null;}analyser=null;}
+function stopRecording(){if(mediaRecorder&&mediaRecorder.state!=='inactive'){try{mediaRecorder.stop();}catch(e){}}}
+async function transcribeAndSend(blob){try{log('Sending audio for transcription — size: '+blob.size+' bytes');const formData=new FormData();formData.append('file',blob,'audio.webm');const resp=await fetch('/api/transcribe',{method:'POST',body:formData});if(!resp.ok){const err=await resp.text();throw new Error('Transcribe error '+resp.status+': '+err.substring(0,200));}const data=await resp.json();const text=(data.text||'').trim();if(!text||text.length<2){log('Empty transcript — restarting');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,200);return;}log('Transcript: '+text,'ok');addMessage('user',text,false);pendingTranscript='';await sendToAI(text);}catch(e){log('Transcription error: '+e.message,'err');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,500);}}
+function stopListening(){if(mediaRecorder&&mediaRecorder.state!=='inactive')suppressRestart=true;if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}if(restartTimeout){clearTimeout(restartTimeout);restartTimeout=null;}stopVAD();stopRecording();isRecording=false;}
+function playBrowserTTS(text){return new Promise((resolve)=>{if(!window.speechSynthesis){resolve();return;}window.speechSynthesis.cancel();const utt=new SpeechSynthesisUtterance(text);utt.rate=0.95;utt.pitch=1.0;utt.volume=1.0;const voices=window.speechSynthesis.getVoices();const preferred=voices.find(v=>v.name.includes('Samantha')||v.name.includes('Karen')||v.name.includes('Daniel')||v.name.includes('Google US English')||v.lang==='en-US');if(preferred)utt.voice=preferred;const done=()=>{isSpeaking=false;currentAudio=null;if(callActive){setTimeout(()=>{setStatus('listening','Listening...');startListening();},300);}resolve();};utt.onend=done;utt.onerror=done;isSpeaking=true;setStatus('speaking','Speaking...');currentAudio={pause:()=>window.speechSynthesis.cancel(),currentTime:0};window.speechSynthesis.speak(utt);log('Browser TTS speaking...','ok');});}
+function normalizeForSpeech(text){return text.replace(/REIA/g,'Ria').replace(/R\.E\.I\.A\./g,'Ria').replace(/Utah REIA/g,'Utah Ria').replace(/utah reia/gi,'Utah Ria');}
+async function speak(text){await playElevenLabs(normalizeForSpeech(text));}
+async function fetchContext(){try{log('Fetching live Utah Ria knowledge...');const resp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'context'})});if(!resp.ok){log('Context fetch failed: '+resp.status,'err');return null;}const data=await resp.json();liveContext=data;let block='';if(data.boardMembers&&data.boardMembers.length>0){block+='BOARD MEMBERS & LEADERSHIP (these are the real people who run Utah Ria):\n';data.boardMembers.forEach(function(b){block+='- '+b.name+(b.specialties?' — '+b.specialties:'')+'\n';});block+='\n';}if(data.vendors&&data.vendors.length>0){block+='ACTIVE VENDORS & SERVICE PROVIDERS IN THE COMMUNITY:\n';data.vendors.forEach(function(v){const who=(v.contact&&v.contact!==v.name)?v.name+' (contact: '+v.contact+')':v.name;const svcs=v.services.join(', ');const specs=(v.specialties&&v.specialties.length>0)?' — specialties: '+v.specialties.join(', '):'';block+='- '+who+': '+svcs+specs+'\n';});block+='\n';}if(data.recentEvents&&data.recentEvents.length>0){block+='RECENT EVENTS (topics Utah Ria has taught — shows depth and range):\n';data.recentEvents.forEach(function(e){block+='- '+e.date+': '+e.title+'\n';});block+='\n';}if(data.membershipTiers&&data.membershipTiers.length>0){block+='MEMBERSHIP TIERS:\n';data.membershipTiers.forEach(function(t){block+='- '+t.tier+': '+t.description+'\n';});}log('Live context loaded — '+(data.boardMembers?data.boardMembers.length:0)+' board members, '+(data.vendors?data.vendors.length:0)+' vendors, '+(data.recentEvents?data.recentEvents.length:0)+' events','ok');return block.trim();}catch(e){log('Context fetch error: '+e.message,'err');return null;}}
+async function startCall(){log('Requesting mic access...');const micOk=await initMicStream();if(!micOk)return;if(window.speechSynthesis)window.speechSynthesis.getVoices();const contextBlock=await fetchContext();if(contextBlock){window._dynamicSystemPrompt=systemPrompt.replace('{{LIVE_CONTEXT}}',contextBlock);}else{window._dynamicSystemPrompt=systemPrompt.replace('{{LIVE_CONTEXT}}','(Live community data temporarily unavailable — use general knowledge about Utah Ria)');}callActive=true;conversationHistory=[];setupScreen.classList.add('hidden');callScreen.classList.add('active');callStartTime=Date.now();callTimer.classList.add('active');timerInterval=setInterval(updateTimer,1000);updateTimer();intakePhase=true;intakeConfirmed=false;awaitingConfirmation=false;intakeFormShown=true;intakeFormEl.classList.add('show');const greeting=`Aloha! So glad you joined. Go ahead and fill in your name, email, and phone number in the form below — once you do that, let's talk.`;conversationHistory.push({role:'assistant',content:greeting});addMessage('assistant',greeting);await speak(greeting);}
+async function fetchAndInjectMatches(profile){try{const resp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matches',profile})});if(!resp.ok){log('Match fetch failed: '+resp.status,'err');return;}const{vendors=[],investors=[]}=await resp.json();if(!vendors.length&&!investors.length){log('No matches found in database');return;}matchesInjected=true;log('Matches found — injecting into conversation','ok');let context='[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';if(vendors.length){context+='\nMatching vendors/service providers:\n';vendors.forEach(v=>{const name=v.contacts?.company_name||v.contacts?.full_name||'Unknown';const services=(v.service_types||[]).join(', ');context+='- '+name+(services?' ('+services+')':'')+'\n';});}if(investors.length){context+='\nPeer investors to connect with:\n';investors.forEach(i=>{const name=i.contacts?.full_name||'Unknown';const strats=(i.investing_types||[]).join(', ');context+='- '+name+' — '+i.where_in_journey+(strats?', '+strats:'')+'\n';});}conversationHistory.push({role:'user',content:context});}catch(e){log('Match inject error: '+e.message,'err');}}
+async function syncToGHL(){if(!callerEmail&&!callerPhone)return;try{log('Syncing to GHL...');const summary=conversationHistory.filter(m=>m.role==='assistant').map(m=>m.content.replace(/\[PROFILE:.*?\]/s,'').replace(/\[INTAKE:.*?\]/s,'').replace('[INTAKE_CONFIRMED]','').trim()).join(' | ');const tags=['Voice Agent Lead'];if(callerProfile.stage)tags.push('Stage: '+callerProfile.stage);if(callerProfile.role)tags.push('Role: '+callerProfile.role);if(callerProfile.blocker)tags.push('Blocker: '+callerProfile.blocker);(callerProfile.strategies||[]).forEach(s=>tags.push('Strategy: '+s));const ghlPayload={first_name:callerName.split(' ')[0]||callerName,last_name:callerName.split(' ').slice(1).join(' ')||'',email:callerEmail,phone:callerPhone,tags,customField:{voice_agent_summary:summary.substring(0,2000),investing_stage:callerProfile.stage||'',investing_strategies:(callerProfile.strategies||[]).join(', '),primary_blocker:callerProfile.blocker||'',investor_goals:callerProfile.goals||''}};const ghlResp=await fetch(GHL_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ghlPayload)});log(ghlResp.ok?'GHL sync successful':'GHL sync failed: '+ghlResp.status,ghlResp.ok?'ok':'err');if(callerEmail){const sbResp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upsert',contact:{name:callerName,email:callerEmail,phone:callerPhone},profile:{...callerProfile,summary:callerProfile.summary||summary.substring(0,500)}})});log(sbResp.ok?'Supabase upsert successful':'Supabase upsert failed: '+sbResp.status,sbResp.ok?'ok':'err');}}catch(e){log('Sync error: '+e.message,'err');}}
+function endCall(){callActive=false;stopListening();interruptAI();if(timerInterval){clearInterval(timerInterval);timerInterval=null;}callTimer.classList.remove('active');syncToGHL();callScreen.classList.remove('active');setupScreen.classList.remove('hidden');conversationHistory=[];transcriptArea.innerHTML='';pendingTranscript='';interimMsgEl=null;callerName='';callerEmail='';callerPhone='';callerProfile={};matchesInjected=false;intakeFormShown=false;intakePhase=true;intakeConfirmed=false;awaitingConfirmation=false;isRecording=false;if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}confirmCard.classList.remove('show');confirmNameEl.value='';confirmEmailEl.value='';confirmPhoneEl.value='';confirmNameEl.classList.remove('filled');confirmEmailEl.classList.remove('filled');confirmPhoneEl.classList.remove('filled');confirmNameEl.disabled=true;confirmEmailEl.disabled=true;confirmPhoneEl.disabled=true;confirmActions.style.display='none';intakeFormEl.classList.remove('show');intakeSubmitBtn.disabled=false;log('Call ended');}
+startBtn.addEventListener('click',startCall);
+endBtn.addEventListener('click',endCall);
+confirmYesBtn.addEventListener('click',()=>{callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;intakeConfirmed=true;intakePhase=false;awaitingConfirmation=false;confirmCard.classList.remove('show');log('Caller confirmed details','ok');const msg='My name is '+callerName+', my email is '+callerEmail+', and my phone number is '+callerPhone+'.';addMessage('user',msg);stopListening();sendToAI(msg);});
+confirmEditBtn.addEventListener('click',()=>{confirmNameEl.disabled=false;confirmEmailEl.disabled=false;confirmPhoneEl.disabled=false;confirmNameEl.focus();confirmActions.innerHTML='<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';document.getElementById('confirmSaveBtn').addEventListener('click',()=>{callerName=confirmNameEl.value.trim();callerEmail=confirmEmailEl.value.trim();callerPhone=confirmPhoneEl.value.trim();intakeConfirmed=true;intakePhase=false;awaitingConfirmation=false;confirmCard.classList.remove('show');log('Caller saved corrected details','ok');const msg='My name is '+callerName+', my email is '+callerEmail+', and my phone number is '+callerPhone+'.';addMessage('user',msg);stopListening();sendToAI(msg);});});
+intakeSubmitBtn.addEventListener('click',()=>{const name=intakeNameInput.value.trim(),email=intakeEmailInput.value.trim(),phone=intakePhoneInput.value.trim();if(!name||!email||!phone){intakeNameInput.style.borderColor=name?'':'rgba(255,120,80,.6)';intakeEmailInput.style.borderColor=email?'':'rgba(255,120,80,.6)';intakePhoneInput.style.borderColor=phone?'':'rgba(255,120,80,.6)';return;}intakeSubmitBtn.disabled=true;intakeFormEl.classList.remove('show');stopListening();callerName=name;callerEmail=email;callerPhone=phone;confirmNameEl.value=name;confirmNameEl.classList.add('filled');confirmEmailEl.value=email;confirmEmailEl.classList.add('filled');confirmPhoneEl.value=phone;confirmPhoneEl.classList.add('filled');confirmNameEl.disabled=false;confirmEmailEl.disabled=false;confirmPhoneEl.disabled=false;confirmActions.style.display='flex';awaitingConfirmation=true;confirmCard.classList.add('show');});
+log('App loaded. Ready.','ok');
+log('Origin: '+window.location.origin);
 </script>
 </body>
 </html>
