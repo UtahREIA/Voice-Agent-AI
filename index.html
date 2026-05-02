@@ -441,7 +441,7 @@ async function sendToAI(userText){
 }
 
 let mediaRecorder=null,audioChunks=[],micStream=null,isRecording=false,audioContext=null,analyser=null,vadInterval=null,suppressRestart=false;
-const NOISE_FLOOR=1.0,SPEECH_THRESHOLD=1.4,HOLD_FLOOR=1.15,END_OF_TURN_MS=3000,IDLE_RESTART_MS=8000,MIN_SPEECH_MS=80,VAD_INTERVAL_MS=80;
+const NOISE_FLOOR=1.0,SPEECH_THRESHOLD=1.4,HOLD_FLOOR=1.15,END_OF_TURN_MS=1800,IDLE_RESTART_MS=8000,MIN_SPEECH_MS=80,VAD_INTERVAL_MS=80;
 let vadState='waiting',vadSpeechDetected=false,vadSpeechDuration=0,vadSilenceDuration=0,vadIdleDuration=0;
 
 async function initMicStream(){if(micStream)return true;try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,sampleRate:16000}});log('Mic acquired','ok');return true;}catch(e){showError('Microphone access required: '+e.message);return false;}}
@@ -469,7 +469,7 @@ function startVAD(){
     analyser.getByteTimeDomainData(dataArray);let sumSq=0;for(let i=0;i<dataArray.length;i++){const v=(dataArray[i]-128)/128;sumSq+=v*v;}
     const rms=Math.sqrt(sumSq/dataArray.length)*100;
     if(rms>=SPEECH_THRESHOLD){vadSpeechDetected=true;vadSpeechDuration+=VAD_INTERVAL_MS;vadSilenceDuration=0;vadIdleDuration=0;if(vadState!=='speaking')vadState='speaking';}
-    else if(rms>=HOLD_FLOOR){vadIdleDuration=0;}
+    else if(rms>=HOLD_FLOOR){vadIdleDuration=0;if(vadState==='speaking')vadSilenceDuration=0;}
     else{if(vadState==='speaking'){vadSilenceDuration+=VAD_INTERVAL_MS;if(vadSilenceDuration>=END_OF_TURN_MS){if(vadSpeechDetected&&vadSpeechDuration>=MIN_SPEECH_MS){vadState='ending';stopRecording();}else{stopRecording();}}}else if(vadState==='waiting'){vadIdleDuration+=VAD_INTERVAL_MS;if(vadIdleDuration>=IDLE_RESTART_MS){stopRecording();}}}
   },VAD_INTERVAL_MS);
 }
@@ -477,10 +477,10 @@ function startVAD(){
 function stopVAD(){if(vadInterval){clearInterval(vadInterval);vadInterval=null;}if(audioContext){try{audioContext.close();}catch(e){}audioContext=null;}analyser=null;}
 function stopRecording(){if(mediaRecorder&&mediaRecorder.state!=='inactive'){try{mediaRecorder.stop();}catch(e){}}}
 async function transcribeAndSend(blob){
-  try{log('Transcribing '+blob.size+' bytes...');const formData=new FormData();formData.append('file',blob,'audio.webm');const resp=await fetch('/api/transcribe',{method:'POST',body:formData});if(!resp.ok){const e=await resp.text();throw new Error('Transcribe '+resp.status+': '+e.substring(0,200));}const data=await resp.json();const text=(data.text||'').trim();if(!text||text.length<2){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,200);return;}log('Transcript: '+text,'ok');addMessage('user',text,false);pendingTranscript='';await sendToAI(text);}
+  try{log('Transcribing '+blob.size+' bytes...');const formData=new FormData();formData.append('file',blob,'audio.webm');const resp=await fetch('/api/transcribe',{method:'POST',body:formData});if(!resp.ok){const e=await resp.text();throw new Error('Transcribe '+resp.status+': '+e.substring(0,200));}const data=await resp.json();const text=(data.text||'').trim();if(!text||text.length<2){log('Empty transcript, restarting mic');if(callActive&&!isSpeaking){isRecording=false;restartTimeout=setTimeout(startListening,200);}return;}log('Transcript: '+text,'ok');addMessage('user',text,false);pendingTranscript='';await sendToAI(text);}
   catch(e){log('Transcription error: '+e.message,'err');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,500);}
 }
-function stopListening(){if(mediaRecorder&&mediaRecorder.state!=='inactive')suppressRestart=true;if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}if(restartTimeout){clearTimeout(restartTimeout);restartTimeout=null;}stopVAD();stopRecording();isRecording=false;}
+function stopListening(){if(listeningWatchdog){clearTimeout(listeningWatchdog);listeningWatchdog=null;}if(mediaRecorder&&mediaRecorder.state!=='inactive')suppressRestart=true;if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}if(restartTimeout){clearTimeout(restartTimeout);restartTimeout=null;}stopVAD();stopRecording();isRecording=false;}
 function playBrowserTTS(text){return new Promise((resolve)=>{if(!window.speechSynthesis){resolve();return;}window.speechSynthesis.cancel();const utt=new SpeechSynthesisUtterance(text);utt.rate=0.95;utt.pitch=1.0;utt.volume=1.0;const voices=window.speechSynthesis.getVoices();const preferred=voices.find(v=>v.name.includes('Samantha')||v.name.includes('Karen')||v.name.includes('Daniel')||v.name.includes('Google US English')||v.lang==='en-US');if(preferred)utt.voice=preferred;const done=()=>{isSpeaking=false;currentAudio=null;if(callActive){setTimeout(()=>{setOrbState('listening');startListening();},300);}resolve();};utt.onend=done;utt.onerror=done;isSpeaking=true;setOrbState('speaking');currentAudio={pause:()=>window.speechSynthesis.cancel(),currentTime:0};window.speechSynthesis.speak(utt);});}
 function normalizeForSpeech(text){return text.replace(/REIA/g,'Ria').replace(/R\.E\.I\.A\./g,'Ria').replace(/Utah REIA/g,'Utah Ria').replace(/utah reia/gi,'Utah Ria');}
 async function speak(text){await playElevenLabs(normalizeForSpeech(text));}
