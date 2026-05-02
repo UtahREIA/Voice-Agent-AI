@@ -10,12 +10,18 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;min-height:100%}
 body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-content:center;min-height:100vh;position:relative;overflow-x:hidden}
+
+/* SCENE */
 .scene{position:fixed;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%, #f5e8c8 0%, #e8c88a 25%, #c8934a 55%, #8a4a1a 80%, #3a1a08 100%);z-index:0}
 .scene-overlay{position:fixed;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 100%, rgba(30,10,0,.45) 0%, transparent 60%);z-index:0}
 .grain{position:fixed;inset:0;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;z-index:0;pointer-events:none}
 .light-halo{position:fixed;width:500px;height:300px;border-radius:50%;background:radial-gradient(ellipse, rgba(255,240,180,.3) 0%, transparent 70%);top:10%;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
 .horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top, rgba(80,20,0,.5) 0%, transparent 100%);pointer-events:none;z-index:0}
+
+/* APP */
 .app{width:100%;max-width:640px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1}
+
+/* HEADER */
 .header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
 .logo{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo img{width:40px;height:40px;object-fit:contain}
@@ -25,34 +31,54 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 .call-timer.active{display:flex}
 .call-timer .dot{width:6px;height:6px;border-radius:50%;background:rgba(40,140,40,.8);animation:pulse 1.4s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ERROR */
 .error-banner{background:rgba(180,60,20,.15);border:1px solid rgba(180,60,20,.35);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(120,30,5,.9);margin:0 24px;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
 .error-banner.show{display:block}
+
+/* SETUP SCREEN -- full height, orb centered */
 .setup-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px 24px 60px;gap:24px}
 .setup-screen.hidden{display:none}
+
+/* ORB */
 .orb-stage{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center}
 .orb-ring-outer{position:absolute;width:220px;height:220px;border-radius:50%;border:1px solid rgba(120,60,10,.25);animation:ringBreath 4s ease-in-out infinite}
 .orb-ring-mid{position:absolute;width:174px;height:174px;border-radius:50%;border:1px solid rgba(120,60,10,.35);animation:ringBreath 4s ease-in-out infinite .6s}
 .orb-ring-inner{position:absolute;width:130px;height:130px;border-radius:50%;border:1px solid rgba(140,70,10,.45);animation:ringBreath 4s ease-in-out infinite 1.2s}
 .orb-glow{position:absolute;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle, rgba(240,180,60,.55) 0%, rgba(200,120,30,.3) 50%, transparent 70%);animation:glowPulse 4s ease-in-out infinite;filter:blur(12px)}
-.orb-core{width:90px;height:90px;border-radius:50%;background:radial-gradient(circle at 38% 35%, rgba(255,225,110,.98) 0%, rgba(225,145,35,.92) 45%, rgba(165,75,12,.92) 100%);box-shadow:0 0 40px rgba(220,140,30,.65),0 0 80px rgba(180,90,10,.45),inset 0 1px 0 rgba(255,250,200,.55);animation:coreBreath 4s ease-in-out infinite;position:relative;z-index:2;transition:background .5s,box-shadow .5s}
+.orb-core{width:90px;height:90px;border-radius:50%;background:radial-gradient(circle at 38% 35%, rgba(255,225,110,.98) 0%, rgba(225,145,35,.92) 45%, rgba(165,75,12,.92) 100%);box-shadow:0 0 40px rgba(220,140,30,.65),0 0 80px rgba(180,90,10,.45),inset 0 1px 0 rgba(255,250,200,.55);animation:coreBreath 4s ease-in-out infinite;position:relative;z-index:2;transition:background .5s, box-shadow .5s}
 .orb-core::after{content:'';position:absolute;top:12px;left:14px;width:24px;height:16px;border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,.55) 0%, transparent 70%);transform:rotate(-30deg)}
+
+/* ORB STATES */
 .orb-stage.listening .orb-core{background:radial-gradient(circle at 38% 35%, rgba(160,230,130,.98) 0%, rgba(80,165,60,.92) 45%, rgba(28,92,18,.92) 100%);box-shadow:0 0 40px rgba(70,180,55,.7),0 0 80px rgba(35,130,28,.45),inset 0 1px 0 rgba(200,255,180,.55)}
 .orb-stage.listening .orb-glow{background:radial-gradient(circle, rgba(80,210,60,.5) 0%, rgba(40,160,30,.25) 50%, transparent 70%)}
 .orb-stage.listening .orb-ring-outer,.orb-stage.listening .orb-ring-mid,.orb-stage.listening .orb-ring-inner{border-color:rgba(60,180,50,.3)}
+
 .orb-stage.thinking .orb-core{background:radial-gradient(circle at 38% 35%, rgba(255,220,100,.98) 0%, rgba(220,140,30,.92) 45%, rgba(160,70,10,.92) 100%);animation:coreBreath 1.5s ease-in-out infinite}
 .orb-stage.thinking .orb-glow{animation:glowPulse 1.5s ease-in-out infinite}
+
 .orb-stage.speaking .orb-core{animation:speakPulse .7s ease-in-out infinite;background:radial-gradient(circle at 38% 35%, rgba(255,140,80,.98) 0%, rgba(225,80,35,.92) 45%, rgba(145,32,10,.92) 100%);box-shadow:0 0 50px rgba(220,90,35,.75),0 0 90px rgba(185,55,12,.5),inset 0 1px 0 rgba(255,210,180,.55)}
 .orb-stage.speaking .orb-glow{background:radial-gradient(circle, rgba(225,90,35,.55) 0%, rgba(185,55,12,.3) 50%, transparent 70%);animation:glowSpeak .7s ease-in-out infinite}
 .orb-stage.speaking .orb-ring-outer,.orb-stage.speaking .orb-ring-mid,.orb-stage.speaking .orb-ring-inner{border-color:rgba(220,80,30,.3)}
+
+/* STATUS TEXT */
 .status-label{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;font-style:italic;color:rgba(55,22,4,.72);letter-spacing:.5px;min-height:32px;text-align:center;text-shadow:0 1px 6px rgba(255,240,200,.4)}
 .setup-sub{font-size:13px;color:rgba(60,25,5,.6);max-width:340px;line-height:1.7;font-weight:300}
+
+/* START BUTTON */
 .start-btn{background:rgba(50,20,2,.18);border:1px solid rgba(80,35,5,.45);color:rgba(45,18,2,.85);padding:13px 36px;border-radius:2px;font-size:12px;font-weight:500;cursor:pointer;transition:all .25s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif;letter-spacing:3px;text-transform:uppercase}
 .start-btn:hover{border-color:rgba(80,35,5,.75);background:rgba(50,20,2,.28);transform:translateY(-1px)}
 .start-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .start-btn svg{width:16px;height:16px}
-.call-screen{flex:1;display:none;flex-direction:column;align-items:center;justify-content:space-between;padding:0}
+
+/* CALL SCREEN -- orb stays, everything overlays */
+.call-screen{flex:1;display:none;flex-direction:column;align-items:center;justify-content:space-between;padding:0 0 0}
 .call-screen.active{display:flex}
+
+/* ORB AREA -- takes most of screen */
 .call-orb-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px 24px}
+
+/* TRANSCRIPT -- hidden by default, shown on toggle */
 .transcript-area{width:100%;max-width:480px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;opacity:0;transition:opacity .4s;pointer-events:none}
 .transcript-area.visible{opacity:1;pointer-events:auto}
 .msg{display:flex;gap:8px;animation:fadeIn .3s ease}
@@ -64,7 +90,11 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 .ai .bubble{border-radius:3px 10px 10px 10px}
 .user .bubble{border-radius:10px 3px 10px 10px;background:rgba(50,20,2,.08)}
 .bubble.interim{opacity:.5;font-style:italic}
+
+/* BOTTOM CONTROLS */
 .call-controls{width:100%;background:rgba(40,15,2,.12);border-top:1px solid rgba(80,40,5,.15);padding:16px 24px 24px;display:flex;flex-direction:column;align-items:center;gap:10px}
+
+/* INTAKE FORM */
 .intake-form{width:100%;max-width:420px;background:rgba(50,20,2,.15);border:1px solid rgba(100,50,10,.3);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
 .intake-form.show{display:block}
 .intake-form-title{font-size:13px;font-weight:600;color:rgba(45,18,2,.85);margin-bottom:3px}
@@ -72,9 +102,13 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 .intake-submit-btn{width:100%;margin-top:12px;padding:9px;border-radius:6px;background:rgba(50,20,2,.25);border:1px solid rgba(80,40,5,.4);color:rgba(40,15,2,.85);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
 .intake-submit-btn:hover{background:rgba(50,20,2,.35);border-color:rgba(80,40,5,.6)}
 .intake-submit-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* CONFIRM CARD */
 .confirm-card{width:100%;max-width:420px;background:rgba(50,20,2,.15);border:1px solid rgba(100,50,10,.25);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
 .confirm-card.show{display:block}
 .confirm-card-title{font-size:10px;font-weight:600;color:rgba(80,40,5,.65);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+
+/* INPUTS */
 .confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
 .confirm-row:last-child{margin-bottom:0}
 .confirm-label{font-size:11px;color:rgba(60,25,5,.6);width:48px;flex-shrink:0;font-weight:400}
@@ -89,6 +123,8 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 .confirm-btn.yes:hover{background:rgba(50,120,30,.5)}
 .confirm-btn.edit{background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.25);color:rgba(50,20,2,.65)}
 .confirm-btn.edit:hover{border-color:rgba(80,40,5,.45);color:rgba(40,15,2,.85)}
+
+/* STATUS INDICATOR */
 .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.2);font-size:11px;color:rgba(50,20,2,.65);transition:all .3s;font-weight:400}
 .status-indicator.listening{border-color:rgba(50,140,30,.4);color:rgba(20,80,10,.85);background:rgba(40,120,20,.12)}
 .status-indicator.thinking{border-color:rgba(150,90,10,.4);color:rgba(100,55,5,.85);background:rgba(140,80,10,.1)}
@@ -101,18 +137,24 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 .voice-bars span:nth-child(4){animation-delay:.1s}
 .voice-bars span:nth-child(5){animation-delay:0s}
 @keyframes wave{0%,100%{height:3px}50%{height:12px}}
+
+/* CONTROL BUTTONS ROW */
 .btn-row{display:flex;align-items:center;gap:12px}
 .end-btn{background:rgba(50,20,2,.15);border:1px solid rgba(160,60,20,.4);color:rgba(120,40,10,.8);padding:10px 22px;border-radius:2px;font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:2px;text-transform:uppercase}
 .end-btn:hover{border-color:rgba(160,60,20,.7);color:rgba(140,35,8,.95);background:rgba(50,20,2,.22)}
 .end-btn svg{width:13px;height:13px}
-.toggle-btn{background:rgba(50,20,2,.1);border:1px solid rgba(80,40,5,.3);cursor:pointer;padding:5px 12px;border-radius:2px;display:flex;align-items:center;gap:7px;transition:all .25s}
-.toggle-btn:hover{background:rgba(50,20,2,.18);border-color:rgba(80,40,5,.5)}
+
+.toggle-btn{background:rgba(20,8,0,.5);border:1px solid rgba(20,8,0,.7);cursor:pointer;padding:6px 14px;border-radius:4px;display:flex;align-items:center;gap:7px;transition:all .25s}
+.toggle-btn:hover{background:rgba(20,8,0,.7);border-color:rgba(20,8,0,.9)}
 .eye-icon{width:14px;height:12px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.eye-oval{width:14px;height:9px;border:1.5px solid rgba(50,20,2,.65);border-radius:50%;position:absolute}
-.eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(50,20,2,.65);position:absolute}
-.eye-slash{width:17px;height:1.5px;background:rgba(50,20,2,.65);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
-.toggle-label{font-size:10px;color:rgba(50,20,2,.65);letter-spacing:2px;text-transform:uppercase;font-weight:400}
+.eye-oval{width:14px;height:9px;border:1.5px solid rgba(255,225,160,.95);border-radius:50%;position:absolute}
+.eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(255,225,160,.95);position:absolute}
+.eye-slash{width:17px;height:1.5px;background:rgba(255,225,160,.95);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
+.toggle-label{font-size:10px;color:rgba(255,225,160,.95);letter-spacing:2px;text-transform:uppercase;font-weight:500}
+
 .hint-bar{font-size:11px;color:rgba(50,20,2,.38);text-align:center;font-weight:300}
+
+/* ANIMATIONS */
 @keyframes ringBreath{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
 @keyframes glowPulse{0%,100%{opacity:.65;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
 @keyframes glowSpeak{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
@@ -126,32 +168,55 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 <div class="grain"></div>
 <div class="light-halo"></div>
 <div class="horizon-glow"></div>
+
 <div class="app">
   <div class="header">
     <div class="logo"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
-    <div class="header-text"><h1>Utah REIA Voice Agent</h1><p>Real-time conversation</p></div>
+    <div class="header-text">
+      <h1>Utah REIA Voice Agent</h1>
+      <p>Real-time conversation</p>
+    </div>
     <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
   </div>
+
   <div class="error-banner" id="errorBanner"></div>
+
+  <!-- SETUP -->
   <div class="setup-screen" id="setupScreen">
     <div class="orb-stage" id="setupOrb">
-      <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
+      <div class="orb-ring-outer"></div>
+      <div class="orb-ring-mid"></div>
+      <div class="orb-ring-inner"></div>
+      <div class="orb-glow"></div>
+      <div class="orb-core"></div>
     </div>
     <div class="status-label">Begin your journey</div>
     <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
     <button class="start-btn" id="startBtn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/></svg>
-      Start Call
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
+      </svg>
+      Begin Journey
     </button>
   </div>
+
+  <!-- CALL SCREEN -->
   <div class="call-screen" id="callScreen">
+    <!-- ORB STAYS CENTERED -->
     <div class="call-orb-area">
       <div class="orb-stage" id="callOrb">
-        <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
+        <div class="orb-ring-outer"></div>
+        <div class="orb-ring-mid"></div>
+        <div class="orb-ring-inner"></div>
+        <div class="orb-glow"></div>
+        <div class="orb-core"></div>
       </div>
       <div class="status-label" id="statusLabel">Connecting...</div>
+      <!-- TRANSCRIPT HIDDEN BY DEFAULT -->
       <div class="transcript-area" id="transcriptArea"></div>
     </div>
+
+    <!-- INTAKE + CONFIRM FLOAT AT BOTTOM -->
     <div class="call-controls">
       <div class="intake-form" id="intakeForm">
         <div class="intake-form-title">Please enter your details below</div>
@@ -161,6 +226,7 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
         <div class="confirm-row"><span class="confirm-label">Phone</span><input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" /></div>
         <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
       </div>
+
       <div class="confirm-card" id="confirmCard">
         <div class="confirm-card-title">Just to confirm your details</div>
         <div class="confirm-row"><span class="confirm-label">Name</span><input type="text" class="confirm-input" id="confirmName" placeholder="---" disabled /></div>
@@ -171,10 +237,18 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
           <button class="confirm-btn edit" id="confirmEditBtn">Edit details</button>
         </div>
       </div>
-      <div class="status-indicator" id="statusInd"><div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div><span id="statusText">Connecting...</span></div>
+
+      <div class="status-indicator" id="statusInd">
+        <div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div>
+        <span id="statusText">Connecting...</span>
+      </div>
+
       <div class="btn-row">
         <button class="end-btn" id="endBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+            <line x1="23" y1="1" x2="1" y2="23"/>
+          </svg>
           End Call
         </button>
         <button class="toggle-btn" id="toggleBtn">
@@ -186,15 +260,27 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
     </div>
   </div>
 </div>
+
 <script>
+// TOGGLE
 const toggleBtn=document.getElementById('toggleBtn'),toggleLabel=document.getElementById('toggleLabel'),eyePupil=document.getElementById('eyePupil'),eyeSlash=document.getElementById('eyeSlash'),transcriptArea=document.getElementById('transcriptArea');
 let transcriptVisible=false;
-toggleBtn.addEventListener('click',()=>{transcriptVisible=!transcriptVisible;transcriptArea.classList.toggle('visible',transcriptVisible);toggleLabel.textContent=transcriptVisible?'Hide':'Text';eyeSlash.style.display=transcriptVisible?'block':'none';eyePupil.style.display=transcriptVisible?'none':'block';});
+toggleBtn.addEventListener('click',()=>{
+  transcriptVisible=!transcriptVisible;
+  transcriptArea.classList.toggle('visible',transcriptVisible);
+  toggleLabel.textContent=transcriptVisible?'Hide':'Text';
+  eyeSlash.style.display=transcriptVisible?'block':'none';
+  eyePupil.style.display=transcriptVisible?'none':'block';
+});
 </script>
+
 <script>
 const setupScreen=document.getElementById('setupScreen'),callScreen=document.getElementById('callScreen'),startBtn=document.getElementById('startBtn'),endBtn=document.getElementById('endBtn'),callOrb=document.getElementById('callOrb'),statusLabel=document.getElementById('statusLabel'),statusInd=document.getElementById('statusInd'),statusText=document.getElementById('statusText'),callTimer=document.getElementById('callTimer'),timerText=document.getElementById('timerText'),errorBanner=document.getElementById('errorBanner'),confirmCard=document.getElementById('confirmCard'),confirmNameEl=document.getElementById('confirmName'),confirmEmailEl=document.getElementById('confirmEmail'),confirmPhoneEl=document.getElementById('confirmPhone'),confirmActions=document.getElementById('confirmActions'),confirmYesBtn=document.getElementById('confirmYesBtn'),confirmEditBtn=document.getElementById('confirmEditBtn'),intakeFormEl=document.getElementById('intakeForm'),intakeNameInput=document.getElementById('intakeName'),intakeEmailInput=document.getElementById('intakeEmail'),intakePhoneInput=document.getElementById('intakePhone'),intakeSubmitBtn=document.getElementById('intakeSubmitBtn');
+
 let callerName='',callerEmail='',callerPhone='',intakePhase=true,intakeConfirmed=false,awaitingConfirmation=false,intakeFormShown=false,callActive=false,conversationHistory=[],currentAudio=null,isSpeaking=false,callStartTime=0,timerInterval=null,silenceTimer=null,interimMsgEl=null,pendingTranscript='',restartTimeout=null,callerProfile={},matchesInjected=false,liveContext=null;
+
 const GHL_WEBHOOK='https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
+
 const systemPrompt=`You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
 
 Utah REIA is not a motivational program. It is not a guru platform. It is a room of experienced investors thinking through real decisions in real time. That is the standard you hold in every sentence.
@@ -214,7 +300,9 @@ At that point: acknowledge them by their first name, emit the INTAKE JSON block,
 CRITICAL — when you receive the typed form submission, you MUST include a JSON block at the very end of your response:
 [INTAKE:{"name":"...","email":"...","phone":"..."}]
 
-Rules: include all three fields, use "" for empty. Once all three present: also include [INTAKE_CONFIRMED]
+Rules for the JSON block:
+- Include all three fields every time, use "" for empty
+- Once all three are present: also include [INTAKE_CONFIRMED]
 
 ---
 
@@ -224,7 +312,9 @@ You are warm, direct, and real. You think out loud. Not a bot, not a coach, not 
 
 Aloha is the signature greeting of Utah REIA and Harmonie Borden. Use it to open. Mahalo is how we close.
 
-Maximum 2 sentences per response. Never use lists, bullet points, or any structure. Spoken language only.
+Maximum 2 sentences per response. This is a phone call, not a presentation.
+
+Never use lists, bullet points, or any structure. Spoken language only.
 
 Use contractions naturally. Ask exactly one question per turn. Mirror back what they say.
 
@@ -235,12 +325,14 @@ No hype. No urgency. No motivational language.
 Never say: "great question", "absolutely", "that's awesome", "fantastic", "I'd be happy to help", "game-changer", "wealth-building journey", "financial freedom", "passive income".
 
 PRONUNCIATION: Always write "Utah REIA" normally. The system handles pronunciation.
-NO MARKDOWN: Plain sentences only.
+
+NO MARKDOWN: Plain sentences only — no bold, bullets, headers, links.
+
 NO RAW JSON: Signal blocks only at the very end, never in conversational text.
 
 ---
 
-YOUR JOB: Figure out where this person is and what they actually need — then point them toward the right next step inside Utah REIA. You are routing, not selling.
+YOUR JOB: Figure out where this person is and what they actually need — then point them toward the right next step inside Utah REIA.
 
 WHAT YOU NEED TO LEARN:
 1. ROLE — investor/learner or service provider?
@@ -250,23 +342,25 @@ WHAT YOU NEED TO LEARN:
 5. RESOURCES — capital available, time per week, financing access
 
 HOW TO ROUTE:
-NEW/EXPLORING: upcoming event + free tools at utahreia.org
+NEW/EXPLORING: upcoming event + free tools (calculators, market report) at utahreia.org
 GETTING STARTED: calculator for their strategy + relevant event or training
-ACTIVE: specific vendor, deal flow, or community resource
-EXPERIENCED/VETERAN: peer tone — advanced rooms, Board Member sessions
-SERVICE PROVIDERS: vendor directory + sponsorship option
+ACTIVE: specific vendor category, deal flow, or community resource
+EXPERIENCED/VETERAN: peer tone only — advanced strategy rooms, Board Member sessions
+SERVICE PROVIDERS: vendor directory listing + sponsorship option
 
-CLOSING: One specific next step. One thing. Make it concrete.
+CLOSING: One specific next step. Not two. Not a menu. One thing.
 
 WHAT UTAH REIA HAS:
 - Live events and strategy-specific meetups monthly
-- Midday trainings and workshops, Event replays and Investor Academy
+- Midday trainings and workshops
+- Event replays and Investor Academy
 - Calculators: Fix and Flip, BRRRR, Rental, Wholesale, Creative Financing, Mortgage, HELOC, Rehab Estimator
 - Market reports and lead magnets by strategy
 - Vendor directory: lenders, contractors, property managers, attorneys, CPAs, title companies
 - Private community and investor circles by strategy
 - True Wealth Investment Club for capital aggregation
-- Deal Center, Home Depot member rebate, Rent Perfect access
+- Deal Center with property listings
+- Home Depot member rebate and Rent Perfect access
 
 {{LIVE_CONTEXT}}
 
@@ -275,43 +369,149 @@ Do not invent people, companies, or events not in the above lists.
 ---
 
 PROFILE SIGNAL — REQUIRED:
-Once you have role, stage, at least one strategy, and primary blocker, emit on its own line at the very end:
+Once you have role, stage, at least one strategy, and primary blocker, emit this JSON block on its own line at the very end — never mid-sentence:
 
 [PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
 
-Fields: role (investor|vendor), stage (exploring|getting_started|active|experienced|veteran), strategies (snake_case array), blocker (capital|deals|team|education|numbers|connections), goals (plain text), summary (one sentence). Emit ONCE only.`;
+Fields: role (investor|vendor), stage (exploring|getting_started|active|experienced|veteran), strategies (snake_case array), blocker (capital|deals|team|education|numbers|connections), goals (plain text), summary (one sentence).
+
+Emit ONCE only. After emitting, the system injects real vendor/investor matches — reference them by name.`;
 
 function log(msg,type){console.log('[REIA]'+(type?'['+type+']':'')+' '+msg);}
-function showError(msg){errorBanner.textContent=msg;errorBanner.classList.add('show');setTimeout(()=>errorBanner.classList.remove('show'),10000);}
-function setOrbState(state){callOrb.className='orb-stage '+state;const labels={idle:'Ready when you are',listening:'Listening...',thinking:'One moment...',speaking:'Speaking',transcribing:'Transcribing...'};statusLabel.textContent=labels[state]||'';statusInd.className='status-indicator '+state;const texts={idle:'Ready',listening:'Listening...',thinking:'Thinking...',speaking:'Speaking...',transcribing:'Transcribing...'};statusText.textContent=texts[state]||'';}
-function addMessage(role,text,interim){if(interim&&interimMsgEl){interimMsgEl.querySelector('.bubble').textContent=text;transcriptArea.scrollTop=transcriptArea.scrollHeight;return interimMsgEl;}const msg=document.createElement('div');msg.className='msg '+(role==='assistant'?'ai':'user');const av=document.createElement('div');av.className='avatar';av.textContent=role==='assistant'?'R':'U';const bubble=document.createElement('div');bubble.className='bubble'+(interim?' interim':'');bubble.textContent=text;msg.appendChild(av);msg.appendChild(bubble);transcriptArea.appendChild(msg);transcriptArea.scrollTop=transcriptArea.scrollHeight;if(interim)interimMsgEl=msg;return msg;}
+function showError(msg){errorBanner.textContent=msg;errorBanner.classList.add('show');log('ERROR: '+msg,'err');setTimeout(()=>errorBanner.classList.remove('show'),10000);}
+
+function setOrbState(state){
+  callOrb.className='orb-stage '+state;
+  const labels={idle:'Ready when you are',listening:'Listening...',thinking:'One moment...',speaking:'Speaking',transcribing:'Transcribing...'};
+  statusLabel.textContent=labels[state]||'';
+  statusInd.className='status-indicator '+state;
+  const texts={idle:'Ready',listening:'Listening...',thinking:'Thinking...',speaking:'Speaking...',transcribing:'Transcribing...'};
+  statusText.textContent=texts[state]||'';
+}
+
+function addMessage(role,text,interim){
+  if(interim&&interimMsgEl){interimMsgEl.querySelector('.bubble').textContent=text;transcriptArea.scrollTop=transcriptArea.scrollHeight;return interimMsgEl;}
+  const msg=document.createElement('div');msg.className='msg '+(role==='assistant'?'ai':'user');
+  const av=document.createElement('div');av.className='avatar';av.textContent=role==='assistant'?'R':'U';
+  const bubble=document.createElement('div');bubble.className='bubble'+(interim?' interim':'');bubble.textContent=text;
+  msg.appendChild(av);msg.appendChild(bubble);transcriptArea.appendChild(msg);transcriptArea.scrollTop=transcriptArea.scrollHeight;
+  if(interim)interimMsgEl=msg;return msg;
+}
+function finalizeInterim(t){if(interimMsgEl){interimMsgEl.querySelector('.bubble').textContent=t;interimMsgEl.querySelector('.bubble').classList.remove('interim');interimMsgEl=null;}}
 function updateTimer(){const s=Math.floor((Date.now()-callStartTime)/1000);timerText.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
-async function playElevenLabs(text){try{setOrbState('speaking');isSpeaking=true;const resp=await fetch('/api/elevenlabs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});if(!resp.ok){const e=await resp.text();throw new Error('ElevenLabs '+resp.status+': '+e.substring(0,200));}const arrayBuffer=await resp.arrayBuffer();const audioCtx=new(window.AudioContext||window.webkitAudioContext)();const decoded=await audioCtx.decodeAudioData(arrayBuffer);const source=audioCtx.createBufferSource();source.buffer=decoded;source.connect(audioCtx.destination);currentAudio={pause:()=>{try{source.stop();audioCtx.close();}catch(e){}},currentTime:0};await new Promise((resolve)=>{source.onended=()=>{isSpeaking=false;currentAudio=null;audioCtx.close();if(callActive){setTimeout(()=>{if(callActive&&!isSpeaking){setOrbState('listening');startListening();}},400);}resolve();};source.start(0);});}catch(e){isSpeaking=false;await playBrowserTTS(text);}}
+
+async function playElevenLabs(text){
+  try{
+    setOrbState('speaking');isSpeaking=true;log('Calling ElevenLabs...');
+    const resp=await fetch('/api/elevenlabs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    if(!resp.ok){const e=await resp.text();throw new Error('ElevenLabs '+resp.status+': '+e.substring(0,200));}
+    log('ElevenLabs OK','ok');
+    const arrayBuffer=await resp.arrayBuffer();
+    const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const decoded=await audioCtx.decodeAudioData(arrayBuffer);
+    const source=audioCtx.createBufferSource();source.buffer=decoded;source.connect(audioCtx.destination);
+    currentAudio={pause:()=>{try{source.stop();audioCtx.close();}catch(e){}},currentTime:0};
+    await new Promise((resolve)=>{source.onended=()=>{isSpeaking=false;currentAudio=null;audioCtx.close();if(callActive){setTimeout(()=>{if(callActive&&!isSpeaking){setOrbState('listening');startListening();}},400);}resolve();};source.start(0);});
+  }catch(e){isSpeaking=false;log('ElevenLabs error, falling back: '+e.message,'err');await playBrowserTTS(text);}
+}
 function interruptAI(){if(currentAudio){try{currentAudio.pause();}catch(e){}currentAudio=null;}isSpeaking=false;}
-async function sendToAI(userText){conversationHistory.push({role:'user',content:userText});setOrbState('thinking');stopListening();try{const resp=await fetch('/api/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:280,system:window._dynamicSystemPrompt||systemPrompt,messages:conversationHistory})});if(!resp.ok){const e=await resp.text();throw new Error('Claude '+resp.status+': '+e.substring(0,300));}const data=await resp.json();if(data.content&&data.content[0]){let fullText=data.content[0].text;const intakeMatch=fullText.match(/\[INTAKE:({.*?})\]/s);if(intakeMatch){try{const p=JSON.parse(intakeMatch[1]);if(p.name){callerName=p.name;confirmNameEl.value=p.name;confirmNameEl.classList.add('filled');}if(p.email){callerEmail=p.email;confirmEmailEl.value=p.email;confirmEmailEl.classList.add('filled');}if(p.phone){callerPhone=p.phone;confirmPhoneEl.value=p.phone;confirmPhoneEl.classList.add('filled');}if(!intakeConfirmed)confirmCard.classList.add('show');}catch(e){}}if(fullText.includes('[INTAKE_CONFIRMED]')){intakeConfirmed=true;intakePhase=false;callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;confirmActions.style.display='none';awaitingConfirmation=false;}if(callerName&&callerEmail&&callerPhone&&!intakeConfirmed&&!awaitingConfirmation){awaitingConfirmation=true;confirmActions.style.display='flex';confirmNameEl.disabled=true;confirmEmailEl.disabled=true;confirmPhoneEl.disabled=true;}if(intakePhase&&!intakeFormShown&&!intakeConfirmed){intakeFormShown=true;intakeFormEl.classList.add('show');}const profileMatch=fullText.match(/\[PROFILE:({.*?})\]/s);if(profileMatch&&!matchesInjected){try{callerProfile=JSON.parse(profileMatch[1]);fetchAndInjectMatches(callerProfile);}catch(e){}}const spokenText=fullText.replace(/\[PROFILE:[\s\S]*?\]\s*/g,'').replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g,'').replace(/\[INTAKE:[\s\S]*?\]\s*/g,'').replace('[INTAKE_CONFIRMED]','').replace(/\[[A-Z_]+:[\s\S]*?\]/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/<https?:\/\/[^>]+>/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/\[\]/g,'').replace(/\(\)/g,'').trim();conversationHistory.push({role:'assistant',content:fullText});addMessage('assistant',spokenText);await speak(spokenText);}else{throw new Error('No response');}}catch(e){showError('AI error: '+(e.message||'connection failed'));if(callActive){setOrbState('listening');startListening();}}}
+
+async function sendToAI(userText){
+  conversationHistory.push({role:'user',content:userText});
+  setOrbState('thinking');stopListening();log('Calling Claude...');
+  try{
+    const resp=await fetch('/api/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:280,system:window._dynamicSystemPrompt||systemPrompt,messages:conversationHistory})});
+    if(!resp.ok){const e=await resp.text();throw new Error('Claude '+resp.status+': '+e.substring(0,300));}
+    const data=await resp.json();log('Claude OK','ok');
+    if(data.content&&data.content[0]){
+      let fullText=data.content[0].text;
+      const intakeMatch=fullText.match(/\[INTAKE:({.*?})\]/s);
+      if(intakeMatch){try{const p=JSON.parse(intakeMatch[1]);if(p.name){callerName=p.name;confirmNameEl.value=p.name;confirmNameEl.classList.add('filled');}if(p.email){callerEmail=p.email;confirmEmailEl.value=p.email;confirmEmailEl.classList.add('filled');}if(p.phone){callerPhone=p.phone;confirmPhoneEl.value=p.phone;confirmPhoneEl.classList.add('filled');}if(!intakeConfirmed)confirmCard.classList.add('show');}catch(e){log('Intake parse error: '+e.message,'err');}}
+      if(fullText.includes('[INTAKE_CONFIRMED]')){intakeConfirmed=true;intakePhase=false;callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;confirmActions.style.display='none';awaitingConfirmation=false;log('Intake confirmed','ok');}
+      if(callerName&&callerEmail&&callerPhone&&!intakeConfirmed&&!awaitingConfirmation){awaitingConfirmation=true;confirmActions.style.display='flex';confirmNameEl.disabled=true;confirmEmailEl.disabled=true;confirmPhoneEl.disabled=true;}
+      if(intakePhase&&!intakeFormShown&&!intakeConfirmed){intakeFormShown=true;intakeFormEl.classList.add('show');}
+      const profileMatch=fullText.match(/\[PROFILE:({.*?})\]/s);
+      if(profileMatch&&!matchesInjected){try{callerProfile=JSON.parse(profileMatch[1]);log('Profile received, fetching matches...');fetchAndInjectMatches(callerProfile);}catch(e){log('Profile parse error: '+e.message,'err');}}
+      const spokenText=fullText.replace(/\[PROFILE:[\s\S]*?\]\s*/g,'').replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g,'').replace(/\[INTAKE:[\s\S]*?\]\s*/g,'').replace('[INTAKE_CONFIRMED]','').replace(/\[[A-Z_]+:[\s\S]*?\]/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/<https?:\/\/[^>]+>/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/\[\]/g,'').replace(/\(\)/g,'').trim();
+      conversationHistory.push({role:'assistant',content:fullText});
+      addMessage('assistant',spokenText);
+      await speak(spokenText);
+    }else{throw new Error('No response content from AI');}
+  }catch(e){showError('AI error: '+(e.message||'connection failed'));if(callActive){setOrbState('listening');startListening();}}
+}
+
 let mediaRecorder=null,audioChunks=[],micStream=null,isRecording=false,audioContext=null,analyser=null,vadInterval=null,suppressRestart=false;
 const NOISE_FLOOR=1.0,SPEECH_THRESHOLD=1.4,HOLD_FLOOR=1.15,END_OF_TURN_MS=3000,IDLE_RESTART_MS=8000,MIN_SPEECH_MS=80,VAD_INTERVAL_MS=80;
 let vadState='waiting',vadSpeechDetected=false,vadSpeechDuration=0,vadSilenceDuration=0,vadIdleDuration=0;
-async function initMicStream(){if(micStream)return true;try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,sampleRate:16000}});return true;}catch(e){showError('Microphone access required: '+e.message);return false;}}
-function startListening(){if(!callActive||isSpeaking||isRecording)return;if(!micStream)return;try{audioChunks=[];vadState='waiting';vadSpeechDetected=false;vadSpeechDuration=0;vadSilenceDuration=0;const mimeType=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';mediaRecorder=new MediaRecorder(micStream,{mimeType});mediaRecorder.ondataavailable=(e)=>{if(e.data.size>0)audioChunks.push(e.data);};mediaRecorder.onstop=async()=>{isRecording=false;stopVAD();if(!callActive)return;if(suppressRestart){suppressRestart=false;return;}if(!vadSpeechDetected||vadSpeechDuration<MIN_SPEECH_MS){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}const blob=new Blob(audioChunks,{type:mimeType});if(blob.size<1500){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}setOrbState('transcribing');await transcribeAndSend(blob);};mediaRecorder.start(80);isRecording=true;audioChunks=[];setOrbState('listening');setTimeout(()=>{audioChunks=audioChunks.slice(0,1);startVAD();},100);}catch(e){log('MediaRecorder error: '+e.message,'err');}}
-function startVAD(){stopVAD();if(!micStream)return;audioContext=new(window.AudioContext||window.webkitAudioContext)();const source=audioContext.createMediaStreamSource(micStream);analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.3;source.connect(analyser);const dataArray=new Uint8Array(analyser.fftSize);vadInterval=setInterval(()=>{if(!isRecording||!callActive||isSpeaking){stopVAD();return;}if(!analyser)return;analyser.getByteTimeDomainData(dataArray);let sumSq=0;for(let i=0;i<dataArray.length;i++){const v=(dataArray[i]-128)/128;sumSq+=v*v;}const rms=Math.sqrt(sumSq/dataArray.length)*100;if(rms>=SPEECH_THRESHOLD){vadSpeechDetected=true;vadSpeechDuration+=VAD_INTERVAL_MS;vadSilenceDuration=0;vadIdleDuration=0;if(vadState!=='speaking')vadState='speaking';}else if(rms>=HOLD_FLOOR){vadIdleDuration=0;}else{if(vadState==='speaking'){vadSilenceDuration+=VAD_INTERVAL_MS;if(vadSilenceDuration>=END_OF_TURN_MS){if(vadSpeechDetected&&vadSpeechDuration>=MIN_SPEECH_MS){vadState='ending';stopRecording();}else{stopRecording();}}}else if(vadState==='waiting'){vadIdleDuration+=VAD_INTERVAL_MS;if(vadIdleDuration>=IDLE_RESTART_MS){stopRecording();}}}},VAD_INTERVAL_MS);}
+
+async function initMicStream(){if(micStream)return true;try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,sampleRate:16000}});log('Mic acquired','ok');return true;}catch(e){showError('Microphone access required: '+e.message);return false;}}
+
+function startListening(){
+  if(!callActive||isSpeaking||isRecording)return;if(!micStream){log('No mic stream','err');return;}
+  try{
+    audioChunks=[];vadState='waiting';vadSpeechDetected=false;vadSpeechDuration=0;vadSilenceDuration=0;
+    const mimeType=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
+    mediaRecorder=new MediaRecorder(micStream,{mimeType});
+    mediaRecorder.ondataavailable=(e)=>{if(e.data.size>0)audioChunks.push(e.data);};
+    mediaRecorder.onstop=async()=>{isRecording=false;stopVAD();if(!callActive)return;if(suppressRestart){suppressRestart=false;return;}if(!vadSpeechDetected||vadSpeechDuration<MIN_SPEECH_MS){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}const blob=new Blob(audioChunks,{type:mimeType});if(blob.size<1500){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,150);return;}setOrbState('transcribing');await transcribeAndSend(blob);};
+    mediaRecorder.start(80);isRecording=true;audioChunks=[];setOrbState('listening');log('Mic started');
+    setTimeout(()=>{audioChunks=audioChunks.slice(0,1);startVAD();},100);
+  }catch(e){log('MediaRecorder error: '+e.message,'err');}
+}
+
+function startVAD(){
+  stopVAD();if(!micStream)return;
+  audioContext=new(window.AudioContext||window.webkitAudioContext)();
+  const source=audioContext.createMediaStreamSource(micStream);analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.3;source.connect(analyser);
+  const dataArray=new Uint8Array(analyser.fftSize);
+  vadInterval=setInterval(()=>{
+    if(!isRecording||!callActive||isSpeaking){stopVAD();return;}if(!analyser)return;
+    analyser.getByteTimeDomainData(dataArray);let sumSq=0;for(let i=0;i<dataArray.length;i++){const v=(dataArray[i]-128)/128;sumSq+=v*v;}
+    const rms=Math.sqrt(sumSq/dataArray.length)*100;
+    if(rms>=SPEECH_THRESHOLD){vadSpeechDetected=true;vadSpeechDuration+=VAD_INTERVAL_MS;vadSilenceDuration=0;vadIdleDuration=0;if(vadState!=='speaking')vadState='speaking';}
+    else if(rms>=HOLD_FLOOR){vadIdleDuration=0;}
+    else{if(vadState==='speaking'){vadSilenceDuration+=VAD_INTERVAL_MS;if(vadSilenceDuration>=END_OF_TURN_MS){if(vadSpeechDetected&&vadSpeechDuration>=MIN_SPEECH_MS){vadState='ending';stopRecording();}else{stopRecording();}}}else if(vadState==='waiting'){vadIdleDuration+=VAD_INTERVAL_MS;if(vadIdleDuration>=IDLE_RESTART_MS){stopRecording();}}}
+  },VAD_INTERVAL_MS);
+}
+
 function stopVAD(){if(vadInterval){clearInterval(vadInterval);vadInterval=null;}if(audioContext){try{audioContext.close();}catch(e){}audioContext=null;}analyser=null;}
 function stopRecording(){if(mediaRecorder&&mediaRecorder.state!=='inactive'){try{mediaRecorder.stop();}catch(e){}}}
-async function transcribeAndSend(blob){try{const formData=new FormData();formData.append('file',blob,'audio.webm');const resp=await fetch('/api/transcribe',{method:'POST',body:formData});if(!resp.ok){const e=await resp.text();throw new Error('Transcribe '+resp.status+': '+e.substring(0,200));}const data=await resp.json();const text=(data.text||'').trim();if(!text||text.length<2){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,200);return;}addMessage('user',text,false);pendingTranscript='';await sendToAI(text);}catch(e){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,500);}}
+async function transcribeAndSend(blob){
+  try{log('Transcribing '+blob.size+' bytes...');const formData=new FormData();formData.append('file',blob,'audio.webm');const resp=await fetch('/api/transcribe',{method:'POST',body:formData});if(!resp.ok){const e=await resp.text();throw new Error('Transcribe '+resp.status+': '+e.substring(0,200));}const data=await resp.json();const text=(data.text||'').trim();if(!text||text.length<2){if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,200);return;}log('Transcript: '+text,'ok');addMessage('user',text,false);pendingTranscript='';await sendToAI(text);}
+  catch(e){log('Transcription error: '+e.message,'err');if(callActive&&!isSpeaking)restartTimeout=setTimeout(startListening,500);}
+}
 function stopListening(){if(mediaRecorder&&mediaRecorder.state!=='inactive')suppressRestart=true;if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}if(restartTimeout){clearTimeout(restartTimeout);restartTimeout=null;}stopVAD();stopRecording();isRecording=false;}
-function playBrowserTTS(text){return new Promise((resolve)=>{if(!window.speechSynthesis){resolve();return;}window.speechSynthesis.cancel();const utt=new SpeechSynthesisUtterance(text);utt.rate=0.95;utt.pitch=1.0;utt.volume=1.0;const voices=window.speechSynthesis.getVoices();const preferred=voices.find(v=>v.name.includes('Samantha')||v.name.includes('Karen')||v.name.includes('Google US English')||v.lang==='en-US');if(preferred)utt.voice=preferred;const done=()=>{isSpeaking=false;currentAudio=null;if(callActive){setTimeout(()=>{setOrbState('listening');startListening();},300);}resolve();};utt.onend=done;utt.onerror=done;isSpeaking=true;setOrbState('speaking');currentAudio={pause:()=>window.speechSynthesis.cancel(),currentTime:0};window.speechSynthesis.speak(utt);});}
+function playBrowserTTS(text){return new Promise((resolve)=>{if(!window.speechSynthesis){resolve();return;}window.speechSynthesis.cancel();const utt=new SpeechSynthesisUtterance(text);utt.rate=0.95;utt.pitch=1.0;utt.volume=1.0;const voices=window.speechSynthesis.getVoices();const preferred=voices.find(v=>v.name.includes('Samantha')||v.name.includes('Karen')||v.name.includes('Daniel')||v.name.includes('Google US English')||v.lang==='en-US');if(preferred)utt.voice=preferred;const done=()=>{isSpeaking=false;currentAudio=null;if(callActive){setTimeout(()=>{setOrbState('listening');startListening();},300);}resolve();};utt.onend=done;utt.onerror=done;isSpeaking=true;setOrbState('speaking');currentAudio={pause:()=>window.speechSynthesis.cancel(),currentTime:0};window.speechSynthesis.speak(utt);});}
 function normalizeForSpeech(text){return text.replace(/REIA/g,'Ria').replace(/R\.E\.I\.A\./g,'Ria').replace(/Utah REIA/g,'Utah Ria').replace(/utah reia/gi,'Utah Ria');}
 async function speak(text){await playElevenLabs(normalizeForSpeech(text));}
 async function fetchContext(){try{const resp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'context'})});if(!resp.ok)return null;const data=await resp.json();liveContext=data;let block='';if(data.boardMembers&&data.boardMembers.length>0){block+='BOARD MEMBERS & LEADERSHIP:\n';data.boardMembers.forEach(b=>{block+='- '+b.name+(b.specialties?' — '+b.specialties:'')+'\n';});block+='\n';}if(data.vendors&&data.vendors.length>0){block+='ACTIVE VENDORS & SERVICE PROVIDERS:\n';data.vendors.forEach(v=>{const who=(v.contact&&v.contact!==v.name)?v.name+' (contact: '+v.contact+')':v.name;block+='- '+who+': '+v.services.join(', ')+((v.specialties&&v.specialties.length>0)?' — specialties: '+v.specialties.join(', '):'')+'\n';});block+='\n';}if(data.recentEvents&&data.recentEvents.length>0){block+='RECENT EVENTS:\n';data.recentEvents.forEach(e=>{block+='- '+e.date+': '+e.title+'\n';});block+='\n';}if(data.membershipTiers&&data.membershipTiers.length>0){block+='MEMBERSHIP TIERS:\n';data.membershipTiers.forEach(t=>{block+='- '+t.tier+': '+t.description+'\n';});}return block.trim();}catch(e){return null;}}
-async function startCall(){const micOk=await initMicStream();if(!micOk)return;if(window.speechSynthesis)window.speechSynthesis.getVoices();const contextBlock=await fetchContext();window._dynamicSystemPrompt=systemPrompt.replace('{{LIVE_CONTEXT}}',contextBlock||'(Live community data temporarily unavailable)');callActive=true;conversationHistory=[];setupScreen.classList.add('hidden');callScreen.classList.add('active');callStartTime=Date.now();callTimer.classList.add('active');timerInterval=setInterval(updateTimer,1000);updateTimer();intakePhase=true;intakeConfirmed=false;awaitingConfirmation=false;intakeFormShown=true;intakeFormEl.classList.add('show');const greeting=`Aloha! So glad you joined. Go ahead and fill in your name, email, and phone number in the form below — once you do that, let's talk.`;conversationHistory.push({role:'assistant',content:greeting});addMessage('assistant',greeting);await speak(greeting);}
-async function fetchAndInjectMatches(profile){try{const resp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matches',profile})});if(!resp.ok)return;const{vendors=[],investors=[]}=await resp.json();if(!vendors.length&&!investors.length)return;matchesInjected=true;let context='[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';if(vendors.length){context+='\nMatching vendors/service providers:\n';vendors.forEach(v=>{const name=v.contacts?.company_name||v.contacts?.full_name||'Unknown';const services=(v.service_types||[]).join(', ');context+='- '+name+(services?' ('+services+')':'')+'\n';});}if(investors.length){context+='\nPeer investors to connect with:\n';investors.forEach(i=>{const name=i.contacts?.full_name||'Unknown';const strats=(i.investing_types||[]).join(', ');context+='- '+name+' — '+i.where_in_journey+(strats?', '+strats:'')+'\n';});}conversationHistory.push({role:'user',content:context});}catch(e){}}
-async function syncToGHL(){if(!callerEmail&&!callerPhone)return;try{const summary=conversationHistory.filter(m=>m.role==='assistant').map(m=>m.content.replace(/\[PROFILE:.*?\]/s,'').replace(/\[INTAKE:.*?\]/s,'').replace('[INTAKE_CONFIRMED]','').trim()).join(' | ');const tags=['Voice Agent Lead'];if(callerProfile.stage)tags.push('Stage: '+callerProfile.stage);if(callerProfile.role)tags.push('Role: '+callerProfile.role);if(callerProfile.blocker)tags.push('Blocker: '+callerProfile.blocker);(callerProfile.strategies||[]).forEach(s=>tags.push('Strategy: '+s));const ghlPayload={first_name:callerName.split(' ')[0]||callerName,last_name:callerName.split(' ').slice(1).join(' ')||'',email:callerEmail,phone:callerPhone,tags,customField:{voice_agent_summary:summary.substring(0,2000),investing_stage:callerProfile.stage||'',investing_strategies:(callerProfile.strategies||[]).join(', '),primary_blocker:callerProfile.blocker||'',investor_goals:callerProfile.goals||''}};await fetch(GHL_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ghlPayload)});if(callerEmail){await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upsert',contact:{name:callerName,email:callerEmail,phone:callerPhone},profile:{...callerProfile,summary:callerProfile.summary||summary.substring(0,500)}});}}catch(e){}}
+
+async function startCall(){
+  const micOk=await initMicStream();if(!micOk)return;
+  if(window.speechSynthesis)window.speechSynthesis.getVoices();
+  const contextBlock=await fetchContext();
+  window._dynamicSystemPrompt=systemPrompt.replace('{{LIVE_CONTEXT}}',contextBlock||'(Live community data temporarily unavailable)');
+  callActive=true;conversationHistory=[];
+  setupScreen.classList.add('hidden');callScreen.classList.add('active');
+  callStartTime=Date.now();callTimer.classList.add('active');timerInterval=setInterval(updateTimer,1000);updateTimer();
+  intakePhase=true;intakeConfirmed=false;awaitingConfirmation=false;intakeFormShown=true;intakeFormEl.classList.add('show');
+  const greeting=`Aloha! So glad you joined. Go ahead and fill in your name, email, and phone number in the form below — once you do that, let's talk.`;
+  conversationHistory.push({role:'assistant',content:greeting});addMessage('assistant',greeting);await speak(greeting);
+}
+
+async function fetchAndInjectMatches(profile){try{const resp=await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matches',profile})});if(!resp.ok)return;const{vendors=[],investors=[]}=await resp.json();if(!vendors.length&&!investors.length)return;matchesInjected=true;let context='[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';if(vendors.length){context+='\nMatching vendors/service providers:\n';vendors.forEach(v=>{const name=v.contacts?.company_name||v.contacts?.full_name||'Unknown';const services=(v.service_types||[]).join(', ');context+='- '+name+(services?' ('+services+')':'')+'\n';});}if(investors.length){context+='\nPeer investors to connect with:\n';investors.forEach(i=>{const name=i.contacts?.full_name||'Unknown';const strats=(i.investing_types||[]).join(', ');context+='- '+name+' — '+i.where_in_journey+(strats?', '+strats:'')+'\n';});}conversationHistory.push({role:'user',content:context});}catch(e){log('Match inject error: '+e.message,'err');}}
+
+async function syncToGHL(){if(!callerEmail&&!callerPhone)return;try{const summary=conversationHistory.filter(m=>m.role==='assistant').map(m=>m.content.replace(/\[PROFILE:.*?\]/s,'').replace(/\[INTAKE:.*?\]/s,'').replace('[INTAKE_CONFIRMED]','').trim()).join(' | ');const tags=['Voice Agent Lead'];if(callerProfile.stage)tags.push('Stage: '+callerProfile.stage);if(callerProfile.role)tags.push('Role: '+callerProfile.role);if(callerProfile.blocker)tags.push('Blocker: '+callerProfile.blocker);(callerProfile.strategies||[]).forEach(s=>tags.push('Strategy: '+s));const ghlPayload={first_name:callerName.split(' ')[0]||callerName,last_name:callerName.split(' ').slice(1).join(' ')||'',email:callerEmail,phone:callerPhone,tags,customField:{voice_agent_summary:summary.substring(0,2000),investing_stage:callerProfile.stage||'',investing_strategies:(callerProfile.strategies||[]).join(', '),primary_blocker:callerProfile.blocker||'',investor_goals:callerProfile.goals||''}};await fetch(GHL_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ghlPayload)});if(callerEmail){await fetch('/api/supabase',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upsert',contact:{name:callerName,email:callerEmail,phone:callerPhone},profile:{...callerProfile,summary:callerProfile.summary||summary.substring(0,500)}})});}}catch(e){log('Sync error: '+e.message,'err');}}
+
 function endCall(){callActive=false;stopListening();interruptAI();if(timerInterval){clearInterval(timerInterval);timerInterval=null;}callTimer.classList.remove('active');syncToGHL();callScreen.classList.remove('active');setupScreen.classList.remove('hidden');conversationHistory=[];transcriptArea.innerHTML='';pendingTranscript='';interimMsgEl=null;callerName='';callerEmail='';callerPhone='';callerProfile={};matchesInjected=false;intakeFormShown=false;intakePhase=true;intakeConfirmed=false;awaitingConfirmation=false;isRecording=false;if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}confirmCard.classList.remove('show');confirmNameEl.value='';confirmEmailEl.value='';confirmPhoneEl.value='';confirmNameEl.classList.remove('filled');confirmEmailEl.classList.remove('filled');confirmPhoneEl.classList.remove('filled');confirmNameEl.disabled=true;confirmEmailEl.disabled=true;confirmPhoneEl.disabled=true;confirmActions.style.display='none';intakeFormEl.classList.remove('show');intakeSubmitBtn.disabled=false;}
+
 startBtn.addEventListener('click',startCall);
 endBtn.addEventListener('click',endCall);
-confirmYesBtn.addEventListener('click',()=>{callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;intakeConfirmed=true;intakePhase=false;awaitingConfirmation=false;confirmCard.classList.remove('show');const msg='My name is '+callerName+', my email is '+callerEmail+', and my phone number is '+callerPhone+'.';addMessage('user',msg);stopListening();sendToAI(msg);});
+confirmYesBtn.addEventListener('click',()=>{callerName=confirmNameEl.value.trim()||callerName;callerEmail=confirmEmailEl.value.trim()||callerEmail;callerPhone=confirmPhoneEl.value.trim()||callerPhone;intakeConfirmed=true;intakePhase=false;awaitingConfirmation=false;confirmCard.classList.remove('show');log('Caller confirmed','ok');const msg='My name is '+callerName+', my email is '+callerEmail+', and my phone number is '+callerPhone+'.';addMessage('user',msg);stopListening();sendToAI(msg);});
 confirmEditBtn.addEventListener('click',()=>{confirmNameEl.disabled=false;confirmEmailEl.disabled=false;confirmPhoneEl.disabled=false;confirmNameEl.focus();confirmActions.innerHTML='<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';document.getElementById('confirmSaveBtn').addEventListener('click',()=>{callerName=confirmNameEl.value.trim();callerEmail=confirmEmailEl.value.trim();callerPhone=confirmPhoneEl.value.trim();intakeConfirmed=true;intakePhase=false;awaitingConfirmation=false;confirmCard.classList.remove('show');const msg='My name is '+callerName+', my email is '+callerEmail+', and my phone number is '+callerPhone+'.';addMessage('user',msg);stopListening();sendToAI(msg);});});
 intakeSubmitBtn.addEventListener('click',()=>{const name=intakeNameInput.value.trim(),email=intakeEmailInput.value.trim(),phone=intakePhoneInput.value.trim();if(!name||!email||!phone){intakeNameInput.style.borderColor=name?'':'rgba(160,60,20,.6)';intakeEmailInput.style.borderColor=email?'':'rgba(160,60,20,.6)';intakePhoneInput.style.borderColor=phone?'':'rgba(160,60,20,.6)';return;}intakeSubmitBtn.disabled=true;intakeFormEl.classList.remove('show');stopListening();callerName=name;callerEmail=email;callerPhone=phone;confirmNameEl.value=name;confirmNameEl.classList.add('filled');confirmEmailEl.value=email;confirmEmailEl.classList.add('filled');confirmPhoneEl.value=phone;confirmPhoneEl.classList.add('filled');confirmNameEl.disabled=false;confirmEmailEl.disabled=false;confirmPhoneEl.disabled=false;confirmActions.style.display='flex';awaitingConfirmation=true;confirmCard.classList.add('show');});
+
+log('App ready.');
 </script>
 </body>
 </html>
