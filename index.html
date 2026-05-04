@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6,7 +6,6 @@
 <link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
-<<<<<<< HEAD
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;min-height:100%}
@@ -120,174 +119,6 @@
   @keyframes coreBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
   @keyframes speakPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
   .debug-log{display:none}
-=======
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;min-height:100%}
-body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-content:center;min-height:100vh;position:relative;overflow-x:hidden}
-
-/* WARM SCENE */
-.scene{position:fixed;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%, #f5e8c8 0%, #e8c88a 25%, #c8934a 55%, #8a4a1a 80%, #3a1a08 100%);z-index:0}
-.scene-overlay{position:fixed;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 100%, rgba(30,10,0,.4) 0%, transparent 60%);z-index:0}
-.grain{position:fixed;inset:0;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;z-index:0;pointer-events:none}
-.light-halo{position:fixed;width:500px;height:300px;border-radius:50%;background:radial-gradient(ellipse,rgba(255,240,180,.28) 0%,transparent 70%);top:10%;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
-.horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top,rgba(80,20,0,.5) 0%,transparent 100%);pointer-events:none;z-index:0}
-
-/* APP SHELL */
-.app{width:100%;max-width:640px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1}
-
-/* HEADER */
-.header{padding:18px 24px 14px;display:flex;align-items:center;gap:12px}
-.logo{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo img{width:40px;height:40px;object-fit:contain}
-.header-text h1{font-size:14px;font-weight:600;color:rgba(45,18,2,.85)}
-.header-text p{font-size:10px;color:rgba(70,30,5,.5);margin-top:1px;letter-spacing:2px;text-transform:uppercase}
-.call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:rgba(30,90,20,.85);display:none;align-items:center;gap:6px}
-.call-timer.active{display:flex}
-.call-timer .dot{width:6px;height:6px;border-radius:50%;background:rgba(30,120,25,.85);animation:pulse 1.4s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* ERROR */
-.error-banner{background:rgba(180,60,20,.12);border:1px solid rgba(160,50,15,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(120,30,5,.9);margin:0 24px;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
-.error-banner.show{display:block}
-
-/* DEBUG LOG -- hidden but functional */
-.debug-log{display:none}
-.debug-log.show{display:none}
-
-/* SETUP SCREEN */
-.setup-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px 24px 60px;gap:22px}
-.setup-screen.hidden{display:none}
-
-/* ORB */
-.setup-icon{position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center}
-.orb-ring-outer{position:absolute;width:200px;height:200px;border-radius:50%;border:1px solid rgba(110,55,8,.2);animation:ringBreath 4s ease-in-out infinite}
-.orb-ring-mid{position:absolute;width:158px;height:158px;border-radius:50%;border:1px solid rgba(110,55,8,.3);animation:ringBreath 4s ease-in-out infinite .6s}
-.orb-ring-inner{position:absolute;width:118px;height:118px;border-radius:50%;border:1px solid rgba(130,65,8,.4);animation:ringBreath 4s ease-in-out infinite 1.2s}
-.orb-glow{position:absolute;width:108px;height:108px;border-radius:50%;background:radial-gradient(circle,rgba(235,175,55,.5) 0%,rgba(195,115,28,.28) 50%,transparent 70%);animation:glowPulse 4s ease-in-out infinite;filter:blur(12px)}
-.orb-core{width:88px;height:88px;border-radius:50%;background:radial-gradient(circle at 38% 35%,rgba(255,222,108,.98) 0%,rgba(222,142,33,.92) 45%,rgba(162,72,10,.92) 100%);box-shadow:0 0 38px rgba(215,138,28,.62),0 0 75px rgba(175,88,8,.42),inset 0 1px 0 rgba(255,248,198,.52);animation:coreBreath 4s ease-in-out infinite;position:relative;z-index:2;transition:background .6s,box-shadow .6s}
-.orb-core::after{content:'';position:absolute;top:11px;left:13px;width:23px;height:15px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.52) 0%,transparent 70%);transform:rotate(-30deg)}
-
-/* SETUP TEXT */
-.setup-title{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;font-style:italic;color:rgba(45,18,2,.78);letter-spacing:.5px;text-shadow:0 1px 6px rgba(255,238,198,.35)}
-.setup-sub{font-size:13px;color:rgba(55,22,4,.58);max-width:340px;line-height:1.7;font-weight:300}
-
-/* START BUTTON */
-.start-btn{background:rgba(38,15,1,.18);border:1px solid rgba(70,30,4,.42);color:rgba(38,15,1,.82);padding:13px 36px;border-radius:2px;font-size:12px;font-weight:500;cursor:pointer;transition:all .25s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif;letter-spacing:3px;text-transform:uppercase}
-.start-btn:hover{border-color:rgba(70,30,4,.72);background:rgba(38,15,1,.28);transform:translateY(-1px)}
-.start-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-.start-btn svg{width:16px;height:16px}
-
-/* CALL SCREEN -- orb stays center, controls at bottom */
-.call-screen{flex:1;display:none;flex-direction:column}
-.call-screen.active{display:flex}
-
-/* TRANSCRIPT AREA -- hidden by default via JS toggle */
-.transcript-area{padding:12px 24px;overflow-y:auto;max-height:200px;display:flex;flex-direction:column;gap:8px;transition:opacity .4s}
-.msg{display:flex;gap:8px;animation:fadeIn .3s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.msg.ai{flex-direction:row}
-.msg.user{flex-direction:row-reverse}
-.avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;font-weight:600;background:rgba(38,15,1,.18);border:1px solid rgba(70,30,4,.22);color:rgba(38,15,1,.7)}
-.bubble{max-width:76%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;background:rgba(38,15,1,.1);border:1px solid rgba(70,30,4,.14);color:rgba(35,12,1,.8)}
-.ai .bubble{border-radius:3px 10px 10px 10px}
-.user .bubble{border-radius:10px 3px 10px 10px;background:rgba(38,15,1,.07)}
-.bubble.interim{opacity:.5;font-style:italic}
-
-/* ORB IN CALL -- centered, large */
-.call-orb-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
-.call-orb-stage{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center}
-.call-orb-stage .orb-ring-outer{width:220px;height:220px}
-.call-orb-stage .orb-ring-mid{width:174px;height:174px}
-.call-orb-stage .orb-ring-inner{width:130px;height:130px}
-.call-orb-stage .orb-glow{width:120px;height:120px}
-.call-orb-stage .orb-core{width:96px;height:96px}
-
-/* ORB LISTENING STATE */
-.call-orb-stage.listening .orb-core{background:radial-gradient(circle at 38% 35%,rgba(158,228,128,.98) 0%,rgba(78,162,58,.92) 45%,rgba(26,90,16,.92) 100%);box-shadow:0 0 38px rgba(68,178,52,.68),0 0 75px rgba(33,128,26,.42),inset 0 1px 0 rgba(198,255,178,.52)}
-.call-orb-stage.listening .orb-glow{background:radial-gradient(circle,rgba(78,208,58,.48) 0%,rgba(38,158,28,.22) 50%,transparent 70%)}
-.call-orb-stage.listening .orb-ring-outer,.call-orb-stage.listening .orb-ring-mid,.call-orb-stage.listening .orb-ring-inner{border-color:rgba(58,178,48,.28)}
-
-/* ORB THINKING STATE */
-.call-orb-stage.thinking .orb-core{animation:coreBreath 1.2s ease-in-out infinite}
-.call-orb-stage.thinking .orb-glow{animation:glowPulse 1.2s ease-in-out infinite}
-
-/* ORB SPEAKING STATE */
-.call-orb-stage.speaking .orb-core{animation:speakPulse .65s ease-in-out infinite;background:radial-gradient(circle at 38% 35%,rgba(255,138,78,.98) 0%,rgba(222,78,33,.92) 45%,rgba(142,30,8,.92) 100%);box-shadow:0 0 48px rgba(218,88,32,.72),0 0 88px rgba(182,52,10,.48),inset 0 1px 0 rgba(255,208,178,.52)}
-.call-orb-stage.speaking .orb-glow{background:radial-gradient(circle,rgba(222,88,32,.52) 0%,rgba(182,52,10,.28) 50%,transparent 70%);animation:glowSpeak .65s ease-in-out infinite}
-.call-orb-stage.speaking .orb-ring-outer,.call-orb-stage.speaking .orb-ring-mid,.call-orb-stage.speaking .orb-ring-inner{border-color:rgba(218,78,28,.28)}
-
-/* STATUS LABEL */
-.orb-status-label{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:300;font-style:italic;color:rgba(45,18,2,.68);min-height:30px;text-align:center}
-
-/* INTAKE FORM */
-.intake-form{margin:0 24px 12px;background:rgba(38,15,1,.12);border:1px solid rgba(90,45,8,.28);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
-.intake-form.show{display:block}
-.intake-form-title{font-size:13px;font-weight:600;color:rgba(38,15,1,.85);margin-bottom:3px}
-.intake-form-sub{font-size:11px;color:rgba(55,22,4,.52);margin-bottom:12px;line-height:1.55;font-weight:300}
-.intake-submit-btn{width:100%;margin-top:12px;padding:9px;border-radius:6px;background:rgba(38,15,1,.22);border:1px solid rgba(70,30,4,.38);color:rgba(35,12,1,.85);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-.intake-submit-btn:hover{background:rgba(38,15,1,.32);border-color:rgba(70,30,4,.58)}
-.intake-submit-btn:disabled{opacity:.4;cursor:not-allowed}
-
-/* CONFIRM CARD */
-.confirm-card{margin:0 24px 12px;background:rgba(38,15,1,.12);border:1px solid rgba(90,45,8,.22);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
-.confirm-card.show{display:block}
-.confirm-card-title{font-size:10px;font-weight:600;color:rgba(65,32,5,.62);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px}
-.confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-.confirm-row:last-child{margin-bottom:0}
-.confirm-label{font-size:11px;color:rgba(55,22,4,.58);width:50px;flex-shrink:0;font-weight:400}
-.confirm-input{flex:1;background:rgba(255,240,198,.32);border:1px solid rgba(90,45,8,.22);border-radius:6px;padding:6px 10px;color:rgba(35,12,1,.85);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
-.confirm-input:focus{outline:none;border-color:rgba(90,45,8,.48)}
-.confirm-input:disabled{opacity:.38;cursor:not-allowed}
-.confirm-input.filled{border-color:rgba(70,120,35,.38)}
-.confirm-input::placeholder{color:rgba(75,45,18,.28)}
-.confirm-actions{display:flex;gap:8px;margin-top:12px}
-.confirm-btn{flex:1;padding:8px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s}
-.confirm-btn.yes{background:rgba(48,118,28,.32);border:1px solid rgba(58,138,38,.32);color:rgba(18,68,8,.9)}
-.confirm-btn.yes:hover{background:rgba(48,118,28,.48)}
-.confirm-btn.edit{background:rgba(38,15,1,.1);border:1px solid rgba(70,30,4,.22);color:rgba(48,20,2,.62)}
-.confirm-btn.edit:hover{border-color:rgba(70,30,4,.42);color:rgba(38,15,1,.85)}
-
-/* CALL STATUS BAR */
-.call-status{background:rgba(30,10,0,.14);border-top:1px solid rgba(70,30,4,.14);padding:14px 24px 22px}
-.status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px}
-.status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(38,15,1,.1);border:1px solid rgba(70,30,4,.18);font-size:11px;color:rgba(45,18,2,.62);transition:all .3s;font-weight:400}
-.status-indicator.listening{border-color:rgba(48,138,28,.38);color:rgba(18,78,8,.85);background:rgba(38,118,18,.1)}
-.status-indicator.thinking{border-color:rgba(148,88,8,.38);color:rgba(98,52,4,.85);background:rgba(138,78,8,.08)}
-.status-indicator.speaking{border-color:rgba(158,68,18,.38);color:rgba(98,38,6,.85);background:rgba(148,58,14,.08)}
-.voice-bars{display:flex;gap:3px;align-items:center;height:14px}
-.voice-bars span{width:2.5px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
-.voice-bars span:nth-child(1){animation-delay:0s}
-.voice-bars span:nth-child(2){animation-delay:.1s}
-.voice-bars span:nth-child(3){animation-delay:.2s}
-.voice-bars span:nth-child(4){animation-delay:.1s}
-.voice-bars span:nth-child(5){animation-delay:0s}
-@keyframes wave{0%,100%{height:3px}50%{height:12px}}
-
-/* BOTTOM BUTTONS */
-.btn-row-bottom{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:2px}
-.end-btn{background:rgba(38,15,1,.14);border:1px solid rgba(155,58,18,.38);color:rgba(115,38,8,.78);padding:10px 22px;border-radius:2px;font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:2px;text-transform:uppercase}
-.end-btn:hover{border-color:rgba(155,58,18,.68);color:rgba(130,32,5,.95);background:rgba(38,15,1,.22)}
-.end-btn svg{width:13px;height:13px}
-
-/* TEXT TOGGLE */
-.toggle-btn{background:rgba(20,8,0,.48);border:1px solid rgba(20,8,0,.65);cursor:pointer;padding:6px 14px;border-radius:4px;display:flex;align-items:center;gap:7px;transition:all .25s}
-.toggle-btn:hover{background:rgba(20,8,0,.65);border-color:rgba(20,8,0,.85)}
-.eye-icon{width:14px;height:12px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.eye-oval{width:14px;height:9px;border:1.5px solid rgba(255,222,148,.92);border-radius:50%;position:absolute}
-.eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(255,222,148,.92);position:absolute}
-.eye-slash{width:17px;height:1.5px;background:rgba(255,222,148,.92);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
-.toggle-label{font-size:10px;color:rgba(255,222,148,.92);letter-spacing:2px;text-transform:uppercase;font-weight:500}
-
-.hint-bar{font-size:11px;color:rgba(38,15,1,.35);text-align:center;margin-top:10px;font-weight:300}
-
-/* ANIMATIONS */
-@keyframes ringBreath{0%,100%{opacity:.52;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
-@keyframes glowPulse{0%,100%{opacity:.62;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
-@keyframes glowSpeak{0%,100%{opacity:.72;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
-@keyframes coreBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-@keyframes speakPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 </style>
 </head>
 <body>
@@ -296,10 +127,6 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 <div class="grain"></div>
 <div class="light-halo"></div>
 <div class="horizon-glow"></div>
-<<<<<<< HEAD
-=======
-
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 <div class="app">
   <div class="header">
     <div class="logo"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
@@ -314,7 +141,6 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 
   <!-- SETUP SCREEN -->
   <div class="setup-screen" id="setupScreen">
-<<<<<<< HEAD
     <div class="orb-stage" id="setupOrb">
       <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
     </div>
@@ -326,31 +152,10 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
       </svg>
       Begin Journey
     </button>
-  </div>  <div class="setup-screen" id="setupScreen">
-    <div class="setup-icon"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
-    <div class="setup-title">Utah REIA Voice Assistant</div>
-=======
-    <div class="setup-icon">
-      <div class="orb-ring-outer"></div>
-      <div class="orb-ring-mid"></div>
-      <div class="orb-ring-inner"></div>
-      <div class="orb-glow"></div>
-      <div class="orb-core"></div>
-    </div>
-    <div class="setup-title">Begin your journey</div>
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
-    <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
-    <button class="start-btn" id="startBtn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
-      </svg>
-      Begin Journey
-    </button>
   </div>
 
   <!-- CALL SCREEN -->
   <div class="call-screen" id="callScreen">
-<<<<<<< HEAD
     <div class="call-orb-area">
       <div class="orb-stage" id="callOrb">
         <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
@@ -358,24 +163,6 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
       <div class="status-label" id="statusLabel">Connecting...</div>
       <div class="transcript-area" id="transcriptArea"></div>
     </div>
-=======
-
-    <!-- ORB CENTER STAGE -->
-    <div class="call-orb-wrap">
-      <div class="call-orb-stage" id="callOrbStage">
-        <div class="orb-ring-outer"></div>
-        <div class="orb-ring-mid"></div>
-        <div class="orb-ring-inner"></div>
-        <div class="orb-glow"></div>
-        <div class="orb-core"></div>
-      </div>
-      <div class="orb-status-label" id="orbStatusLabel">Connecting...</div>
-      <!-- TRANSCRIPT -- hidden by default, shown on toggle -->
-      <div class="transcript-area" id="transcriptArea" style="opacity:0;pointer-events:none"></div>
-    </div>
-
-    <!-- INTAKE FORM -->
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
     <div class="intake-form" id="intakeForm">
       <div class="intake-form-title">Please enter your details below</div>
       <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
@@ -414,7 +201,6 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
         <button class="confirm-btn edit" id="confirmEditBtn">Edit details</button>
       </div>
     </div>
-<<<<<<< HEAD
     <div class="call-controls">
       <div class="status-indicator" id="statusInd"><div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div><span id="statusText">Connecting...</span></div>
       <div class="btn-row">
@@ -431,35 +217,6 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
         </button>
       </div>
       <div class="hint-bar">Just talk naturally. Pause when you're done.</div>
-=======
-
-    <!-- CALL STATUS -->
-    <div class="call-status">
-      <div class="status-row">
-        <div class="status-indicator" id="statusInd">
-          <div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div>
-          <span id="statusText">Connecting...</span>
-        </div>
-      </div>
-      <div class="btn-row-bottom">
-        <button class="end-btn" id="endBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
-            <line x1="23" y1="1" x2="1" y2="23"/>
-          </svg>
-          End Call
-        </button>
-        <button class="toggle-btn" id="toggleBtn">
-          <div class="eye-icon">
-            <div class="eye-oval"></div>
-            <div class="eye-pupil" id="eyePupil"></div>
-            <div class="eye-slash" id="eyeSlash"></div>
-          </div>
-          <span class="toggle-label" id="toggleLabel">Text</span>
-        </button>
-      </div>
-      <div class="hint-bar">Just talk naturally. Pause when you're done. You can interrupt anytime by speaking.</div>
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
     </div>
   </div>
 
@@ -468,55 +225,20 @@ body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-c
 </div>
 
 <script>
-<<<<<<< HEAD
-=======
-// TEXT TOGGLE
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 const toggleBtn = document.getElementById('toggleBtn');
 const toggleLabel = document.getElementById('toggleLabel');
 const eyePupil = document.getElementById('eyePupil');
 const eyeSlash = document.getElementById('eyeSlash');
-<<<<<<< HEAD
 let transcriptVisible = false;
 toggleBtn.addEventListener('click', () => {
   transcriptVisible = !transcriptVisible;
   document.getElementById('transcriptArea').classList.toggle('visible', transcriptVisible);
-=======
-const transcriptAreaEl = document.getElementById('transcriptArea');
-let transcriptVisible = false;
-toggleBtn.addEventListener('click', () => {
-  transcriptVisible = !transcriptVisible;
-  transcriptAreaEl.style.opacity = transcriptVisible ? '1' : '0';
-  transcriptAreaEl.style.pointerEvents = transcriptVisible ? 'auto' : 'none';
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
   toggleLabel.textContent = transcriptVisible ? 'Hide' : 'Text';
   eyeSlash.style.display = transcriptVisible ? 'block' : 'none';
   eyePupil.style.display = transcriptVisible ? 'none' : 'block';
 });
-<<<<<<< HEAD
 </script>
 <script>
-=======
-
-// ORB STATE -- mirrors setStatus calls to animate the orb
-const callOrbStage = document.getElementById('callOrbStage');
-const orbStatusLabel = document.getElementById('orbStatusLabel');
-const _origSetStatus = window._origSetStatus;
-function updateOrbFromState(state) {
-  callOrbStage.className = 'call-orb-stage ' + state;
-  const labels = {
-    listening: 'Listening...',
-    thinking: 'One moment...',
-    speaking: 'Speaking',
-    '': 'Ready'
-  };
-  orbStatusLabel.textContent = labels[state] !== undefined ? labels[state] : '';
-}
-</script>
-
-<script>
-// ── ORIGINAL JS BELOW -- COMPLETELY UNTOUCHED ──────────────────────────────
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 const setupScreen = document.getElementById('setupScreen');
 const callScreen = document.getElementById('callScreen');
 const startBtn = document.getElementById('startBtn');
@@ -740,7 +462,6 @@ const statusLabel = document.getElementById('statusLabel');
 function setStatus(state, text) {
   statusInd.className = 'status-indicator ' + state;
   statusText.textContent = text;
-<<<<<<< HEAD
   if (callOrb) callOrb.className = 'orb-stage ' + state;
   const labels = {
     listening: 'Listening...',
@@ -749,10 +470,6 @@ function setStatus(state, text) {
     transcribing: 'Transcribing...'
   };
   if (statusLabel) statusLabel.textContent = labels[state] || text;
-=======
-  // Also update orb state to match
-  updateOrbFromState(state);
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 }
 
 function addMessage(role, text, interim) {
@@ -866,7 +583,6 @@ async function sendToAI(userText) {
       const errTxt = await resp.text();
       throw new Error('Claude proxy ' + resp.status + ': ' + errTxt.substring(0, 300));
     }
-<<<<<<< HEAD
 
     // Stream the response — collect text and speak sentence by sentence
     const reader = resp.body.getReader();
@@ -887,63 +603,6 @@ async function sendToAI(userText) {
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
         .replace(/\*\*([^*]+)\*\*/g, '$1')
         .replace(/\*([^*]+)\*/g, '$1')
-=======
-    const data = await resp.json();
-    log('Claude response OK', 'ok');
-    if (data.content && data.content[0]) {
-      let fullText = data.content[0].text;
-      const intakeMatch = fullText.match(/\[INTAKE:({.*?})\]/s);
-      if (intakeMatch) {
-        try {
-          const parsed = JSON.parse(intakeMatch[1]);
-          if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
-          if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
-          if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
-          if (!intakeConfirmed) confirmCard.classList.add('show');
-        } catch(e) { log('Intake parse error: ' + e.message, 'err'); }
-      }
-      if (fullText.includes('[INTAKE_CONFIRMED]')) {
-        intakeConfirmed = true;
-        intakePhase = false;
-        callerName = confirmNameEl.value.trim() || callerName;
-        callerEmail = confirmEmailEl.value.trim() || callerEmail;
-        callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-        confirmActions.style.display = 'none';
-        awaitingConfirmation = false;
-        log('Intake confirmed', 'ok');
-      }
-      if (callerName && callerEmail && callerPhone && !intakeConfirmed && !awaitingConfirmation) {
-        awaitingConfirmation = true;
-        confirmActions.style.display = 'flex';
-        confirmNameEl.disabled = true;
-        confirmEmailEl.disabled = true;
-        confirmPhoneEl.disabled = true;
-      }
-      if (intakePhase && !intakeFormShown && !intakeConfirmed) {
-        intakeFormShown = true;
-        intakeFormEl.classList.add('show');
-      }
-      const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
-      if (profileMatch && !matchesInjected) {
-        try {
-          callerProfile = JSON.parse(profileMatch[1]);
-          log('Profile signal received — fetching matches...');
-          fetchAndInjectMatches(callerProfile);
-        } catch(e) { log('Profile parse error: ' + e.message, 'err'); }
-      }
-      const spokenText = fullText
-        .replace(/\[PROFILE:[\s\S]*?\]\s*/g, '')
-        .replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g, '')
-        .replace(/\[INTAKE:[\s\S]*?\]\s*/g, '')
-        .replace('[INTAKE_CONFIRMED]', '')
-        .replace(/\[[A-Z_]+:[\s\S]*?\]/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/<https?:\/\/[^>]+>/g, '')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .replace(/\[\]/g, '')
-        .replace(/\(\)/g, '')
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
         .trim();
 
       if (!toSpeak || toSpeak === spokenSoFar) return;
@@ -1014,7 +673,6 @@ async function sendToAI(userText) {
   }
 }
 
-<<<<<<< HEAD
 function stripForSpeech(text) {
   return text
     .replace(/\[PROFILE:[\s\S]*?\]/g, '')
@@ -1069,8 +727,6 @@ function processSignals(fullText) {
 }
 
 
-=======
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 let mediaRecorder = null;
 let audioChunks = [];
 let micStream = null;
@@ -1083,25 +739,12 @@ let suppressRestart = false;
 const NOISE_FLOOR      = 1.0;
 const SPEECH_THRESHOLD = 1.4;
 const HOLD_FLOOR       = 1.15;
-const END_OF_TURN_MS   = 3000;
+const END_OF_TURN_MS   = 1200;
 const IDLE_RESTART_MS  = 8000;
 const MIN_SPEECH_MS    = 80;
-const VAD_INTERVAL_MS  = 80;
-
-<<<<<<< HEAD
-const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
-const SPEECH_THRESHOLD = 1.4;  // above this = real voice
-const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
-                                // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 1200; // ms of silence before committing — 1.2 seconds
-const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
-const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
-const VAD_INTERVAL_MS  = 50;   // sample interval in ms
+const VAD_INTERVAL_MS  = 50;
 
 let vadState           = 'waiting'; // waiting | speaking | ending
-=======
-let vadState           = 'waiting';
->>>>>>> cd52026bd9c78945ddad3bc3118258e5b1bb267e
 let vadSpeechDetected  = false;
 let vadSpeechDuration  = 0;
 let vadSilenceDuration = 0;
