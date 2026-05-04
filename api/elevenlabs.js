@@ -3,7 +3,12 @@ export default async function handler(req, res) {
 
   const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
   const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
-  if (!ELEVEN_KEY || !ELEVEN_VOICE_ID) return res.status(500).json({ error: 'ElevenLabs not configured.' });
+
+  // Diagnostic — log what we have (partial key only for security)
+  console.log('ElevenLabs check — key present:', !!ELEVEN_KEY, '| key prefix:', ELEVEN_KEY ? ELEVEN_KEY.substring(0,8) + '...' : 'MISSING');
+  console.log('Voice ID:', ELEVEN_VOICE_ID || 'MISSING');
+
+  if (!ELEVEN_KEY || !ELEVEN_VOICE_ID) return res.status(500).json({ error: 'ElevenLabs not configured. Key: ' + !!ELEVEN_KEY + ' VoiceID: ' + !!ELEVEN_VOICE_ID });
 
   try {
     const resp = await fetch(
@@ -25,6 +30,7 @@ export default async function handler(req, res) {
 
     if (!resp.ok) {
       const err = await resp.text();
+      console.log('ElevenLabs API error', resp.status, err.substring(0, 300));
       return res.status(resp.status).json({ error: err });
     }
 

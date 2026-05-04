@@ -19,8 +19,8 @@
   .header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
   .logo{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .logo img{width:56px;height:56px;object-fit:contain}
-  .header-text h1{font-size:14px;font-weight:600;color:rgba(60,25,5,.85);letter-spacing:.3px}
-  .header-text p{font-size:10px;color:rgba(80,35,8,.55);margin-top:1px;letter-spacing:2px;text-transform:uppercase}
+  .header-text h1{font-size:14px;font-weight:600;color:rgba(30,10,2,.92);letter-spacing:.3px}
+  .header-text p{font-size:10px;color:rgba(60,25,5,.75);margin-top:1px;letter-spacing:2px;text-transform:uppercase}
   .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:rgba(40,100,30,.85);display:none;align-items:center;gap:6px}
   .call-timer.active{display:flex}
   .call-timer .dot{width:6px;height:6px;border-radius:50%;background:rgba(40,140,40,.8);animation:pulse 1.4s infinite}
@@ -44,8 +44,8 @@
   .orb-stage.speaking .orb-core{animation:speakPulse .7s ease-in-out infinite;background:radial-gradient(circle at 38% 35%, rgba(255,140,80,.98) 0%, rgba(225,80,35,.92) 45%, rgba(145,32,10,.92) 100%);box-shadow:0 0 50px rgba(220,90,35,.75),0 0 90px rgba(185,55,12,.5),inset 0 1px 0 rgba(255,210,180,.55)}
   .orb-stage.speaking .orb-glow{background:radial-gradient(circle, rgba(225,90,35,.55) 0%, rgba(185,55,12,.3) 50%, transparent 70%);animation:glowSpeak .7s ease-in-out infinite}
   .orb-stage.speaking .orb-ring-outer,.orb-stage.speaking .orb-ring-mid,.orb-stage.speaking .orb-ring-inner{border-color:rgba(220,80,30,.3)}
-  .status-label{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;font-style:italic;color:rgba(55,22,4,.72);letter-spacing:.5px;min-height:32px;text-align:center;text-shadow:0 1px 6px rgba(255,240,200,.4)}
-  .setup-sub{font-size:13px;color:rgba(60,25,5,.6);max-width:340px;line-height:1.7;font-weight:300}
+  .status-label{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;font-style:italic;color:rgba(40,15,2,.88);letter-spacing:.5px;min-height:32px;text-align:center;text-shadow:0 1px 8px rgba(255,240,200,.6)}
+  .setup-sub{font-size:13px;color:rgba(40,15,2,.75);max-width:340px;line-height:1.7;font-weight:400}
   .start-btn{background:rgba(50,20,2,.18);border:1px solid rgba(80,35,5,.45);color:rgba(45,18,2,.85);padding:13px 36px;border-radius:2px;font-size:12px;font-weight:500;cursor:pointer;transition:all .25s;display:flex;align-items:center;gap:10px;font-family:'DM Sans',sans-serif;letter-spacing:3px;text-transform:uppercase}
   .start-btn:hover{border-color:rgba(80,35,5,.75);background:rgba(50,20,2,.28);transform:translateY(-1px)}
   .start-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
@@ -89,7 +89,7 @@
   .confirm-btn.yes:hover{background:rgba(50,120,30,.5)}
   .confirm-btn.edit{background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.25);color:rgba(50,20,2,.65)}
   .confirm-btn.edit:hover{border-color:rgba(80,40,5,.45);color:rgba(40,15,2,.85)}
-  .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.2);font-size:11px;color:rgba(50,20,2,.65);transition:all .3s;font-weight:400}
+  .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(50,20,2,.18);border:1px solid rgba(80,40,5,.45);font-size:11px;color:rgba(40,15,2,.8);transition:all .3s;font-weight:500}
   .status-indicator.listening{border-color:rgba(50,140,30,.4);color:rgba(20,80,10,.85);background:rgba(40,120,20,.12)}
   .status-indicator.thinking{border-color:rgba(150,90,10,.4);color:rgba(100,55,5,.85);background:rgba(140,80,10,.1)}
   .status-indicator.speaking{border-color:rgba(160,70,20,.4);color:rgba(100,40,8,.85);background:rgba(150,60,15,.1)}
@@ -102,17 +102,17 @@
   .voice-bars span:nth-child(5){animation-delay:0s}
   @keyframes wave{0%,100%{height:3px}50%{height:12px}}
   .btn-row{display:flex;align-items:center;gap:12px}
-  .end-btn{background:rgba(50,20,2,.15);border:1px solid rgba(160,60,20,.4);color:rgba(120,40,10,.8);padding:10px 22px;border-radius:2px;font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:2px;text-transform:uppercase}
-  .end-btn:hover{border-color:rgba(160,60,20,.7);color:rgba(140,35,8,.95);background:rgba(50,20,2,.22)}
+  .end-btn{background:rgba(120,30,10,.75);border:1px solid rgba(180,60,20,.8);color:#fff;padding:10px 22px;border-radius:2px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:2px;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  .end-btn:hover{border-color:rgba(220,80,30,.9);background:rgba(160,40,10,.85);box-shadow:0 4px 14px rgba(0,0,0,.3)}
   .end-btn svg{width:13px;height:13px}
-  .toggle-btn{background:rgba(50,20,2,.1);border:1px solid rgba(80,40,5,.3);cursor:pointer;padding:5px 12px;border-radius:2px;display:flex;align-items:center;gap:7px;transition:all .25s}
+  .toggle-btn{background:rgba(50,20,2,.2);border:1px solid rgba(80,40,5,.5);cursor:pointer;padding:5px 12px;border-radius:2px;display:flex;align-items:center;gap:7px;transition:all .25s}
   .toggle-btn:hover{background:rgba(50,20,2,.18);border-color:rgba(80,40,5,.5)}
   .eye-icon{width:14px;height:12px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .eye-oval{width:14px;height:9px;border:1.5px solid rgba(50,20,2,.65);border-radius:50%;position:absolute}
-  .eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(50,20,2,.65);position:absolute}
-  .eye-slash{width:17px;height:1.5px;background:rgba(50,20,2,.65);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
-  .toggle-label{font-size:10px;color:rgba(50,20,2,.65);letter-spacing:2px;text-transform:uppercase;font-weight:400}
-  .hint-bar{font-size:11px;color:rgba(50,20,2,.38);text-align:center;font-weight:300}
+  .eye-oval{width:14px;height:9px;border:1.5px solid rgba(40,15,2,.85);border-radius:50%;position:absolute}
+  .eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(40,15,2,.85);position:absolute}
+  .eye-slash{width:17px;height:1.5px;background:rgba(40,15,2,.85);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
+  .toggle-label{font-size:10px;color:rgba(40,15,2,.85);letter-spacing:2px;text-transform:uppercase;font-weight:500}
+  .hint-bar{font-size:11px;color:rgba(40,15,2,.65);text-align:center;font-weight:400}
   @keyframes ringBreath{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
   @keyframes glowPulse{0%,100%{opacity:.65;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
   @keyframes glowSpeak{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
@@ -136,10 +136,7 @@
     </div>
     <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
   </div>
-
   <div class="error-banner" id="errorBanner"></div>
-
-  <!-- SETUP SCREEN -->
   <div class="setup-screen" id="setupScreen">
     <div class="orb-stage" id="setupOrb">
       <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
@@ -152,9 +149,17 @@
       </svg>
       Begin Journey
     </button>
+  </div>  <div class="setup-screen" id="setupScreen">
+    <div class="setup-icon"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></div>
+    <div class="setup-title">Utah REIA Voice Assistant</div>
+    <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
+    <button class="start-btn" id="startBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
+      </svg>
+      Start Call
+    </button>
   </div>
-
-  <!-- CALL SCREEN -->
   <div class="call-screen" id="callScreen">
     <div class="call-orb-area">
       <div class="orb-stage" id="callOrb">
@@ -180,8 +185,6 @@
       </div>
       <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
     </div>
-
-    <!-- CONFIRM CARD -->
     <div class="confirm-card" id="confirmCard">
       <div class="confirm-card-title">Just to confirm your details</div>
       <div class="confirm-row">
@@ -219,11 +222,8 @@
       <div class="hint-bar">Just talk naturally. Pause when you're done.</div>
     </div>
   </div>
-
-  <!-- DEBUG LOG -- hidden from view but JS still works -->
   <div class="debug-log" id="debugLog"></div>
 </div>
-
 <script>
 const toggleBtn = document.getElementById('toggleBtn');
 const toggleLabel = document.getElementById('toggleLabel');
@@ -323,25 +323,18 @@ Rules for the JSON block:
 
 ---
 
-VOICE AND PERSONALITY — NON-NEGOTIABLE:
-
-You are warm, direct, and real. You think out loud. You sound like a person who has been in the room when deals go sideways — not a bot, not a coach, not a salesperson.
-
-Aloha is the signature greeting of Utah REIA and Harmonie Borden. Use it to open and to re-warm the conversation when it fits naturally. Mahalo is how we close — use it when wrapping up or when someone shares something real with you.
-Maximum 2 sentences per response. This is a phone call, not a presentation. Get to the point fast, then stop.
-Never use lists, bullet points, or any structure. Spoken language only. Short, punchy sentences. No long wind-ups.
-Use contractions naturally — I'm, you're, let's, we've, they're. Sound like a person talking, not a corporate press release.
-Ask exactly one question per turn. Give them room to answer. A short follow-up beats a long explanation every time.
-Mirror back what they say before moving forward. Show you actually heard them. Something like: "Yeah, so you're about six months in and looking at your first flip — that makes sense."
-Use observational language, not instructional language. "Here's what I've seen..." or "Most investors we talk to..." — never "You should..." or "Let me teach you..."
-Light natural filler when it genuinely fits: "yeah, totally", "that makes sense", "okay so..." — sparingly, and only when it's real.
-No hype. No urgency. No motivational language. Not even subtle versions. You are calm, steady, and you've seen the cycle before.
-Never say: "great question", "absolutely", "that's awesome", "fantastic", "I'd be happy to help", "let's get you on the path to success", "game-changer", "wealth-building journey", "financial freedom", "passive income", or anything that sounds like a sales call or a real estate guru.
-If someone shares a struggle, a mistake, or a hesitation — acknowledge it plainly and move forward. No over-the-top empathy performance. Warmth is real here, not performed.
-If they seem unsure or vague, give them room. Silence is fine. A short follow-up beats a long explanation.
-PRONUNCIATION: Always write "Utah REIA" normally in your responses. The system handles pronunciation automatically.
-NO MARKDOWN: Never use markdown formatting of any kind. No links like [text](url), no bold **text**, no bullet points, no headers. This is spoken audio — plain sentences only.
-NO RAW JSON: Never let any signal block like [PROFILE:...] or [INTAKE:...] appear in your conversational text. Those blocks must only appear at the very end of the response, after your spoken sentence.
+VOICE RULES — NON-NEGOTIABLE:
+- Maximum 2 sentences per response. This is a phone call, not a presentation.
+- Never use lists, bullet points, or any structure. Spoken language only.
+- Use contractions naturally. Sound like a person, not a script.
+- Ask exactly one question per turn. Never stack questions.
+- No hype. No urgency. No motivational language. Not even subtle versions of it.
+- No phrases like: "great question", "absolutely", "that's awesome", "fantastic", "let's get you on the path to success", "game-changer", "wealth-building journey", or anything that sounds like a sales call.
+- Calm, steady, peer-to-peer. You are talking with an investor, not at one.
+- If they seem unsure or vague, give them room. A short follow-up beats a long explanation.
+- PRONUNCIATION: Always write "Utah REIA" normally in your responses. The system handles pronunciation automatically.
+- NO MARKDOWN: Never use markdown formatting of any kind. No links like [text](url), no bold **text**, no bullet points, no headers. This is spoken audio — plain sentences only.
+- NO RAW JSON: Never let any signal block like [PROFILE:...] or [INTAKE:...] appear in your conversational text. Those blocks must only appear at the very end of the response, after your spoken sentence.
 
 ---
 
@@ -419,12 +412,7 @@ Do not invent people, companies, or events that are not in the above lists. If y
 ---
 
 PROFILE SIGNAL — REQUIRED:
-Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block. CRITICAL RULES FOR THE JSON BLOCK:
-- It MUST appear on its own line at the very end of your response, after all spoken text is complete
-- There must be a line break between your last spoken sentence and the JSON block
-- Never embed it mid-sentence or mid-paragraph
-- The spoken text and the JSON block must be completely separate — a reader should be able to cut everything after the last period and get clean spoken text
-- Emit it exactly ONCE — do not repeat it on subsequent turns
+Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block at the end of your response (after your spoken text). Emit it exactly ONCE — do not repeat it on subsequent turns.
 
 [PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
 
@@ -736,13 +724,27 @@ let analyser = null;
 let vadInterval = null;
 let suppressRestart = false;
 
-const NOISE_FLOOR      = 1.0;
-const SPEECH_THRESHOLD = 1.4;
-const HOLD_FLOOR       = 1.15;
-const END_OF_TURN_MS   = 1200;
-const IDLE_RESTART_MS  = 8000;
-const MIN_SPEECH_MS    = 80;
-const VAD_INTERVAL_MS  = 50;
+// VAD constants — calibrated to headset RMS output
+// Ambient noise floor: ~1.0-1.1 RMS
+// Normal speaking voice: ~1.4-1.7 RMS
+// Loud speaking voice: ~11-12 RMS
+//
+// Super Whisper-style behaviour:
+// - SPEAKING zone: above SPEECH_THRESHOLD — accumulates speech duration
+// - HOLDING zone: between HOLD_FLOOR and SPEECH_THRESHOLD — we stay in speaking state,
+//   treating this as a natural thinking pause mid-sentence. The silence timer does NOT
+//   start here. This is the key difference from a simple threshold check.
+// - SILENCE zone: below HOLD_FLOOR — silence timer starts
+// - Only commits when silence timer reaches END_OF_TURN_MS after real speech
+
+const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
+const SPEECH_THRESHOLD = 1.4;  // above this = real voice
+const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
+                                // silence timer does NOT run here — prevents mid-sentence cutoffs
+const END_OF_TURN_MS   = 1200; // ms of silence before committing — 1.2 seconds
+const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
+const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
+const VAD_INTERVAL_MS  = 50;   // sample interval in ms
 
 let vadState           = 'waiting'; // waiting | speaking | ending
 let vadSpeechDetected  = false;
@@ -819,6 +821,7 @@ function startListening() {
     setStatus('listening', 'Listening...');
     log('Mic recording started');
 
+    // Drain first 100ms only — less aggressive, preserves speech onset
     setTimeout(() => {
       audioChunks = audioChunks.slice(0, 1);
       startVAD();
@@ -837,7 +840,7 @@ function startVAD() {
   const source = audioContext.createMediaStreamSource(micStream);
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.3;
+  analyser.smoothingTimeConstant = 0.3; // smooth amplitude, reduces spikes
   source.connect(analyser);
 
   const dataArray = new Uint8Array(analyser.fftSize);
@@ -848,6 +851,7 @@ function startVAD() {
 
     analyser.getByteTimeDomainData(dataArray);
 
+    // RMS amplitude — far more stable than peak for real speech detection
     let sumSq = 0;
     for (let i = 0; i < dataArray.length; i++) {
       const v = (dataArray[i] - 128) / 128;
@@ -855,11 +859,13 @@ function startVAD() {
     }
     const rms = Math.sqrt(sumSq / dataArray.length) * 100;
 
+    // TEMP DEBUG — log RMS every 10 frames so we can tune thresholds
     if (typeof window._rmsLogCount === "undefined") window._rmsLogCount = 0;
     window._rmsLogCount++;
     if (window._rmsLogCount % 10 === 0) { const zone = rms >= SPEECH_THRESHOLD ? "SPEECH" : rms >= HOLD_FLOOR ? "HOLD" : "silence"; log("RMS: " + rms.toFixed(2) + " zone:" + zone + " state:" + vadState); }
 
     if (rms >= SPEECH_THRESHOLD) {
+      // ── SPEECH ZONE — real voice ──────────────────────────────────────────
       vadSpeechDetected = true;
       vadSpeechDuration += VAD_INTERVAL_MS;
       vadSilenceDuration = 0;
@@ -867,12 +873,23 @@ function startVAD() {
       if (vadState !== 'speaking') {
         vadState = 'speaking';
       }
+
     } else if (rms >= HOLD_FLOOR) {
+      // ── HOLD ZONE — between noise floor and speech threshold ──────────────
+      // Natural mid-sentence pause, breath, trailing syllable, thinking gap.
+      // We stay in whatever state we're in and do NOT start the silence timer.
+      // This is the "Super Whisper" behaviour — the system waits patiently here
+      // rather than immediately starting the end-of-turn countdown.
       vadIdleDuration = 0;
       if (vadState === 'waiting') {
+        // Still waiting for first speech — treat hold zone as idle
         vadIdleDuration += VAD_INTERVAL_MS;
       }
+      // Importantly: vadSilenceDuration does NOT increment here
+
     } else {
+      // ── SILENCE ZONE — true silence below noise floor ─────────────────────
+      // Only now do we start counting toward end of turn
       if (vadState === 'speaking') {
         vadSilenceDuration += VAD_INTERVAL_MS;
         if (vadSilenceDuration >= END_OF_TURN_MS) {
@@ -881,6 +898,7 @@ function startVAD() {
             vadState = 'ending';
             stopRecording();
           } else {
+            // Timed out but not enough speech — restart quietly
             stopRecording();
           }
         }
@@ -981,9 +999,11 @@ function playBrowserTTS(text) {
 }
 
 function normalizeForSpeech(text) {
+  // Force correct pronunciation of REIA as "REE-ah" (not "RAY-ah" or spelled out)
+  // ElevenLabs reads "Ria" as REE-ah reliably
   return text
-    .replace(/REIA/g, 'Ria')
-    .replace(/R\.E\.I\.A\./g, 'Ria')
+    .replace(/REIA/g, 'Ria')
+    .replace(/R\.E\.I\.A\./g, 'Ria')
     .replace(/Utah REIA/g, 'Utah Ria')
     .replace(/utah reia/gi, 'Utah Ria');
 }
@@ -1046,16 +1066,20 @@ async function fetchContext() {
   }
 }
 
+
 async function startCall() {
   log('Requesting mic access...');
   const micOk = await initMicStream();
   if (!micOk) return;
   if (window.speechSynthesis) window.speechSynthesis.getVoices();
 
+  // Fetch live Utah Ria knowledge and inject into system prompt
   const contextBlock = await fetchContext();
   if (contextBlock) {
+    // Inject live context into the system prompt by replacing the placeholder
     window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', contextBlock);
   } else {
+    // Fallback — remove placeholder cleanly if fetch failed
     window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', '(Live community data temporarily unavailable — use general knowledge about Utah Ria)');
   }
 
@@ -1210,9 +1234,9 @@ intakeSubmitBtn.addEventListener('click', () => {
   const email = intakeEmailInput.value.trim();
   const phone = intakePhoneInput.value.trim();
   if (!name || !email || !phone) {
-    intakeNameInput.style.borderColor = name ? '' : 'rgba(180,60,20,.6)';
-    intakeEmailInput.style.borderColor = email ? '' : 'rgba(180,60,20,.6)';
-    intakePhoneInput.style.borderColor = phone ? '' : 'rgba(180,60,20,.6)';
+    intakeNameInput.style.borderColor = name ? '' : 'var(--red)';
+    intakeEmailInput.style.borderColor = email ? '' : 'var(--red)';
+    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red)';
     return;
   }
   intakeSubmitBtn.disabled = true;
