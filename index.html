@@ -6,16 +6,18 @@
 <link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
+  html { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: inherit; }
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;min-height:100%}
-  body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-content:center;min-height:100vh;position:relative;overflow-x:hidden}
-  .scene{position:fixed;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%, #f5e8c8 0%, #e8c88a 25%, #c8934a 55%, #8a4a1a 80%, #3a1a08 100%);z-index:0}
+  html,body{height:100%;min-height:100%;background:#c8934a}
+  body{font-family:'DM Sans',sans-serif;display:flex;align-items:stretch;justify-content:center;min-height:100vh;position:relative;overflow-x:hidden;overflow-y:auto;isolation:isolate}
+  .scene{position:fixed;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%, #f5e8c8 0%, #e8c88a 25%, #c8934a 55%, #8a4a1a 80%, #3a1a08 100%);z-index:0;contain:strict}
   .scene-overlay{position:fixed;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 100%, rgba(30,10,0,.45) 0%, transparent 60%);z-index:0}
   .grain{position:fixed;inset:0;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;z-index:0;pointer-events:none}
   .light-halo{position:fixed;width:500px;height:300px;border-radius:50%;background:radial-gradient(ellipse, rgba(255,240,180,.3) 0%, transparent 70%);top:10%;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
   .horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top, rgba(80,20,0,.5) 0%, transparent 100%);pointer-events:none;z-index:0}
-  .app{width:100%;max-width:640px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1}
+  .app{width:100%;max-width:640px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:10}
   .header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
   .logo{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .logo img{width:56px;height:56px;object-fit:contain}
