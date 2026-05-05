@@ -557,8 +557,8 @@ async function sendToAI(userText) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 180,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 80,
         stream: true,
         system: window._dynamicSystemPrompt || systemPrompt,
         messages: conversationHistory
@@ -739,7 +739,7 @@ const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
 const SPEECH_THRESHOLD = 1.4;  // above this = real voice
 const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
                                 // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 1200; // ms of silence before committing — 1.2 seconds
+const END_OF_TURN_MS   = 800;  // ms of silence before committing — 0.8 seconds
 const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
 const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
 const VAD_INTERVAL_MS  = 50;   // sample interval in ms
@@ -857,10 +857,6 @@ function startVAD() {
     }
     const rms = Math.sqrt(sumSq / dataArray.length) * 100;
 
-    // TEMP DEBUG — log RMS every 10 frames so we can tune thresholds
-    if (typeof window._rmsLogCount === "undefined") window._rmsLogCount = 0;
-    window._rmsLogCount++;
-    if (window._rmsLogCount % 10 === 0) { const zone = rms >= SPEECH_THRESHOLD ? "SPEECH" : rms >= HOLD_FLOOR ? "HOLD" : "silence"; log("RMS: " + rms.toFixed(2) + " zone:" + zone + " state:" + vadState); }
 
     if (rms >= SPEECH_THRESHOLD) {
       // ── SPEECH ZONE — real voice ──────────────────────────────────────────
@@ -956,7 +952,7 @@ async function transcribeAndSend(blob) {
 
   } catch(e) {
     log('Transcription error: ' + e.message, 'err');
-    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 500);
+    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
   }
 }
 
@@ -984,7 +980,7 @@ function playBrowserTTS(text) {
     if (preferred) utt.voice = preferred;
     const done = () => {
       isSpeaking = false; currentAudio = null;
-      if (callActive) { setTimeout(() => { setStatus('listening', 'Listening...'); startListening(); }, 300); }
+      if (callActive) { setTimeout(() => { setStatus('listening', 'Listening...'); startListening(); }, 100); }
       resolve();
     };
     utt.onend = done; utt.onerror = done;
