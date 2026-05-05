@@ -558,7 +558,7 @@ async function sendToAI(userText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 80,
+        max_tokens: 120,
         stream: true,
         system: window._dynamicSystemPrompt || systemPrompt,
         messages: conversationHistory
@@ -739,7 +739,7 @@ const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
 const SPEECH_THRESHOLD = 1.4;  // above this = real voice
 const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
                                 // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 800;  // ms of silence before committing — 0.8 seconds
+const END_OF_TURN_MS   = 1000; // ms of silence before committing — 1.0 seconds
 const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
 const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
 const VAD_INTERVAL_MS  = 50;   // sample interval in ms
