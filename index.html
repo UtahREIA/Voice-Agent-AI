@@ -9,7 +9,7 @@
   html { background: #c8934a !important; }
   body { background: #c8934a !important; }
 </style>
-<script src="https://unpkg.com/@vapi-ai/web@latest/dist/vapi.js"></script>
+
 <link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
@@ -316,13 +316,27 @@ function addMessage(role, text) {
   transcriptArea.scrollTop = transcriptArea.scrollHeight;
 }
 
+async function loadVapiSDK() {
+  return new Promise((resolve, reject) => {
+    if (window.Vapi) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.1.0/dist/vapi.umd.js';
+    script.onload = () => {
+      if (window.Vapi) resolve();
+      else reject(new Error('Vapi not found after load'));
+    };
+    script.onerror = () => reject(new Error('Failed to load Vapi SDK'));
+    document.head.appendChild(script);
+  });
+}
+
 function initVapi() {
   if (vapi) return;
-  if (typeof Vapi === 'undefined') {
+  if (typeof window.Vapi === 'undefined') {
     showError('Vapi SDK failed to load. Please refresh the page.');
     throw new Error('Vapi is not defined');
   }
-  vapi = new Vapi(VAPI_PUBLIC_KEY);
+  vapi = new window.Vapi(VAPI_PUBLIC_KEY);
 
   vapi.on('call-start', () => {
     log('Vapi call started');
@@ -364,6 +378,7 @@ function initVapi() {
 
 async function startCall() {
   try {
+    await loadVapiSDK();
     initVapi();
 
     callStartTime = Date.now();
