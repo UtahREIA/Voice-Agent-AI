@@ -9,6 +9,7 @@
   html { background: #c8934a !important; }
   body { background: #c8934a !important; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.umd.js"></script>
 <link rel="icon" type="image/png" href="https://storage.googleapis.com/msgsndr/DNirEjy0ejVwbHsaBYrn/media/681a99b5f3a47f154c92bfc2.png">
 <title>Utah REIA Voice Agent</title>
 <style>
@@ -223,213 +224,53 @@
   <div class="debug-log" id="debugLog"></div>
 </div>
 <script>
-const toggleBtn = document.getElementById('toggleBtn');
-const toggleLabel = document.getElementById('toggleLabel');
-const eyePupil = document.getElementById('eyePupil');
-const eyeSlash = document.getElementById('eyeSlash');
-let transcriptVisible = false;
-toggleBtn.addEventListener('click', () => {
-  transcriptVisible = !transcriptVisible;
-  document.getElementById('transcriptArea').classList.toggle('visible', transcriptVisible);
-  toggleLabel.textContent = transcriptVisible ? 'Hide' : 'Text';
-  eyeSlash.style.display = transcriptVisible ? 'block' : 'none';
-  eyePupil.style.display = transcriptVisible ? 'none' : 'block';
-});
-</script>
-<script>
-const setupScreen = document.getElementById('setupScreen');
-const callScreen = document.getElementById('callScreen');
-const startBtn = document.getElementById('startBtn');
-const endBtn = document.getElementById('endBtn');
-const transcriptArea = document.getElementById('transcriptArea');
-const statusInd = document.getElementById('statusInd');
-const statusText = document.getElementById('statusText');
-const callTimer = document.getElementById('callTimer');
-const timerText = document.getElementById('timerText');
-const errorBanner = document.getElementById('errorBanner');
-const debugLog = document.getElementById('debugLog');
-const confirmCard = document.getElementById('confirmCard');
-const confirmNameEl = document.getElementById('confirmName');
-const confirmEmailEl = document.getElementById('confirmEmail');
-const confirmPhoneEl = document.getElementById('confirmPhone');
-const confirmActions = document.getElementById('confirmActions');
-const confirmYesBtn = document.getElementById('confirmYesBtn');
-const confirmEditBtn = document.getElementById('confirmEditBtn');
-const intakeFormEl = document.getElementById('intakeForm');
-const intakeNameInput = document.getElementById('intakeName');
-const intakeEmailInput = document.getElementById('intakeEmail');
-const intakePhoneInput = document.getElementById('intakePhone');
-const intakeSubmitBtn = document.getElementById('intakeSubmitBtn');
-
-let callerName = '';
-let callerEmail = '';
-let callerPhone = '';
-let intakePhase = true;
-let intakeConfirmed = false;
-let awaitingConfirmation = false;
-let intakeFormShown = false;
-let callActive = false;
-let conversationHistory = [];
-let currentAudio = null;
-let isSpeaking = false;
-let callStartTime = 0;
-let timerInterval = null;
-let silenceTimer = null;
-let interimMsgEl = null;
-let pendingTranscript = '';
-let restartTimeout = null;
-let callerProfile = {};
-let matchesInjected = false;
-let liveContext = null;
-
-// Persistent AudioContext — reused across turns to avoid creation overhead
-let sharedAudioCtx = null;
-function getAudioCtx() {
-  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
-    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
-  return sharedAudioCtx;
-}
-
+const VAPI_PUBLIC_KEY  = 'fdd43a99-3ec4-4eab-ba03-d83d99e2f94d';
+const VAPI_ASSISTANT_ID = '92018c4f-f382-41b9-80e0-c46e8f2b505a';
 const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/YOUR_WEBHOOK_ID/webhook-trigger/YOUR_TRIGGER_ID';
 
-const systemPrompt = `You are the Utah REIA voice assistant. You are having a real spoken phone conversation — not a chat, not a form, not a pitch. You sound like someone who has been in the room when deals go sideways and has no interest in pretending otherwise.
+// DOM refs
+const setupScreen   = document.getElementById('setupScreen');
+const callScreen    = document.getElementById('callScreen');
+const startBtn      = document.getElementById('startBtn');
+const endBtn        = document.getElementById('endBtn');
+const transcriptArea= document.getElementById('transcriptArea');
+const statusInd     = document.getElementById('statusInd');
+const statusText    = document.getElementById('statusText');
+const callTimer     = document.getElementById('callTimer');
+const timerText     = document.getElementById('timerText');
+const errorBanner   = document.getElementById('errorBanner');
+const debugLog      = document.getElementById('debugLog');
+const confirmCard   = document.getElementById('confirmCard');
+const confirmNameEl = document.getElementById('confirmName');
+const confirmEmailEl= document.getElementById('confirmEmail');
+const confirmPhoneEl= document.getElementById('confirmPhone');
+const confirmActions= document.getElementById('confirmActions');
+const confirmYesBtn = document.getElementById('confirmYesBtn');
+const confirmEditBtn= document.getElementById('confirmEditBtn');
+const intakeFormEl  = document.getElementById('intakeForm');
+const intakeNameInput  = document.getElementById('intakeName');
+const intakeEmailInput = document.getElementById('intakeEmail');
+const intakePhoneInput = document.getElementById('intakePhone');
+const intakeSubmitBtn  = document.getElementById('intakeSubmitBtn');
+const callOrb       = document.getElementById('callOrb');
+const statusLabel   = document.getElementById('statusLabel');
+const toggleBtn     = document.getElementById('toggleBtn');
+const toggleLabel   = document.getElementById('toggleLabel');
 
-Utah REIA is not a motivational program. It is not a guru platform. It is a room of experienced investors thinking through real decisions in real time. That is the standard you hold in every sentence.
+// State
+let callerName  = '';
+let callerEmail = '';
+let callerPhone = '';
+let callActive  = false;
+let timerInterval = null;
+let callStartTime = 0;
+let transcriptVisible = false;
+let vapi = null;
 
----
-
-INTAKE PHASE — CONTACT DETAILS VIA FORM:
-A typed form is shown on screen the moment the call starts. The caller will enter their name, email address, and phone number by typing — you do NOT need to ask for these verbally.
-
-Your FIRST message must be a brief warm welcome only (1-2 sentences). Tell them their details form is on screen and you'll get started once they've filled it in. Example: "Hey, welcome to Utah REIA — go ahead and fill in your details in the form on screen and we'll take it from there."
-
-When the caller submits the form, you will receive a message in this format:
-"My name is X, my email is Y, and my phone number is Z."
-
-At that point: acknowledge them by their first name, emit the INTAKE JSON block, then move immediately into the conversation. Do not ask them to repeat or confirm anything they just typed — it is already on screen.
-
-CRITICAL — when you receive the typed form submission, you MUST include a JSON block at the very end of your response in this exact format (after your spoken text):
-[INTAKE:{"name":"...","email":"...","phone":"..."}]
-
-Rules for the JSON block:
-- Include it ONLY when you have newly extracted or updated one or more fields
-- Include all three fields every time you output the block, even if some are still empty strings
-- Use empty string "" for fields not yet collected
-- Once all three are present and the caller has not asked to change anything, also include: [INTAKE_CONFIRMED]
-
----
-
-VOICE RULES — NON-NEGOTIABLE:
-- Maximum 2 sentences per response. This is a phone call, not a presentation.
-- Never use lists, bullet points, or any structure. Spoken language only.
-- Use contractions naturally. Sound like a person, not a script.
-- Ask exactly one question per turn. Never stack questions.
-- No hype. No urgency. No motivational language. Not even subtle versions of it.
-- No phrases like: "great question", "absolutely", "that's awesome", "fantastic", "let's get you on the path to success", "game-changer", "wealth-building journey", or anything that sounds like a sales call.
-- Calm, steady, peer-to-peer. You are talking with an investor, not at one.
-- If they seem unsure or vague, give them room. A short follow-up beats a long explanation.
-- PRONUNCIATION: Always write "Utah REIA" normally in your responses. The system handles pronunciation automatically.
-- NO MARKDOWN: Never use markdown formatting of any kind. No links like [text](url), no bold **text**, no bullet points, no headers. This is spoken audio — plain sentences only.
-- NO RAW JSON: Never let any signal block like [PROFILE:...] or [INTAKE:...] appear in your conversational text. Those blocks must only appear at the very end of the response, after your spoken sentence.
-
----
-
-YOUR JOB:
-Figure out where this person is and what they actually need — then point them toward the right next step inside Utah REIA.
-
-You are not selling. You are routing. There is a difference. Routing means asking the right questions, listening carefully, and connecting them to something genuinely useful for where they are right now.
-
----
-
-WHAT YOU NEED TO LEARN (in natural conversation order — do not rush this):
-
-1. ROLE — Are they here as an investor or learner, or as a service provider? If both, which side do they want help with first?
-
-2. STAGE — Where are they in their investing journey?
-   - Exploring: haven't started, just learning
-   - Getting Started: researching their first deal
-   - Active: currently doing deals
-   - Experienced: managing a portfolio, wants to scale
-   - Veteran: been around, strategic, possibly mentoring others
-
-3. STRATEGY — What type of investing interests them? Do not list these — let them tell you. If they are unsure, that is useful information too.
-   Options to listen for: Buy and Hold, Fix and Flip, Wholesaling, BRRRR, Short Term Rental, Creative Financing, Notes and Lending, Commercial, Development, Land, Passive Investing, Raising Capital, Tax Deeds and Liens, Out of State.
-
-4. CURRENT BLOCKER — What is actually in their way right now? Common ones: need capital, need deals, need a team or vendors, need education on a specific strategy, need to run numbers, need to connect with other investors.
-
-5. RESOURCES — What are they working with? Capital available, time per week, and whether they have access to financing. You do not need to ask all of these directly — listen for clues and only ask what matters for their situation.
-
----
-
-HOW TO ROUTE THEM (once you have enough to go on):
-
-NEW or EXPLORING investors:
-Point them toward an upcoming event as the first step. The room is the education. Also mention the free tools on the site — calculators, market report — so they have something concrete to do before they show up.
-
-GETTING STARTED investors:
-They usually need deal analysis tools and clarity on their strategy. Point them toward the calculator for their strategy of interest and a relevant event or training. If they are stuck on capital or team, flag that you can connect them with lenders or contractors inside the community.
-
-ACTIVE investors:
-They know what they are doing but have a specific problem. Listen for it. Connect them to the right vendor category, deal flow, or community resource. The True Wealth Investment Club may be relevant if they are aggregating capital.
-
-EXPERIENCED or VETERAN investors:
-Peer tone only. They do not need hand-holding. They may want advanced strategy rooms, the Board Member sessions, or involvement at a higher level including mentoring or sponsorship conversations.
-
-SERVICE PROVIDERS:
-Let them know they can be listed as a resource in the vendor directory and connected to investors who need what they offer. Mention the option to explore sponsorship if they want more visibility.
-
----
-
-CLOSING THE CALL:
-Once you have a clear picture, give them one specific next step. Not two. Not a menu. One thing. Make it concrete — an event, a tool, a connection — and tell them where to find it or what to ask for.
-
-The website is utahreia.org. The community is active and the events are real. Do not oversell either — just point.
-
----
-
-WHAT UTAH REIA ACTUALLY HAS:
-
-PLATFORM RESOURCES (always available):
-- Live events and strategy-specific meetups held monthly
-- Midday trainings and workshops
-- Event replays and the Investor Academy
-- Calculators: Fix and Flip, BRRRR, Rental, Wholesale, Creative Financing, Mortgage, HELOC, Rehab Estimator
-- Market reports and lead magnets by strategy
-- Vendor directory: lenders, contractors, property managers, attorneys, CPAs, title companies
-- Private community and investor circles by strategy
-- True Wealth Investment Club for capital aggregation
-- Deal Center with property listings
-- Home Depot member rebate and Rent Perfect access
-
-{{LIVE_CONTEXT}}
-
-Do not invent people, companies, or events that are not in the above lists. If you are asked about something not covered, say you can connect them with the right person at Utah REIA directly.
-
----
-
-PROFILE SIGNAL — REQUIRED:
-Once you have determined the caller's role, stage, at least one strategy, and their primary blocker, emit this JSON block at the end of your response (after your spoken text). Emit it exactly ONCE — do not repeat it on subsequent turns.
-
-[PROFILE:{"role":"investor","stage":"exploring","strategies":["fix_and_flip"],"blocker":"capital","goals":"","summary":""}]
-
-Field rules:
-- role: "investor" or "vendor"
-- stage: one of exploring | getting_started | active | experienced | veteran
-- strategies: array using snake_case — buy_and_hold, fix_and_flip, wholesaling, brrrr, short_term_rental, creative_financing, notes_and_lending, commercial, development, land, passive_investing, raising_capital, tax_deeds, out_of_state
-- blocker: one of capital | deals | team | education | numbers | connections
-- goals: brief plain-text summary of what they want to achieve
-- summary: one sentence about this caller for the record
-
-After you emit [PROFILE:...], the system will automatically provide you with real matching vendors and peer investors from the Utah REIA database. When that context arrives, reference those specific people and businesses by name in your response — do not make up names.`;
-
-function log(msg, type) {
+function log(msg) {
   debugLog.classList.add('show');
   const div = document.createElement('div');
-  div.className = type === 'err' ? 'd-err' : (type === 'ok' ? 'd-ok' : '');
-  const t = new Date().toLocaleTimeString();
-  div.textContent = '[' + t + '] ' + msg;
+  div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
   debugLog.appendChild(div);
   debugLog.scrollTop = debugLog.scrollHeight;
   console.log('[REIA]', msg);
@@ -438,12 +279,8 @@ function log(msg, type) {
 function showError(msg) {
   errorBanner.textContent = msg;
   errorBanner.classList.add('show');
-  log('ERROR: ' + msg, 'err');
-  setTimeout(() => errorBanner.classList.remove('show'), 10000);
+  setTimeout(() => errorBanner.classList.remove('show'), 8000);
 }
-
-const callOrb = document.getElementById('callOrb');
-const statusLabel = document.getElementById('statusLabel');
 
 function setStatus(state, text) {
   statusInd.className = 'status-indicator ' + state;
@@ -451,42 +288,10 @@ function setStatus(state, text) {
   if (callOrb) callOrb.className = 'orb-stage ' + state;
   const labels = {
     listening: 'Listening...',
-    thinking: 'One moment...',
-    speaking: 'Speaking',
-    transcribing: 'Transcribing...'
+    thinking:  'Thinking...',
+    speaking:  'Speaking'
   };
   if (statusLabel) statusLabel.textContent = labels[state] || text;
-}
-
-function addMessage(role, text, interim) {
-  if (interim && interimMsgEl) {
-    interimMsgEl.querySelector('.bubble').textContent = text;
-    transcriptArea.scrollTop = transcriptArea.scrollHeight;
-    return interimMsgEl;
-  }
-  const msg = document.createElement('div');
-  msg.className = 'msg ' + (role === 'assistant' ? 'ai' : 'user');
-  const av = document.createElement('div');
-  av.className = 'avatar';
-  av.textContent = role === 'assistant' ? 'R' : 'U';
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble' + (interim ? ' interim' : '');
-  bubble.textContent = text;
-  msg.appendChild(av);
-  msg.appendChild(bubble);
-  transcriptArea.appendChild(msg);
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
-  if (interim) interimMsgEl = msg;
-  return msg;
-}
-
-function finalizeInterim(finalText) {
-  if (interimMsgEl) {
-    const bubble = interimMsgEl.querySelector('.bubble');
-    bubble.textContent = finalText;
-    bubble.classList.remove('interim');
-    interimMsgEl = null;
-  }
 }
 
 function updateTimer() {
@@ -496,719 +301,221 @@ function updateTimer() {
   timerText.textContent = m + ':' + s;
 }
 
-async function playElevenLabs(text) {
-  try {
-    setStatus('speaking', 'Speaking...');
-    isSpeaking = true;
-    const resp = await fetch('/api/elevenlabs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (!resp.ok) {
-      const errTxt = await resp.text();
-      throw new Error('ElevenLabs proxy ' + resp.status + ': ' + errTxt.substring(0, 200));
-    }
-    const arrayBuffer = await resp.arrayBuffer();
-    const audioCtx = getAudioCtx();
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-    const source = audioCtx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(audioCtx.destination);
-    currentAudio = { pause: () => { try { source.stop(); } catch(e){} }, currentTime: 0 };
-    await new Promise((resolve) => {
-      source.onended = () => {
-        isSpeaking = false;
-        currentAudio = null;
-        if (callActive) {
-          setTimeout(() => {
-            if (callActive && !isSpeaking) {
-              setStatus('listening', 'Listening...');
-              startListening();
-            }
-          }, 150);
-        }
-        resolve();
-      };
-      source.start(0);
-    });
-  } catch (e) {
-    isSpeaking = false;
-    log('ElevenLabs error — falling back to browser TTS: ' + e.message, 'err');
-    await playBrowserTTS(text);
-  }
+function addMessage(role, text) {
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + (role === 'assistant' ? 'ai' : 'user');
+  const av = document.createElement('div');
+  av.className = 'avatar';
+  av.textContent = role === 'assistant' ? 'R' : 'U';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  msg.appendChild(av);
+  msg.appendChild(bubble);
+  transcriptArea.appendChild(msg);
+  transcriptArea.scrollTop = transcriptArea.scrollHeight;
 }
 
-function interruptAI() {
-  if (currentAudio) {
-    try { currentAudio.pause(); } catch(e) {}
-    currentAudio = null;
-  }
-  isSpeaking = false;
-}
+function initVapi() {
+  if (vapi) return;
+  vapi = new Vapi(VAPI_PUBLIC_KEY);
 
-async function sendToAI(userText) {
-  conversationHistory.push({ role: 'user', content: userText });
-  setStatus('thinking', 'Thinking...');
-  stopListening();
-
-  try {
-    const resp = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 180,
-        stream: true,
-        system: window._dynamicSystemPrompt || systemPrompt,
-        messages: conversationHistory
-      })
-    });
-
-    if (!resp.ok) {
-      const errTxt = await resp.text();
-      throw new Error('Claude proxy ' + resp.status + ': ' + errTxt.substring(0, 300));
-    }
-
-    // Collect the full streamed response first, then speak it complete
-    // This avoids the sentence-cutting bug where only the first sentence gets spoken
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-
-    // Read entire SSE stream from Claude
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') continue;
-
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.delta?.text || parsed.delta?.content?.[0]?.text || '';
-          if (!delta) continue;
-          fullText += delta;
-        } catch(e) {
-          // Malformed SSE chunk — skip
-        }
-      }
-    }
-
-    // Process signal blocks from full accumulated text
-    processSignals(fullText);
-
-    // Store full response in history
-    conversationHistory.push({ role: 'assistant', content: fullText });
-
-    // Strip signals and markdown then speak the complete response
-    const spokenText = stripForSpeech(fullText);
-    if (spokenText) {
-      addMessage('assistant', spokenText);
-      setStatus('speaking', 'Speaking...');
-      await speak(spokenText);
-    }
-
-  } catch (e) {
-    log('AI error: ' + (e.message || 'connection failed'), 'err');
-    showError('AI error: ' + (e.message || 'connection failed'));
-    if (callActive) { setStatus('listening', 'Listening...'); startListening(); }
-  }
-}
-
-function stripForSpeech(text) {
-  return text
-    .replace(/\[PROFILE:[\s\S]*?\]/g, '')
-    .replace(/,\s*"[a-z_]+":\s*"[^"]*"\s*\}\s*\]\s*/g, '')
-    .replace(/\[INTAKE:[\s\S]*?\]\s*/g, '')
-    .replace('\[INTAKE_CONFIRMED\]', '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/<https?:\/\/[^>]+>/g, '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/\[\]/g, '')
-    .replace(/\(\)/g, '')
-    .trim();
-}
-
-function processSignals(fullText) {
-  // INTAKE signal
-  const intakeMatch = fullText.match(/\[INTAKE:({.*?})\]/s);
-  if (intakeMatch) {
-    try {
-      const parsed = JSON.parse(intakeMatch[1]);
-      if (parsed.name) { callerName = parsed.name; confirmNameEl.value = parsed.name; confirmNameEl.classList.add('filled'); }
-      if (parsed.email) { callerEmail = parsed.email; confirmEmailEl.value = parsed.email; confirmEmailEl.classList.add('filled'); }
-      if (parsed.phone) { callerPhone = parsed.phone; confirmPhoneEl.value = parsed.phone; confirmPhoneEl.classList.add('filled'); }
-      if (!intakeConfirmed) confirmCard.classList.add('show');
-    } catch(e) {}
-  }
-  if (fullText.includes('[INTAKE_CONFIRMED]')) {
-    intakeConfirmed = true; intakePhase = false;
-    callerName = confirmNameEl.value.trim() || callerName;
-    callerEmail = confirmEmailEl.value.trim() || callerEmail;
-    callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-    confirmActions.style.display = 'none';
-    awaitingConfirmation = false;
-  }
-  if (callerName && callerEmail && callerPhone && !intakeConfirmed && !awaitingConfirmation) {
-    awaitingConfirmation = true;
-    confirmActions.style.display = 'flex';
-    confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
-  }
-  if (intakePhase && !intakeFormShown && !intakeConfirmed) {
-    intakeFormShown = true; intakeFormEl.classList.add('show');
-  }
-  // PROFILE signal
-  const profileMatch = fullText.match(/\[PROFILE:({.*?})\]/s);
-  if (profileMatch && !matchesInjected) {
-    try {
-      callerProfile = JSON.parse(profileMatch[1]);
-      fetchAndInjectMatches(callerProfile);
-    } catch(e) {}
-  }
-}
-
-
-let mediaRecorder = null;
-let audioChunks = [];
-let micStream = null;
-let isRecording = false;
-let audioContext = null;
-let analyser = null;
-let vadInterval = null;
-let suppressRestart = false;
-
-// VAD constants — calibrated to headset RMS output
-// Ambient noise floor: ~1.0-1.1 RMS
-// Normal speaking voice: ~1.4-1.7 RMS
-// Loud speaking voice: ~11-12 RMS
-//
-// Super Whisper-style behaviour:
-// - SPEAKING zone: above SPEECH_THRESHOLD — accumulates speech duration
-// - HOLDING zone: between HOLD_FLOOR and SPEECH_THRESHOLD — we stay in speaking state,
-//   treating this as a natural thinking pause mid-sentence. The silence timer does NOT
-//   start here. This is the key difference from a simple threshold check.
-// - SILENCE zone: below HOLD_FLOOR — silence timer starts
-// - Only commits when silence timer reaches END_OF_TURN_MS after real speech
-
-const NOISE_FLOOR      = 1.0;  // true background noise — ignore entirely
-const SPEECH_THRESHOLD = 1.4;  // above this = real voice
-const HOLD_FLOOR       = 1.15; // between HOLD_FLOOR and SPEECH_THRESHOLD = "still thinking" zone
-                                // silence timer does NOT run here — prevents mid-sentence cutoffs
-const END_OF_TURN_MS   = 1000; // ms of silence before committing — 1.0 seconds
-const IDLE_RESTART_MS  = 8000; // ms with no speech at all before quiet mic restart
-const MIN_SPEECH_MS    = 80;   // minimum speech duration to bother sending to Whisper
-const VAD_INTERVAL_MS  = 50;   // sample interval in ms
-
-let vadState           = 'waiting'; // waiting | speaking | ending
-let vadSpeechDetected  = false;
-let vadSpeechDuration  = 0;
-let vadSilenceDuration = 0;
-let vadIdleDuration    = 0;
-
-async function initMicStream() {
-  if (micStream) return true;
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: 16000
-      }
-    });
-    log('Mic stream acquired', 'ok');
-    return true;
-  } catch(e) {
-    showError('Microphone access required: ' + e.message);
-    return false;
-  }
-}
-
-function startListening() {
-  if (!callActive || isSpeaking || isRecording) return;
-  if (!micStream) { log('No mic stream', 'err'); return; }
-
-  try {
-    audioChunks = [];
-    vadState = 'waiting';
-    vadSpeechDetected = false;
-    vadSpeechDuration = 0;
-    vadSilenceDuration = 0;
-
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
-
-    mediaRecorder = new MediaRecorder(micStream, { mimeType });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-      isRecording = false;
-      stopVAD();
-      if (!callActive) return;
-      if (suppressRestart) { suppressRestart = false; return; }
-
-      if (!vadSpeechDetected || vadSpeechDuration < MIN_SPEECH_MS) {
-        log('No real speech detected (' + Math.round(vadSpeechDuration) + 'ms) — restarting mic');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
-        return;
-      }
-
-      const blob = new Blob(audioChunks, { type: mimeType });
-      if (blob.size < 1500) {
-        log('Audio blob too small — restarting');
-        if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 150);
-        return;
-      }
-
-      setStatus('thinking', 'Transcribing...');
-      await transcribeAndSend(blob);
-    };
-
-    mediaRecorder.start(80);
-    isRecording = true;
-    audioChunks = [];
+  vapi.on('call-start', () => {
+    log('Vapi call started');
+    callActive = true;
     setStatus('listening', 'Listening...');
-    log('Mic recording started');
+  });
 
-    // Drain first 100ms only — less aggressive, preserves speech onset
-    setTimeout(() => {
-      audioChunks = audioChunks.slice(0, 1);
-      startVAD();
-    }, 50);
+  vapi.on('call-end', () => {
+    log('Vapi call ended');
+    callActive = false;
+    endCallCleanup();
+  });
 
-  } catch(e) {
-    log('MediaRecorder error: ' + e.message, 'err');
-  }
-}
+  vapi.on('speech-start', () => {
+    setStatus('speaking', 'Speaking');
+  });
 
-function startVAD() {
-  stopVAD();
-  if (!micStream) return;
+  vapi.on('speech-end', () => {
+    setStatus('listening', 'Listening...');
+  });
 
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaStreamSource(micStream);
-  analyser = audioContext.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.3; // smooth amplitude, reduces spikes
-  source.connect(analyser);
-
-  const dataArray = new Uint8Array(analyser.fftSize);
-
-  vadInterval = setInterval(() => {
-    if (!isRecording || !callActive || isSpeaking) { stopVAD(); return; }
-    if (!analyser) return;
-
-    analyser.getByteTimeDomainData(dataArray);
-
-    // RMS amplitude — far more stable than peak for real speech detection
-    let sumSq = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      const v = (dataArray[i] - 128) / 128;
-      sumSq += v * v;
-    }
-    const rms = Math.sqrt(sumSq / dataArray.length) * 100;
-
-
-    if (rms >= SPEECH_THRESHOLD) {
-      // ── SPEECH ZONE — real voice ──────────────────────────────────────────
-      vadSpeechDetected = true;
-      vadSpeechDuration += VAD_INTERVAL_MS;
-      vadSilenceDuration = 0;
-      vadIdleDuration = 0;
-      if (vadState !== 'speaking') {
-        vadState = 'speaking';
+  vapi.on('message', (msg) => {
+    if (msg.type === 'transcript') {
+      if (msg.role === 'user' && msg.transcriptType === 'final') {
+        addMessage('user', msg.transcript);
       }
-
-    } else if (rms >= HOLD_FLOOR) {
-      // ── HOLD ZONE — between noise floor and speech threshold ──────────────
-      // Natural mid-sentence pause, breath, trailing syllable, thinking gap.
-      // We stay in whatever state we're in and do NOT start the silence timer.
-      // This is the "Super Whisper" behaviour — the system waits patiently here
-      // rather than immediately starting the end-of-turn countdown.
-      vadIdleDuration = 0;
-      if (vadState === 'waiting') {
-        // Still waiting for first speech — treat hold zone as idle
-        vadIdleDuration += VAD_INTERVAL_MS;
-      }
-      // Importantly: vadSilenceDuration does NOT increment here
-
-    } else {
-      // ── SILENCE ZONE — true silence below noise floor ─────────────────────
-      // Only now do we start counting toward end of turn
-      if (vadState === 'speaking') {
-        vadSilenceDuration += VAD_INTERVAL_MS;
-        if (vadSilenceDuration >= END_OF_TURN_MS) {
-          if (vadSpeechDetected && vadSpeechDuration >= MIN_SPEECH_MS) {
-            log('End of turn — ' + Math.round(vadSilenceDuration) + 'ms silence after speech');
-            vadState = 'ending';
-            stopRecording();
-          } else {
-            // Timed out but not enough speech — restart quietly
-            stopRecording();
-          }
-        }
-      } else if (vadState === 'waiting') {
-        vadIdleDuration += VAD_INTERVAL_MS;
-        if (vadIdleDuration >= IDLE_RESTART_MS) {
-          log('No speech for 8s — restarting mic');
-          stopRecording();
-        }
+      if (msg.role === 'assistant' && msg.transcriptType === 'final') {
+        addMessage('assistant', msg.transcript);
       }
     }
+  });
 
-  }, VAD_INTERVAL_MS);
-}
-
-function stopVAD() {
-  if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
-  if (audioContext) { try { audioContext.close(); } catch(e){} audioContext = null; }
-  analyser = null;
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    try { mediaRecorder.stop(); } catch(e) {}
-  }
-}
-
-async function transcribeAndSend(blob) {
-  try {
-    log('Sending audio for transcription — size: ' + blob.size + ' bytes');
-    const formData = new FormData();
-    formData.append('file', blob, 'audio.webm');
-
-    const resp = await fetch('/api/transcribe', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error('Transcribe error ' + resp.status + ': ' + err.substring(0, 200));
-    }
-
-    const data = await resp.json();
-    const text = (data.text || '').trim();
-
-    if (!text || text.length < 2) {
-      log('Empty transcript — restarting');
-      if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
-      return;
-    }
-
-    log('Transcript: ' + text, 'ok');
-    addMessage('user', text, false);
-    pendingTranscript = '';
-    await sendToAI(text);
-
-  } catch(e) {
-    log('Transcription error: ' + e.message, 'err');
-    if (callActive && !isSpeaking) restartTimeout = setTimeout(startListening, 200);
-  }
-}
-
-function stopListening() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') suppressRestart = true;
-  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-  if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null; }
-  stopVAD();
-  stopRecording();
-  isRecording = false;
-}
-
-function playBrowserTTS(text) {
-  return new Promise((resolve) => {
-    if (!window.speechSynthesis) { resolve(); return; }
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 0.95; utt.pitch = 1.0; utt.volume = 1.0;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v =>
-      v.name.includes('Samantha') || v.name.includes('Karen') ||
-      v.name.includes('Daniel') || v.name.includes('Google US English') ||
-      v.lang === 'en-US'
-    );
-    if (preferred) utt.voice = preferred;
-    const done = () => {
-      isSpeaking = false; currentAudio = null;
-      if (callActive) { setTimeout(() => { setStatus('listening', 'Listening...'); startListening(); }, 100); }
-      resolve();
-    };
-    utt.onend = done; utt.onerror = done;
-    isSpeaking = true;
-    setStatus('speaking', 'Speaking...');
-    currentAudio = { pause: () => window.speechSynthesis.cancel(), currentTime: 0 };
-    window.speechSynthesis.speak(utt);
-    log('Browser TTS speaking...', 'ok');
+  vapi.on('error', (e) => {
+    log('Vapi error: ' + (e.message || JSON.stringify(e)));
+    showError('Call error — please try again.');
+    endCallCleanup();
   });
 }
 
-function normalizeForSpeech(text) {
-  // Force correct pronunciation of REIA as "REE-ah" (not "RAY-ah" or spelled out)
-  // ElevenLabs reads "Ria" as REE-ah reliably
-  return text
-    .replace(/REIA/g, 'Ria')
-    .replace(/R\.E\.I\.A\./g, 'Ria')
-    .replace(/Utah REIA/g, 'Utah Ria')
-    .replace(/utah reia/gi, 'Utah Ria');
-}
-
-async function speak(text) { await playElevenLabs(normalizeForSpeech(text)); }
-
-async function fetchContext() {
-  try {
-    log('Fetching live Utah Ria knowledge...');
-    const resp = await fetch('/api/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'context' })
-    });
-    if (!resp.ok) { log('Context fetch failed: ' + resp.status, 'err'); return null; }
-    const data = await resp.json();
-    liveContext = data;
-
-    let block = '';
-
-    if (data.boardMembers && data.boardMembers.length > 0) {
-      block += 'BOARD MEMBERS & LEADERSHIP (these are the real people who run Utah Ria):\n';
-      data.boardMembers.forEach(function(b) {
-        block += '- ' + b.name + (b.specialties ? ' — ' + b.specialties : '') + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.vendors && data.vendors.length > 0) {
-      block += 'ACTIVE VENDORS & SERVICE PROVIDERS IN THE COMMUNITY:\n';
-      data.vendors.forEach(function(v) {
-        const who = (v.contact && v.contact !== v.name) ? v.name + ' (contact: ' + v.contact + ')' : v.name;
-        const svcs = v.services.join(', ');
-        const specs = (v.specialties && v.specialties.length > 0) ? ' — specialties: ' + v.specialties.join(', ') : '';
-        block += '- ' + who + ': ' + svcs + specs + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.recentEvents && data.recentEvents.length > 0) {
-      block += 'RECENT EVENTS (topics Utah Ria has taught — shows depth and range):\n';
-      data.recentEvents.forEach(function(e) {
-        block += '- ' + e.date + ': ' + e.title + '\n';
-      });
-      block += '\n';
-    }
-
-    if (data.membershipTiers && data.membershipTiers.length > 0) {
-      block += 'MEMBERSHIP TIERS:\n';
-      data.membershipTiers.forEach(function(t) {
-        block += '- ' + t.tier + ': ' + t.description + '\n';
-      });
-    }
-
-    log('Live context loaded — ' + (data.boardMembers ? data.boardMembers.length : 0) + ' board members, ' + (data.vendors ? data.vendors.length : 0) + ' vendors, ' + (data.recentEvents ? data.recentEvents.length : 0) + ' events', 'ok');
-    return block.trim();
-  } catch(e) {
-    log('Context fetch error: ' + e.message, 'err');
-    return null;
-  }
-}
-
-
 async function startCall() {
-  log('Requesting mic access...');
-  const micOk = await initMicStream();
-  if (!micOk) return;
-  if (window.speechSynthesis) window.speechSynthesis.getVoices();
-
-  // Fetch live Utah Ria knowledge and inject into system prompt
-  const contextBlock = await fetchContext();
-  if (contextBlock) {
-    // Inject live context into the system prompt by replacing the placeholder
-    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', contextBlock);
-  } else {
-    // Fallback — remove placeholder cleanly if fetch failed
-    window._dynamicSystemPrompt = systemPrompt.replace('{{LIVE_CONTEXT}}', '(Live community data temporarily unavailable — use general knowledge about Utah Ria)');
-  }
-
-  callActive = true;
-  conversationHistory = [];
-  setupScreen.classList.add('hidden');
-  callScreen.classList.add('active');
-  callStartTime = Date.now();
-  callTimer.classList.add('active');
-  timerInterval = setInterval(updateTimer, 1000);
-  updateTimer();
-
-  intakePhase = true;
-  intakeConfirmed = false;
-  awaitingConfirmation = false;
-  intakeFormShown = true;
-  intakeFormEl.classList.add('show');
-
-  const greeting = `Aloha! So glad you joined. Go ahead and fill in your name, email, and phone number in the form below — once you do that, let's talk.`;
-  conversationHistory.push({ role: 'assistant', content: greeting });
-  addMessage('assistant', greeting);
-  await speak(greeting);
-}
-
-async function fetchAndInjectMatches(profile) {
   try {
-    const resp = await fetch('/api/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'matches', profile })
-    });
-    if (!resp.ok) { log('Match fetch failed: ' + resp.status, 'err'); return; }
-    const { vendors = [], investors = [] } = await resp.json();
-    if (!vendors.length && !investors.length) { log('No matches found in database'); return; }
-    matchesInjected = true;
-    log('Matches found — injecting into conversation', 'ok');
-    let context = '[SYSTEM CONTEXT — Live matches from the Utah REIA database. Reference these by name in your next response.]\n';
-    if (vendors.length) {
-      context += '\nMatching vendors/service providers:\n';
-      vendors.forEach(v => {
-        const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
-        const services = (v.service_types || []).join(', ');
-        context += '- ' + name + (services ? ' (' + services + ')' : '') + '\n';
-      });
-    }
-    if (investors.length) {
-      context += '\nPeer investors to connect with:\n';
-      investors.forEach(i => {
-        const name = i.contacts?.full_name || 'Unknown';
-        const strats = (i.investing_types || []).join(', ');
-        context += '- ' + name + ' — ' + i.where_in_journey + (strats ? ', ' + strats : '') + '\n';
-      });
-    }
-    conversationHistory.push({ role: 'user', content: context });
-  } catch(e) { log('Match inject error: ' + e.message, 'err'); }
-}
+    initVapi();
 
-async function syncToGHL() {
-  if (!callerEmail && !callerPhone) return;
-  try {
-    log('Syncing to GHL...');
-    const summary = conversationHistory
-      .filter(m => m.role === 'assistant')
-      .map(m => m.content.replace(/\[PROFILE:.*?\]/s, '').replace(/\[INTAKE:.*?\]/s, '').replace('[INTAKE_CONFIRMED]', '').trim())
-      .join(' | ');
-    const tags = ['Voice Agent Lead'];
-    if (callerProfile.stage)   tags.push('Stage: ' + callerProfile.stage);
-    if (callerProfile.role)    tags.push('Role: ' + callerProfile.role);
-    if (callerProfile.blocker) tags.push('Blocker: ' + callerProfile.blocker);
-    (callerProfile.strategies || []).forEach(s => tags.push('Strategy: ' + s));
-    const ghlPayload = {
-      first_name: callerName.split(' ')[0] || callerName,
-      last_name: callerName.split(' ').slice(1).join(' ') || '',
-      email: callerEmail, phone: callerPhone, tags,
-      customField: {
-        voice_agent_summary: summary.substring(0, 2000),
-        investing_stage: callerProfile.stage || '',
-        investing_strategies: (callerProfile.strategies || []).join(', '),
-        primary_blocker: callerProfile.blocker || '',
-        investor_goals: callerProfile.goals || '',
+    callStartTime = Date.now();
+    callTimer.classList.add('active');
+    timerInterval = setInterval(updateTimer, 1000);
+    updateTimer();
+
+    setupScreen.classList.add('hidden');
+    callScreen.classList.add('active');
+    intakeFormEl.classList.add('show');
+    setStatus('listening', 'Listening...');
+
+    // Start Vapi with assistant, passing caller name as variable if available
+    const overrides = {
+      variableValues: {
+        callerName: callerName || '',
+        callerEmail: callerEmail || '',
+        callerPhone: callerPhone || ''
       }
     };
-    const ghlResp = await fetch(GHL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ghlPayload) });
-    log(ghlResp.ok ? 'GHL sync successful' : 'GHL sync failed: ' + ghlResp.status, ghlResp.ok ? 'ok' : 'err');
-    if (callerEmail) {
-      const sbResp = await fetch('/api/supabase', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upsert', contact: { name: callerName, email: callerEmail, phone: callerPhone }, profile: { ...callerProfile, summary: callerProfile.summary || summary.substring(0, 500) } })
-      });
-      log(sbResp.ok ? 'Supabase upsert successful' : 'Supabase upsert failed: ' + sbResp.status, sbResp.ok ? 'ok' : 'err');
-    }
-  } catch(e) { log('Sync error: ' + e.message, 'err'); }
+
+    await vapi.start(VAPI_ASSISTANT_ID, overrides);
+    log('Vapi started');
+
+  } catch(e) {
+    log('Start error: ' + e.message);
+    showError('Could not start call: ' + e.message);
+    endCallCleanup();
+  }
 }
 
 function endCall() {
+  if (vapi && callActive) {
+    vapi.stop();
+  }
+  syncToGHL();
+  endCallCleanup();
+}
+
+function endCallCleanup() {
   callActive = false;
-  stopListening();
-  interruptAI();
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   callTimer.classList.remove('active');
-  syncToGHL();
   callScreen.classList.remove('active');
   setupScreen.classList.remove('hidden');
-  conversationHistory = []; transcriptArea.innerHTML = '';
-  pendingTranscript = ''; interimMsgEl = null;
+  transcriptArea.innerHTML = '';
   callerName = ''; callerEmail = ''; callerPhone = '';
-  callerProfile = {}; matchesInjected = false; intakeFormShown = false;
-  intakePhase = true; intakeConfirmed = false; awaitingConfirmation = false; isRecording = false;
-  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  intakeFormEl.classList.remove('show');
+  intakeSubmitBtn.disabled = false;
   confirmCard.classList.remove('show');
   confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
   confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
   confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
   confirmActions.style.display = 'none';
-  intakeFormEl.classList.remove('show');
-  intakeSubmitBtn.disabled = false;
+  intakeNameInput.value = ''; intakeEmailInput.value = ''; intakePhoneInput.value = '';
+  if (statusLabel) statusLabel.textContent = 'Begin your journey';
   log('Call ended');
 }
 
+async function syncToGHL() {
+  if (!callerEmail && !callerPhone) return;
+  try {
+    const payload = {
+      first_name: callerName.split(' ')[0] || callerName,
+      last_name: callerName.split(' ').slice(1).join(' ') || '',
+      email: callerEmail,
+      phone: callerPhone,
+      tags: ['Voice Agent Lead']
+    };
+    await fetch(GHL_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    log('GHL sync sent');
+  } catch(e) {
+    log('GHL sync error: ' + e.message);
+  }
+}
+
+// Event listeners
 startBtn.addEventListener('click', startCall);
 endBtn.addEventListener('click', endCall);
 
+toggleBtn.addEventListener('click', () => {
+  transcriptVisible = !transcriptVisible;
+  document.getElementById('transcriptArea').classList.toggle('visible', transcriptVisible);
+  toggleLabel.textContent = transcriptVisible ? 'Hide' : 'Text';
+  document.getElementById('eyeSlash').style.display = transcriptVisible ? 'block' : 'none';
+  document.getElementById('eyePupil').style.display = transcriptVisible ? 'none' : 'block';
+});
+
 confirmYesBtn.addEventListener('click', () => {
-  callerName = confirmNameEl.value.trim() || callerName;
+  callerName  = confirmNameEl.value.trim() || callerName;
   callerEmail = confirmEmailEl.value.trim() || callerEmail;
   callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-  intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
   confirmCard.classList.remove('show');
-  log('Caller confirmed details', 'ok');
-  const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
-  addMessage('user', msg);
-  stopListening();
-  sendToAI(msg);
+  log('Details confirmed — sending to Vapi');
+  // Inject confirmed details into ongoing Vapi call
+  if (vapi && callActive) {
+    vapi.send({
+      type: 'add-message',
+      message: {
+        role: 'system',
+        content: 'Caller details confirmed. Name: ' + callerName + '. Email: ' + callerEmail + '. Phone: ' + callerPhone + '. Continue the routing conversation.'
+      }
+    });
+  }
 });
 
 confirmEditBtn.addEventListener('click', () => {
-  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
+  confirmNameEl.disabled = false;
+  confirmEmailEl.disabled = false;
+  confirmPhoneEl.disabled = false;
   confirmNameEl.focus();
   confirmActions.innerHTML = '<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';
   document.getElementById('confirmSaveBtn').addEventListener('click', () => {
-    callerName = confirmNameEl.value.trim(); callerEmail = confirmEmailEl.value.trim(); callerPhone = confirmPhoneEl.value.trim();
-    intakeConfirmed = true; intakePhase = false; awaitingConfirmation = false;
+    callerName  = confirmNameEl.value.trim();
+    callerEmail = confirmEmailEl.value.trim();
+    callerPhone = confirmPhoneEl.value.trim();
+    confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
     confirmCard.classList.remove('show');
-    log('Caller saved corrected details', 'ok');
-    const msg = 'My name is ' + callerName + ', my email is ' + callerEmail + ', and my phone number is ' + callerPhone + '.';
-    addMessage('user', msg); stopListening(); sendToAI(msg);
+    if (vapi && callActive) {
+      vapi.send({
+        type: 'add-message',
+        message: {
+          role: 'system',
+          content: 'Caller details updated. Name: ' + callerName + '. Email: ' + callerEmail + '. Phone: ' + callerPhone + '. Continue the routing conversation.'
+        }
+      });
+    }
   });
 });
 
 intakeSubmitBtn.addEventListener('click', () => {
-  const name = intakeNameInput.value.trim();
+  const name  = intakeNameInput.value.trim();
   const email = intakeEmailInput.value.trim();
   const phone = intakePhoneInput.value.trim();
   if (!name || !email || !phone) {
-    intakeNameInput.style.borderColor = name ? '' : 'var(--red)';
-    intakeEmailInput.style.borderColor = email ? '' : 'var(--red)';
-    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red)';
+    intakeNameInput.style.borderColor  = name  ? '' : 'var(--red, #f87171)';
+    intakeEmailInput.style.borderColor = email ? '' : 'var(--red, #f87171)';
+    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red, #f87171)';
     return;
   }
   intakeSubmitBtn.disabled = true;
   intakeFormEl.classList.remove('show');
-  stopListening();
   callerName = name; callerEmail = email; callerPhone = phone;
-  confirmNameEl.value = name; confirmNameEl.classList.add('filled');
+  confirmNameEl.value  = name;  confirmNameEl.classList.add('filled');
   confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
   confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
   confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
   confirmActions.style.display = 'flex';
-  awaitingConfirmation = true;
   confirmCard.classList.add('show');
 });
 
-log('App loaded. Ready.', 'ok');
+log('App loaded. Ready.');
 log('Origin: ' + window.location.origin);
 </script>
 </body>
