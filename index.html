@@ -357,7 +357,7 @@ function initVapi() {
   vapi.on('call-start', () => {
     log('Vapi call started');
     callActive = true;
-    setStatus('listening', 'Listening...');
+    setStatus('speaking', 'Speaking');
   });
 
   vapi.on('call-end', () => {
@@ -405,7 +405,8 @@ async function startCall() {
     setupScreen.classList.add('hidden');
     callScreen.classList.add('active');
     intakeFormEl.classList.add('show');
-    setStatus('listening', 'Listening...');
+    setStatus('thinking', 'Connecting...');
+    if (statusLabel) statusLabel.textContent = 'Connecting...';
 
     // Start Vapi with assistant, passing caller name as variable if available
     const overrides = {
