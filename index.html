@@ -97,10 +97,10 @@
   .confirm-btn.yes:hover{background:rgba(50,120,30,.5)}
   .confirm-btn.edit{background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.25);color:rgba(50,20,2,.65)}
   .confirm-btn.edit:hover{border-color:rgba(80,40,5,.45);color:rgba(40,15,2,.85)}
-  .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(50,20,2,.18);border:1px solid rgba(80,40,5,.45);font-size:11px;color:rgba(40,15,2,.8);transition:all .3s;font-weight:500}
-  .status-indicator.listening{border-color:rgba(50,140,30,.4);color:rgba(20,80,10,.85);background:rgba(40,120,20,.12)}
-  .status-indicator.thinking{border-color:rgba(150,90,10,.4);color:rgba(100,55,5,.85);background:rgba(140,80,10,.1)}
-  .status-indicator.speaking{border-color:rgba(160,70,20,.4);color:rgba(100,40,8,.85);background:rgba(150,60,15,.1)}
+  .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(20,8,0,.55);border:1px solid rgba(80,40,5,.7);font-size:11px;color:#fff;transition:all .3s;font-weight:600}
+  .status-indicator.listening{border-color:rgba(60,180,40,.7);color:#fff;background:rgba(30,100,15,.6)}
+  .status-indicator.thinking{border-color:rgba(200,120,10,.7);color:#fff;background:rgba(120,65,5,.6)}
+  .status-indicator.speaking{border-color:rgba(200,80,20,.7);color:#fff;background:rgba(140,45,10,.65)}
   .voice-bars{display:flex;gap:3px;align-items:center;height:14px}
   .voice-bars span{width:2.5px;border-radius:2px;background:currentColor;animation:wave .6s ease-in-out infinite}
   .voice-bars span:nth-child(1){animation-delay:0s}
@@ -113,14 +113,14 @@
   .end-btn{background:rgba(120,30,10,.75);border:1px solid rgba(180,60,20,.8);color:#fff;padding:10px 22px;border-radius:2px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:2px;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.2)}
   .end-btn:hover{border-color:rgba(220,80,30,.9);background:rgba(160,40,10,.85);box-shadow:0 4px 14px rgba(0,0,0,.3)}
   .end-btn svg{width:13px;height:13px}
-  .toggle-btn{background:rgba(255,240,200,.35);border:1px solid rgba(80,40,5,.6);cursor:pointer;padding:5px 14px;border-radius:2px;display:flex;align-items:center;gap:7px;transition:all .25s}
+  .toggle-btn{background:rgba(20,8,0,.45);border:1px solid rgba(80,40,5,.8);cursor:pointer;padding:5px 14px;border-radius:2px;display:flex;align-items:center;gap:7px;transition:all .25s}
   .toggle-btn:hover{background:rgba(50,20,2,.18);border-color:rgba(80,40,5,.5)}
   .eye-icon{width:14px;height:12px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .eye-oval{width:14px;height:9px;border:1.5px solid rgba(40,15,2,.85);border-radius:50%;position:absolute}
-  .eye-pupil{width:4px;height:4px;border-radius:50%;background:rgba(40,15,2,.85);position:absolute}
-  .eye-slash{width:17px;height:1.5px;background:rgba(40,15,2,.85);position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
-  .toggle-label{font-size:10px;color:rgba(25,8,0,.92);letter-spacing:2px;text-transform:uppercase;font-weight:600}
-  .hint-bar{font-size:11px;color:rgba(40,15,2,.65);text-align:center;font-weight:400}
+  .eye-oval{width:14px;height:9px;border:1.5px solid #fff;border-radius:50%;position:absolute}
+  .eye-pupil{width:4px;height:4px;border-radius:50%;background:#fff;position:absolute}
+  .eye-slash{width:17px;height:1.5px;background:#fff;position:absolute;transform:rotate(-38deg);display:none;border-radius:1px}
+  .toggle-label{font-size:10px;color:#fff;letter-spacing:2px;text-transform:uppercase;font-weight:600}
+  .hint-bar{font-size:11px;color:rgba(20,8,0,.8);text-align:center;font-weight:500;text-shadow:0 1px 4px rgba(255,220,150,.4)}
   @keyframes ringBreath{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
   @keyframes glowPulse{0%,100%{opacity:.65;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
   @keyframes glowSpeak{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
