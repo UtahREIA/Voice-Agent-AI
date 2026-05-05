@@ -570,40 +570,13 @@ async function sendToAI(userText) {
       throw new Error('Claude proxy ' + resp.status + ': ' + errTxt.substring(0, 300));
     }
 
-    // Stream the response — collect text and speak sentence by sentence
+    // Collect the full streamed response first, then speak it complete
+    // This avoids the sentence-cutting bug where only the first sentence gets spoken
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let fullText = '';
-    let buffer = '';
-    let spokenSoFar = '';
-    let firstSentencePlaying = false;
 
-    const SENTENCE_END = /[.!?][\s"']*(?=[A-Z\s]|$)/;
-
-    async function speakPending(final) {
-      // Extract clean spoken text from buffer
-      let toSpeak = buffer
-        .replace(/\[PROFILE:[\s\S]*?\]/g, '')
-        .replace(/\[INTAKE:[\s\S]*?\]/g, '')
-        .replace('\[INTAKE_CONFIRMED\]', '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .trim();
-
-      if (!toSpeak || toSpeak === spokenSoFar) return;
-
-      // On first sentence — start speaking immediately
-      if (!firstSentencePlaying && (final || SENTENCE_END.test(toSpeak))) {
-        firstSentencePlaying = true;
-        spokenSoFar = toSpeak;
-        addMessage('assistant', toSpeak);
-        setStatus('speaking', 'Speaking...');
-        await speak(toSpeak);
-      }
-    }
-
-    // Read SSE stream from Claude
+    // Read entire SSE stream from Claude
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -620,36 +593,25 @@ async function sendToAI(userText) {
           const parsed = JSON.parse(data);
           const delta = parsed.delta?.text || parsed.delta?.content?.[0]?.text || '';
           if (!delta) continue;
-
           fullText += delta;
-          buffer += delta;
-
-          // Try to speak at sentence boundaries for lower latency
-          if (!firstSentencePlaying && SENTENCE_END.test(buffer)) {
-            await speakPending(false);
-          }
         } catch(e) {
           // Malformed SSE chunk — skip
         }
       }
     }
 
-    // Speak anything remaining after stream ends
-    await speakPending(true);
-
     // Process signal blocks from full accumulated text
     processSignals(fullText);
 
-    // Store full response in history (with signals intact for context)
+    // Store full response in history
     conversationHistory.push({ role: 'assistant', content: fullText });
 
-    // If nothing was spoken yet (very short response or signals only)
-    if (!firstSentencePlaying) {
-      const spokenText = stripForSpeech(fullText);
-      if (spokenText) {
-        addMessage('assistant', spokenText);
-        await speak(spokenText);
-      }
+    // Strip signals and markdown then speak the complete response
+    const spokenText = stripForSpeech(fullText);
+    if (spokenText) {
+      addMessage('assistant', spokenText);
+      setStatus('speaking', 'Speaking...');
+      await speak(spokenText);
     }
 
   } catch (e) {
