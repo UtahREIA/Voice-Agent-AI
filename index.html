@@ -317,17 +317,33 @@ function addMessage(role, text) {
 }
 
 async function loadVapiSDK() {
-  return new Promise((resolve, reject) => {
-    if (window.Vapi) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.1.0/dist/vapi.umd.js';
-    script.onload = () => {
-      if (window.Vapi) resolve();
-      else reject(new Error('Vapi not found after load'));
-    };
-    script.onerror = () => reject(new Error('Failed to load Vapi SDK'));
-    document.head.appendChild(script);
-  });
+  if (window.Vapi) return;
+
+  const urls = [
+    'https://cdn.jsdelivr.net/gh/balacodeio/Vapi-Web-UMD@latest/dist/latest/vapi-web-bundle.min.js',
+    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.1.0/dist/vapi.umd.js',
+    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.0.0/dist/vapi.umd.js',
+    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@1.0.0/dist/vapi.umd.js',
+  ];
+
+  for (const url of urls) {
+    try {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = () => {
+          log('SDK loaded from: ' + url);
+          resolve();
+        };
+        script.onerror = () => reject(new Error('Failed: ' + url));
+        document.head.appendChild(script);
+      });
+      if (window.Vapi) { log('Vapi class ready', 'ok'); return; }
+    } catch(e) {
+      log('Trying next CDN...');
+    }
+  }
+  throw new Error('All CDN sources failed — Vapi could not be loaded');
 }
 
 function initVapi() {
