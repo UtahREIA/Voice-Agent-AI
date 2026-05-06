@@ -1,3 +1,4 @@
+// GHL sync handler
 // Receives Vapi end-of-call webhook and syncs structured data to GHL
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
