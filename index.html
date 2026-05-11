@@ -26,8 +26,8 @@
   .horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top, rgba(80,20,0,.5) 0%, transparent 100%);pointer-events:none;z-index:2}
   .app{width:100%;max-width:520px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:10;margin:0 auto}
   .header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
-  .logo{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .logo img{width:56px;height:56px;object-fit:contain}
+  .logo{width:220px;height:220px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .logo img{width:220px;height:220px;object-fit:contain}
   .header-text h1{font-size:14px;font-weight:600;color:rgba(30,10,2,.92);letter-spacing:.3px}
   .header-text p{font-size:10px;color:rgba(60,25,5,.75);margin-top:1px;letter-spacing:2px;text-transform:uppercase}
   .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:rgba(40,100,30,.85);display:none;align-items:center;gap:6px}
@@ -74,30 +74,8 @@
   .user .bubble{border-radius:10px 3px 10px 10px;background:rgba(50,20,2,.08)}
   .bubble.interim{opacity:.5;font-style:italic}
   .call-controls{width:100%;background:rgba(40,15,2,.12);border-top:1px solid rgba(80,40,5,.15);padding:16px 24px 24px;display:flex;flex-direction:column;align-items:center;gap:10px}
-  .intake-form{width:100%;max-width:420px;background:rgba(255,235,180,.4);border:1px solid rgba(100,50,10,.4);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
-  .intake-form.show{display:block}
-  .intake-form-title{font-size:13px;font-weight:600;color:rgba(30,10,2,.95);margin-bottom:3px}
-  .intake-form-sub{font-size:11px;color:rgba(45,18,2,.75);margin-bottom:12px;line-height:1.5;font-weight:400}
-  .intake-submit-btn{width:100%;margin-top:12px;padding:9px;border-radius:6px;background:rgba(70,28,4,.7);border:1px solid rgba(100,50,8,.7);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .intake-submit-btn:hover{background:rgba(50,20,2,.35);border-color:rgba(80,40,5,.6)}
-  .intake-submit-btn:disabled{opacity:.4;cursor:not-allowed}
-  .confirm-card{width:100%;max-width:420px;background:rgba(255,235,180,.4);border:1px solid rgba(100,50,10,.35);border-radius:10px;padding:14px 16px;display:none;animation:fadeIn .3s ease}
-  .confirm-card.show{display:block}
-  .confirm-card-title{font-size:10px;font-weight:600;color:rgba(80,40,5,.65);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
-  .confirm-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-  .confirm-row:last-child{margin-bottom:0}
-  .confirm-label{font-size:11px;color:rgba(40,15,2,.85);width:48px;flex-shrink:0;font-weight:500}
-  .confirm-input{flex:1;background:rgba(255,245,220,.6);border:1px solid rgba(100,50,10,.4);border-radius:6px;padding:6px 10px;color:rgba(25,8,0,.92);font-family:'DM Mono',monospace;font-size:12px;transition:border-color .2s}
-  .confirm-input:focus{outline:none;border-color:rgba(100,50,10,.5)}
-  .confirm-input:disabled{opacity:.4;cursor:not-allowed}
-  .confirm-input.filled{border-color:rgba(80,120,40,.4)}
-  .confirm-input::placeholder{color:rgba(60,30,10,.45)}
-  .confirm-actions{display:flex;gap:8px;margin-top:12px}
-  .confirm-btn{flex:1;padding:8px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s}
-  .confirm-btn.yes{background:rgba(50,120,30,.35);border:1px solid rgba(60,140,40,.35);color:rgba(20,70,10,.9)}
-  .confirm-btn.yes:hover{background:rgba(50,120,30,.5)}
-  .confirm-btn.edit{background:rgba(50,20,2,.12);border:1px solid rgba(80,40,5,.25);color:rgba(50,20,2,.65)}
-  .confirm-btn.edit:hover{border-color:rgba(80,40,5,.45);color:rgba(40,15,2,.85)}
+
+
   .status-indicator{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:20px;background:rgba(20,8,0,.55);border:1px solid rgba(80,40,5,.7);font-size:11px;color:#fff;transition:all .3s;font-weight:600}
   .status-indicator.listening{border-color:rgba(60,180,40,.7);color:#fff;background:rgba(30,100,15,.6)}
   .status-indicator.thinking{border-color:rgba(200,120,10,.7);color:#fff;background:rgba(120,65,5,.6)}
@@ -167,42 +145,8 @@
       <div class="status-label" id="statusLabel">Connecting...</div>
       <div class="transcript-area" id="transcriptArea"></div>
     </div>
-    <div class="intake-form" id="intakeForm">
-      <div class="intake-form-title">Please enter your details below</div>
-      <div class="intake-form-sub">You can type your name, email, and phone number here instead of spelling them out — this helps us get them right.</div>
-      <div class="confirm-row">
-        <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="intakeName" placeholder="Full name" autocomplete="name" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="intakeEmail" placeholder="you@example.com" autocomplete="email" />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="intakePhone" placeholder="e.g. 801 555 0123" autocomplete="tel" />
-      </div>
-      <button class="intake-submit-btn" id="intakeSubmitBtn" type="button">Submit my details</button>
-    </div>
-    <div class="confirm-card" id="confirmCard">
-      <div class="confirm-card-title">Just to confirm your details</div>
-      <div class="confirm-row">
-        <span class="confirm-label">Name</span>
-        <input type="text" class="confirm-input" id="confirmName" placeholder="---" disabled />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <input type="email" class="confirm-input" id="confirmEmail" placeholder="---" disabled />
-      </div>
-      <div class="confirm-row">
-        <span class="confirm-label">Phone</span>
-        <input type="tel" class="confirm-input" id="confirmPhone" placeholder="---" disabled />
-      </div>
-      <div class="confirm-actions" id="confirmActions" style="display:none">
-        <button class="confirm-btn yes" id="confirmYesBtn">Looks correct</button>
-        <button class="confirm-btn edit" id="confirmEditBtn">Edit details</button>
-      </div>
-    </div>
+
+
     <div class="call-controls">
       <div class="status-indicator" id="statusInd"><div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div><span id="statusText">Connecting...</span></div>
       <div class="btn-row">
@@ -240,18 +184,7 @@ const callTimer     = document.getElementById('callTimer');
 const timerText     = document.getElementById('timerText');
 const errorBanner   = document.getElementById('errorBanner');
 const debugLog      = document.getElementById('debugLog');
-const confirmCard   = document.getElementById('confirmCard');
-const confirmNameEl = document.getElementById('confirmName');
-const confirmEmailEl= document.getElementById('confirmEmail');
-const confirmPhoneEl= document.getElementById('confirmPhone');
-const confirmActions= document.getElementById('confirmActions');
-const confirmYesBtn = document.getElementById('confirmYesBtn');
-const confirmEditBtn= document.getElementById('confirmEditBtn');
-const intakeFormEl  = document.getElementById('intakeForm');
-const intakeNameInput  = document.getElementById('intakeName');
-const intakeEmailInput = document.getElementById('intakeEmail');
-const intakePhoneInput = document.getElementById('intakePhone');
-const intakeSubmitBtn  = document.getElementById('intakeSubmitBtn');
+// Form removed — contact details collected verbally
 const callOrb       = document.getElementById('callOrb');
 const statusLabel   = document.getElementById('statusLabel');
 const toggleBtn     = document.getElementById('toggleBtn');
@@ -404,7 +337,7 @@ async function startCall() {
 
     setupScreen.classList.add('hidden');
     callScreen.classList.add('active');
-    intakeFormEl.classList.add('show');
+
     setStatus('thinking', 'Connecting...');
     if (statusLabel) statusLabel.textContent = 'Connecting...';
 
@@ -443,14 +376,7 @@ function endCallCleanup() {
   setupScreen.classList.remove('hidden');
   transcriptArea.innerHTML = '';
   callerName = ''; callerEmail = ''; callerPhone = '';
-  intakeFormEl.classList.remove('show');
-  intakeSubmitBtn.disabled = false;
-  confirmCard.classList.remove('show');
-  confirmNameEl.value = ''; confirmEmailEl.value = ''; confirmPhoneEl.value = '';
-  confirmNameEl.classList.remove('filled'); confirmEmailEl.classList.remove('filled'); confirmPhoneEl.classList.remove('filled');
-  confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
-  confirmActions.style.display = 'none';
-  intakeNameInput.value = ''; intakeEmailInput.value = ''; intakePhoneInput.value = '';
+
   if (statusLabel) statusLabel.textContent = 'Begin your journey';
   log('Call ended');
 }
@@ -488,68 +414,7 @@ toggleBtn.addEventListener('click', () => {
   document.getElementById('eyePupil').style.display = transcriptVisible ? 'none' : 'block';
 });
 
-confirmYesBtn.addEventListener('click', () => {
-  callerName  = confirmNameEl.value.trim() || callerName;
-  callerEmail = confirmEmailEl.value.trim() || callerEmail;
-  callerPhone = confirmPhoneEl.value.trim() || callerPhone;
-  confirmCard.classList.remove('show');
-  log('Details confirmed — sending to Vapi');
-  // Inject confirmed details into ongoing Vapi call
-  if (vapi && callActive) {
-    vapi.send({
-      type: 'add-message',
-      message: {
-        role: 'system',
-        content: 'Caller details confirmed. Name: ' + callerName + '. Email: ' + callerEmail + '. Phone: ' + callerPhone + '. Continue the routing conversation.'
-      }
-    });
-  }
-});
-
-confirmEditBtn.addEventListener('click', () => {
-  confirmNameEl.disabled = false;
-  confirmEmailEl.disabled = false;
-  confirmPhoneEl.disabled = false;
-  confirmNameEl.focus();
-  confirmActions.innerHTML = '<button class="confirm-btn yes" id="confirmSaveBtn">Save changes</button>';
-  document.getElementById('confirmSaveBtn').addEventListener('click', () => {
-    callerName  = confirmNameEl.value.trim();
-    callerEmail = confirmEmailEl.value.trim();
-    callerPhone = confirmPhoneEl.value.trim();
-    confirmNameEl.disabled = true; confirmEmailEl.disabled = true; confirmPhoneEl.disabled = true;
-    confirmCard.classList.remove('show');
-    if (vapi && callActive) {
-      vapi.send({
-        type: 'add-message',
-        message: {
-          role: 'system',
-          content: 'Caller details updated. Name: ' + callerName + '. Email: ' + callerEmail + '. Phone: ' + callerPhone + '. Continue the routing conversation.'
-        }
-      });
-    }
-  });
-});
-
-intakeSubmitBtn.addEventListener('click', () => {
-  const name  = intakeNameInput.value.trim();
-  const email = intakeEmailInput.value.trim();
-  const phone = intakePhoneInput.value.trim();
-  if (!name || !email || !phone) {
-    intakeNameInput.style.borderColor  = name  ? '' : 'var(--red, #f87171)';
-    intakeEmailInput.style.borderColor = email ? '' : 'var(--red, #f87171)';
-    intakePhoneInput.style.borderColor = phone ? '' : 'var(--red, #f87171)';
-    return;
-  }
-  intakeSubmitBtn.disabled = true;
-  intakeFormEl.classList.remove('show');
-  callerName = name; callerEmail = email; callerPhone = phone;
-  confirmNameEl.value  = name;  confirmNameEl.classList.add('filled');
-  confirmEmailEl.value = email; confirmEmailEl.classList.add('filled');
-  confirmPhoneEl.value = phone; confirmPhoneEl.classList.add('filled');
-  confirmNameEl.disabled = false; confirmEmailEl.disabled = false; confirmPhoneEl.disabled = false;
-  confirmActions.style.display = 'flex';
-  confirmCard.classList.add('show');
-});
+// Contact details collected verbally via Vapi conversation
 
 log('App loaded. Ready.');
 log('Origin: ' + window.location.origin);
