@@ -5,15 +5,22 @@ export default async function handler(req, res) {
     const payload = req.body;
     const eventType = payload.message?.type || payload.type;
 
-    // Only process end-of-call-report — skip all other event types
+    // Log every event type so we can see what Vapi sends
+    console.log('Vapi event received:', eventType);
+
+    // Only process end-of-call-report
     if (eventType !== 'end-of-call-report') {
       return res.status(200).json({ ok: true, skipped: true, eventType });
     }
 
-    console.log('End of call report received');
+    console.log('=== END OF CALL REPORT ===');
 
-    const analysis  = payload.message?.analysis || payload.analysis || {};
+    // Log full analysis block so we can see the exact structure
+    const analysis = payload.message?.analysis || payload.analysis || {};
+    console.log('Analysis block:', JSON.stringify(analysis));
+
     const structured = analysis.structuredData || {};
+    console.log('Structured data:', JSON.stringify(structured));
 
     const {
       callerName    = '',
@@ -28,22 +35,23 @@ export default async function handler(req, res) {
       recommendedNextStep = ''
     } = structured;
 
-    console.log('Structured data:', JSON.stringify(structured));
+    console.log('Extracted — name:', callerName, '| phone:', callerPhone, '| stage:', investorStage);
 
-    if (!callerEmail && !callerPhone) {
-      console.log('No contact info — skipping GHL sync');
+    if (!callerName && !callerPhone) {
+      console.log('No contact info found — skipping GHL sync');
       return res.status(200).json({ ok: true, skipped: true, reason: 'no contact info' });
     }
 
-    // Convert strategies string to array if needed
+    // Convert strategies string to array
     const strategiesArray = Array.isArray(strategies)
       ? strategies
       : strategies.split(',').map(s => s.trim()).filter(Boolean);
 
+    // Build GHL payload with exact field IDs
     const ghlPayload = {
       firstName: callerName.split(' ')[0] || callerName,
       lastName:  callerName.split(' ').slice(1).join(' ') || '',
-      email:     callerEmail,
+      email:     callerEmail || '',
       phone:     callerPhone,
       tags: [
         'Voice Agent Lead',
@@ -56,7 +64,10 @@ export default async function handler(req, res) {
         { id: 'hf9VEhcVwgyNXP3qbzsA', field_value: strategiesArray },
         { id: 't150aKjUz1KvU183CtJw', field_value: goals ? [goals] : [] },
         { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
-        { id: 'TCCSXzunxUqJme5YtGSr', field_value: summary + (recommendedNextStep ? '\n\nRecommended next step: ' + recommendedNextStep : '') },
+        {
+          id: 'TCCSXzunxUqJme5YtGSr',
+          field_value: summary + (recommendedNextStep ? '\n\nRecommended next step: ' + recommendedNextStep : '')
+        },
         blocker === 'capital'     ? { id: 'A6d3LiW4tm4sRYgKkexW', field_value: ['Needs funding / capital'] } : null,
         blocker === 'deals'       ? { id: 'xRQGkFLJLgH0L3RQUxKF', field_value: ['Looking for deals'] }      : null,
         blocker === 'team'        ? { id: 'oiMoxdyO8wHRWl8ECyug', field_value: ['Needs team / vendors'] }   : null,
@@ -65,10 +76,12 @@ export default async function handler(req, res) {
       ].filter(Boolean)
     };
 
-    const GHL_WEBHOOK = process.env.GHL_WEBHOOK_URL;
+    console.log('GHL payload:', JSON.stringify(ghlPayload));
 
-    if (!GHL_WEBHOOK || GHL_WEBHOOK.includes('YOUR_WEBHOOK_ID')) {
-      console.log('GHL webhook not configured — payload ready but not sent:', JSON.stringify(ghlPayload));
+    // Send to GHL
+    const GHL_WEBHOOK = process.env.GHL_WEBHOOK_URL;
+    if (!GHL_WEBHOOK) {
+      console.log('GHL_WEBHOOK_URL not set');
       return res.status(200).json({ ok: true, note: 'GHL webhook not configured', payload: ghlPayload });
     }
 
@@ -77,13 +90,15 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ghlPayload)
     });
-    console.log('GHL sync status:', ghlResp.status);
 
-    // Also upsert to Supabase
+    const ghlBody = await ghlResp.text();
+    console.log('GHL response:', ghlResp.status, ghlBody.substring(0, 200));
+
+    // Supabase upsert
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-    if (SUPABASE_URL && SUPABASE_KEY && callerEmail) {
+    if (SUPABASE_URL && SUPABASE_KEY && callerPhone) {
       const stageMap = {
         'Exploring': 'exploring',
         'Getting Started': 'getting_started',
@@ -99,9 +114,13 @@ export default async function handler(req, res) {
         'Prefer': 'return=representation'
       };
 
-      // Check if contact exists
+      // Lookup by phone since we may not have email
+      const lookupField = callerEmail
+        ? `email=eq.${encodeURIComponent(callerEmail)}`
+        : `phone=eq.${encodeURIComponent(callerPhone)}`;
+
       const existing = await fetch(
-        `${SUPABASE_URL}/rest/v1/contacts?email=eq.${encodeURIComponent(callerEmail)}&select=id&limit=1`,
+        `${SUPABASE_URL}/rest/v1/contacts?${lookupField}&select=id&limit=1`,
         { headers: baseHeaders }
       ).then(r => r.json());
 
@@ -111,28 +130,39 @@ export default async function handler(req, res) {
         await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${contactId}`, {
           method: 'PATCH',
           headers: baseHeaders,
-          body: JSON.stringify({ full_name: callerName, phone: callerPhone, updated_at: new Date().toISOString() })
+          body: JSON.stringify({
+            full_name: callerName,
+            phone: callerPhone,
+            updated_at: new Date().toISOString()
+          })
         });
+        console.log('Supabase contact updated:', contactId);
       } else {
         const created = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
           method: 'POST',
           headers: baseHeaders,
           body: JSON.stringify({
-            full_name: callerName, email: callerEmail, phone: callerPhone,
-            profile_type: profileType, created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+            full_name: callerName,
+            email: callerEmail || null,
+            phone: callerPhone,
+            profile_type: profileType,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           })
         }).then(r => r.json());
         contactId = created[0]?.id;
+        console.log('Supabase contact created:', contactId);
       }
 
       if (contactId) {
         const profileData = {
           contact_id: contactId,
           where_in_journey: stageMap[investorStage] || investorStage,
-          investing_types: strategiesArray,
+          investing_types: strategiesArray.length ? strategiesArray : null,
           goals_6_to_12_months: goals ? [goals] : null,
           updated_at: new Date().toISOString()
         };
+
         const existingProfile = await fetch(
           `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=id&limit=1`,
           { headers: baseHeaders }
@@ -140,22 +170,25 @@ export default async function handler(req, res) {
 
         if (existingProfile.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}`, {
-            method: 'PATCH', headers: baseHeaders, body: JSON.stringify(profileData)
+            method: 'PATCH',
+            headers: baseHeaders,
+            body: JSON.stringify(profileData)
           });
         } else {
           await fetch(`${SUPABASE_URL}/rest/v1/investor_profiles`, {
-            method: 'POST', headers: baseHeaders,
+            method: 'POST',
+            headers: baseHeaders,
             body: JSON.stringify({ ...profileData, created_at: new Date().toISOString() })
           });
         }
-        console.log('Supabase upsert complete for contact:', contactId);
+        console.log('Supabase investor profile upserted for contact:', contactId);
       }
     }
 
     return res.status(200).json({ ok: true, ghlStatus: ghlResp.status });
 
   } catch(e) {
-    console.error('GHL sync error:', e.message);
+    console.error('ghl-sync error:', e.message, e.stack);
     return res.status(500).json({ error: e.message });
   }
 }
