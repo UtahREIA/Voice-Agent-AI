@@ -95,9 +95,13 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('Context error:', e.message);
-    // Return a fallback so the call still works even if Supabase is down
+    console.error('Context error stack:', e.stack);
+    console.error('SUPABASE_URL set:', !!process.env.SUPABASE_URL);
+    console.error('SUPABASE_KEY set:', !!process.env.SUPABASE_SERVICE_KEY);
+    console.error('SUPABASE_URL value:', process.env.SUPABASE_URL ? process.env.SUPABASE_URL.substring(0, 40) : 'MISSING');
     return res.status(200).json({
-      result: 'Live community data temporarily unavailable. Use the knowledge in your system prompt.'
+      result: 'Live community data temporarily unavailable. Use the knowledge in your system prompt.',
+      error: e.message
     });
   }
 }
