@@ -593,6 +593,8 @@ async function startCall() {
     // If we got context, prepend it to the assistant messages
     if (contextBlock) {
       overrides.model = {
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
         messages: [
           {
             role: 'system',
