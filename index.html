@@ -407,7 +407,7 @@ const callTimer     = document.getElementById('callTimer');
 const timerText     = document.getElementById('timerText');
 const errorBanner   = document.getElementById('errorBanner');
 const debugLog      = document.getElementById('debugLog');
-// Form removed — contact details collected verbally
+// Form removed - contact details collected verbally
 const callOrb       = document.getElementById('callOrb');
 const statusLabel   = document.getElementById('statusLabel');
 const toggleBtn     = document.getElementById('toggleBtn');
@@ -499,7 +499,7 @@ async function loadVapiSDK() {
       log('Trying next CDN...');
     }
   }
-  throw new Error('All CDN sources failed — Vapi could not be loaded');
+  throw new Error('All CDN sources failed - Vapi could not be loaded');
 }
 
 function initVapi() {
@@ -543,7 +543,7 @@ function initVapi() {
 
   vapi.on('error', (e) => {
     log('Vapi error: ' + (e.message || JSON.stringify(e)));
-    showError('Call error — please try again.');
+    showError('Call error - please try again.');
     endCallCleanup();
   });
 }
@@ -564,7 +564,24 @@ async function startCall() {
     setStatus('thinking', 'Connecting...');
     if (statusLabel) statusLabel.textContent = 'Connecting...';
 
-    // Start Vapi with assistant, passing caller name as variable if available
+    // Fetch live context from Supabase before starting the call
+    let contextBlock = '';
+    try {
+      const ctxResp = await fetch('/api/context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (ctxResp.ok) {
+        const ctxData = await ctxResp.json();
+        contextBlock = ctxData.result || '';
+        log('Live context loaded', 'ok');
+      }
+    } catch(e) {
+      log('Context fetch failed - using fallback: ' + e.message);
+    }
+
+    // Inject context into Vapi as a system message override
     const overrides = {
       variableValues: {
         callerName: callerName || '',
@@ -572,6 +589,22 @@ async function startCall() {
         callerPhone: callerPhone || ''
       }
     };
+
+    // If we got context, prepend it to the assistant messages
+    if (contextBlock) {
+      overrides.model = {
+        messages: [
+          {
+            role: 'system',
+            content: contextBlock + ' Use the above live data to answer questions about board members, vendors, events, and resources.'
+
+
+
+
+          }
+        ]
+      };
+    }
 
     await vapi.start(VAPI_ASSISTANT_ID, overrides);
     log('Vapi started');
