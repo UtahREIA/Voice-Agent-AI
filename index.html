@@ -331,6 +331,52 @@
     .logo img { width: 110px; height: 110px; }
     .status-label { font-size: 16px; }
   }
+
+  /* ── QUIET ENVIRONMENT BANNER ──────────────────────────────────────── */
+  .quiet-banner{
+    width:100%;
+    background:rgba(50,20,2,.18);
+    border-bottom:1px solid rgba(80,40,5,.25);
+    padding:10px 24px;
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    animation:fadeIn .4s ease;
+  }
+  .quiet-banner-icon{
+    font-size:16px;
+    flex-shrink:0;
+    margin-top:1px;
+  }
+  .quiet-banner-text{
+    font-size:12px;
+    color:rgba(40,15,2,.82);
+    line-height:1.55;
+    font-weight:400;
+  }
+  .quiet-banner-text strong{
+    font-weight:600;
+    color:rgba(30,10,2,.92);
+  }
+  .quiet-banner-dismiss{
+    margin-left:auto;
+    background:none;
+    border:none;
+    cursor:pointer;
+    color:rgba(60,25,5,.5);
+    font-size:16px;
+    flex-shrink:0;
+    padding:0 0 0 8px;
+    line-height:1;
+    transition:color .2s;
+  }
+  .quiet-banner-dismiss:hover{
+    color:rgba(40,15,2,.85);
+  }
+  @media (max-width:480px){
+    .quiet-banner{ padding:10px 16px; }
+    .quiet-banner-text{ font-size:11px; }
+  }
 </style>
 </head>
 <body>
@@ -349,6 +395,11 @@
     <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
   </div>
   <div class="error-banner" id="errorBanner"></div>
+  <div class="quiet-banner" id="quietBanner">
+    <span class="quiet-banner-icon">&#127897;</span>
+    <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation. A few minutes alone is worth it.</span>
+    <button class="quiet-banner-dismiss" id="quietDismiss" aria-label="Dismiss">&#215;</button>
+  </div>
   <div class="setup-screen" id="setupScreen">
     <div class="orb-stage" id="setupOrb">
       <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
@@ -662,6 +713,17 @@ toggleBtn.addEventListener('click', () => {
 });
 
 // Contact details collected verbally via Vapi conversation
+
+// Quiet environment banner dismiss
+const quietBanner = document.getElementById('quietBanner');
+const quietDismiss = document.getElementById('quietDismiss');
+if (quietDismiss) {
+  quietDismiss.addEventListener('click', () => {
+    quietBanner.style.opacity = '0';
+    quietBanner.style.transition = 'opacity .3s';
+    setTimeout(() => { quietBanner.style.display = 'none'; }, 300);
+  });
+}
 
 log('App loaded. Ready.');
 log('Origin: ' + window.location.origin);
