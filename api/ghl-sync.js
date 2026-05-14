@@ -185,6 +185,53 @@ export default async function handler(req, res) {
       }
     }
 
+    // Update contact custom fields directly via GHL API
+    const GHL_API_KEY = process.env.GHL_API_KEY;
+    if (GHL_API_KEY && callerName) {
+      try {
+        // Wait briefly for GHL to create the contact
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Search for the contact by phone
+        const searchResp = await fetch(
+          `https://rest.gohighlevel.com/v1/contacts/?phone=${encodeURIComponent(callerPhone)}&locationId=DNirEjy0ejVwbHsaBYrn`,
+          { headers: { 'Authorization': `Bearer ${GHL_API_KEY}`, 'Content-Type': 'application/json' } }
+        ).then(r => r.json());
+
+        const contact = searchResp.contacts?.[0];
+        if (contact?.id) {
+          // Stage mapping to exact GHL option labels
+          const stageMap = {
+            'Exploring': 'Exploring / New',
+            'Getting Started': 'Getting Started',
+            'Active Investor': 'Active Investor',
+            'Experienced Investor': 'Experienced Investor',
+            'Veteran': 'Veteran / Operator'
+          };
+
+          const updateResp = await fetch(
+            `https://rest.gohighlevel.com/v1/contacts/${contact.id}`,
+            {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${GHL_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customField: {
+                  swDtahR8SAnG4S34s2a6: stageMap[investorStage] || investorStage,
+                  TCCSXzunxUqJme5YtGSr: summary + (recommendedNextStep ? '
+
+Next step: ' + recommendedNextStep : ''),
+                  mTmRVbyZKGqVXqHvhsX6: profileType
+                }
+              })
+            }
+          );
+          console.log('GHL contact fields updated:', updateResp.status);
+        }
+      } catch(e) {
+        console.error('GHL API update error:', e.message);
+      }
+    }
+
     return res.status(200).json({ ok: true, ghlStatus: ghlResp.status });
 
   } catch(e) {
