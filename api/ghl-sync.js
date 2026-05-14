@@ -5,40 +5,45 @@ export default async function handler(req, res) {
     const payload = req.body;
     const eventType = payload.message?.type || payload.type;
 
-    // Log every event type so we can see what Vapi sends
     console.log('Vapi event received:', eventType);
 
-    // Only process end-of-call-report
     if (eventType !== 'end-of-call-report') {
       return res.status(200).json({ ok: true, skipped: true, eventType });
     }
 
     console.log('=== END OF CALL REPORT ===');
 
-    // Log full analysis block so we can see the exact structure
-    const analysis = payload.message?.analysis || payload.analysis || {};
-    console.log('Analysis block:', JSON.stringify(analysis));
+    // Vapi structured outputs come as an object keyed by output ID
+    // Each value has { name, result } shape
+    const structuredOutputs = payload.message?.artifact?.structuredOutputs ||
+                              payload.artifact?.structuredOutputs || {};
 
-    const structured = analysis.structuredData || {};
+    // Build a name -> result map
+    const structured = {};
+    for (const key of Object.keys(structuredOutputs)) {
+      const item = structuredOutputs[key];
+      if (item?.name && item?.result !== undefined) {
+        structured[item.name] = item.result;
+      }
+    }
+
     console.log('Structured data:', JSON.stringify(structured));
 
-    const {
-      callerName    = '',
-      callerEmail   = '',
-      callerPhone   = '',
-      profileType   = 'Investor',
-      investorStage = '',
-      strategies    = '',
-      blocker       = '',
-      goals         = '',
-      summary       = '',
-      recommendedNextStep = ''
-    } = structured;
+    const callerName    = structured.callerName    || '';
+    const callerPhone   = structured.callerPhone   || '';
+    const callerEmail   = structured.callerEmail   || '';
+    const profileType   = structured.profileType   || 'Investor';
+    const investorStage = structured.investorStage || '';
+    const strategies    = structured.strategies    || '';
+    const blocker       = structured.blocker       || '';
+    const goals         = structured.goals         || '';
+    const summary       = structured.summary       || '';
+    const recommendedNextStep = structured.recommendedNextStep || '';
 
     console.log('Extracted — name:', callerName, '| phone:', callerPhone, '| stage:', investorStage);
 
     if (!callerName && !callerPhone) {
-      console.log('No contact info found — skipping GHL sync');
+      console.log('No contact info — skipping GHL sync');
       return res.status(200).json({ ok: true, skipped: true, reason: 'no contact info' });
     }
 
@@ -47,12 +52,16 @@ export default async function handler(req, res) {
       ? strategies
       : strategies.split(',').map(s => s.trim()).filter(Boolean);
 
-    // Build GHL payload with exact field IDs
+    // Build GHL payload
+    const nameParts = callerName.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName  = nameParts.slice(1).join(' ') || '';
+
     const ghlPayload = {
-      firstName: callerName.split(' ')[0] || callerName,
-      lastName:  callerName.split(' ').slice(1).join(' ') || '',
-      email:     callerEmail || '',
-      phone:     callerPhone,
+      firstName,
+      lastName,
+      email:  callerEmail || '',
+      phone:  callerPhone,
       tags: [
         'Voice Agent Lead',
         investorStage ? 'Stage: ' + investorStage : null,
@@ -64,10 +73,7 @@ export default async function handler(req, res) {
         { id: 'hf9VEhcVwgyNXP3qbzsA', field_value: strategiesArray },
         { id: 't150aKjUz1KvU183CtJw', field_value: goals ? [goals] : [] },
         { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
-        {
-          id: 'TCCSXzunxUqJme5YtGSr',
-          field_value: summary + (recommendedNextStep ? '\n\nRecommended next step: ' + recommendedNextStep : '')
-        },
+        { id: 'TCCSXzunxUqJme5YtGSr', field_value: summary + (recommendedNextStep ? '\n\nNext step: ' + recommendedNextStep : '') },
         blocker === 'capital'     ? { id: 'A6d3LiW4tm4sRYgKkexW', field_value: ['Needs funding / capital'] } : null,
         blocker === 'deals'       ? { id: 'xRQGkFLJLgH0L3RQUxKF', field_value: ['Looking for deals'] }      : null,
         blocker === 'team'        ? { id: 'oiMoxdyO8wHRWl8ECyug', field_value: ['Needs team / vendors'] }   : null,
@@ -78,7 +84,6 @@ export default async function handler(req, res) {
 
     console.log('GHL payload:', JSON.stringify(ghlPayload));
 
-    // Send to GHL
     const GHL_WEBHOOK = process.env.GHL_WEBHOOK_URL;
     if (!GHL_WEBHOOK) {
       console.log('GHL_WEBHOOK_URL not set');
@@ -90,15 +95,21 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ghlPayload)
     });
-
     const ghlBody = await ghlResp.text();
-    console.log('GHL response:', ghlResp.status, ghlBody.substring(0, 200));
+    console.log('GHL sync status:', ghlResp.status, ghlBody.substring(0, 200));
 
     // Supabase upsert
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
     if (SUPABASE_URL && SUPABASE_KEY && (callerPhone || callerEmail)) {
+      const baseHeaders = {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'return=representation'
+      };
+
       const stageMap = {
         'Exploring': 'exploring',
         'Getting Started': 'getting_started',
@@ -107,14 +118,6 @@ export default async function handler(req, res) {
         'Veteran': 'veteran'
       };
 
-      const baseHeaders = {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'return=representation'
-      };
-
-      // Lookup by phone since we may not have email
       const lookupField = callerEmail
         ? `email=eq.${encodeURIComponent(callerEmail)}`
         : `phone=eq.${encodeURIComponent(callerPhone)}`;
@@ -122,7 +125,7 @@ export default async function handler(req, res) {
       const existing = await fetch(
         `${SUPABASE_URL}/rest/v1/contacts?${lookupField}&select=id&limit=1`,
         { headers: baseHeaders }
-      ).then(r => r.json());
+      ).then(r => r.json()).catch(() => []);
 
       let contactId;
       if (existing.length > 0) {
@@ -130,11 +133,7 @@ export default async function handler(req, res) {
         await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${contactId}`, {
           method: 'PATCH',
           headers: baseHeaders,
-          body: JSON.stringify({
-            full_name: callerName,
-            phone: callerPhone,
-            updated_at: new Date().toISOString()
-          })
+          body: JSON.stringify({ full_name: callerName, phone: callerPhone, updated_at: new Date().toISOString() })
         });
         console.log('Supabase contact updated:', contactId);
       } else {
@@ -142,53 +141,46 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: baseHeaders,
           body: JSON.stringify({
-            full_name: callerName,
-            email: callerEmail || null,
-            phone: callerPhone,
+            full_name: callerName, email: callerEmail || null, phone: callerPhone,
             profile_type: profileType,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString()
           })
-        }).then(r => r.json());
+        }).then(r => r.json()).catch(() => []);
         contactId = created[0]?.id;
         console.log('Supabase contact created:', contactId);
       }
 
-      if (contactId) {
+      if (contactId && (investorStage || strategiesArray.length)) {
         const profileData = {
           contact_id: contactId,
-          where_in_journey: stageMap[investorStage] || investorStage,
+          where_in_journey: stageMap[investorStage] || investorStage || null,
           investing_types: strategiesArray.length ? strategiesArray : null,
           goals_6_to_12_months: goals ? [goals] : null,
           updated_at: new Date().toISOString()
         };
-
         const existingProfile = await fetch(
           `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=id&limit=1`,
           { headers: baseHeaders }
-        ).then(r => r.json());
+        ).then(r => r.json()).catch(() => []);
 
         if (existingProfile.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}`, {
-            method: 'PATCH',
-            headers: baseHeaders,
-            body: JSON.stringify(profileData)
+            method: 'PATCH', headers: baseHeaders, body: JSON.stringify(profileData)
           });
         } else {
           await fetch(`${SUPABASE_URL}/rest/v1/investor_profiles`, {
-            method: 'POST',
-            headers: baseHeaders,
+            method: 'POST', headers: baseHeaders,
             body: JSON.stringify({ ...profileData, created_at: new Date().toISOString() })
           });
         }
-        console.log('Supabase investor profile upserted for contact:', contactId);
+        console.log('Supabase investor profile upserted');
       }
     }
 
     return res.status(200).json({ ok: true, ghlStatus: ghlResp.status });
 
   } catch(e) {
-    console.error('ghl-sync error:', e.message, e.stack);
+    console.error('ghl-sync error:', e.message);
     return res.status(500).json({ error: e.message });
   }
 }
