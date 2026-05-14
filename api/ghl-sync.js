@@ -217,9 +217,7 @@ export default async function handler(req, res) {
               body: JSON.stringify({
                 customField: {
                   swDtahR8SAnG4S34s2a6: stageMap[investorStage] || investorStage,
-                  TCCSXzunxUqJme5YtGSr: summary + (recommendedNextStep ? '
-
-Next step: ' + recommendedNextStep : ''),
+                  TCCSXzunxUqJme5YtGSr: summary + (recommendedNextStep ? ' Next step: ' + recommendedNextStep : ''),
                   mTmRVbyZKGqVXqHvhsX6: profileType
                 }
               })
