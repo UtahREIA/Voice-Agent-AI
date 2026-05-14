@@ -62,6 +62,14 @@ export default async function handler(req, res) {
       lastName,
       email:  callerEmail || '',
       phone:  callerPhone,
+      // Flat fields for easy GHL workflow mapping via {{inboundWebhookRequest.*}}
+      investorStage,
+      strategies: strategiesArray.join(', '),
+      blocker,
+      goals,
+      summary,
+      recommendedNextStep,
+      profileType,
       tags: [
         'Voice Agent Lead',
         investorStage ? 'Stage: ' + investorStage : null,
