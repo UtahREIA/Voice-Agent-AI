@@ -18,8 +18,8 @@
 
     /* Header */
     .header { padding: 16px 28px 14px; }
-    .logo { width: 180px; height: 180px; }
-    .logo img { width: 180px; height: 180px; }
+    .logo { width: 130px; height: 130px; }
+    .logo img { width: 130px; height: 130px; }
     .header-text h1 { font-size: 15px; }
     .header-text p { font-size: 10px; }
 
@@ -65,8 +65,8 @@
 
     /* Header */
     .header { padding: 12px 16px 10px; }
-    .logo { width: 140px; height: 140px; }
-    .logo img { width: 140px; height: 140px; }
+    .logo { width: 100px; height: 100px; }
+    .logo img { width: 100px; height: 100px; }
     .header-text h1 { font-size: 12px; }
     .header-text p { font-size: 9px; }
     .call-timer { font-size: 11px; }
@@ -136,14 +136,14 @@
   .light-halo{position:fixed;width:500px;height:300px;border-radius:50%;background:radial-gradient(ellipse, rgba(255,240,180,.3) 0%, transparent 70%);top:10%;left:50%;transform:translateX(-50%);pointer-events:none;z-index:2}
   .horizon-glow{position:fixed;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to top, rgba(80,20,0,.5) 0%, transparent 100%);pointer-events:none;z-index:2}
   .app{width:100%;max-width:520px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:10;margin:0 auto}
-  .header{padding:20px 24px 16px;display:flex;align-items:center;gap:12px}
-  .logo{width:220px;height:220px;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;cursor:pointer}
-  .logo img{width:220px;height:220px;object-fit:contain;transition:opacity .2s}
+  .header{padding:20px 24px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+  .logo{width:140px;height:140px;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;cursor:pointer}
+  .logo img{width:140px;height:140px;object-fit:contain;transition:opacity .2s}
   .logo:hover img{opacity:.85}
   .header-text{text-decoration:none}
   .header-text h1{font-size:14px;font-weight:600;color:rgba(30,10,2,.92);letter-spacing:.3px}
   .header-text p{font-size:10px;color:rgba(60,25,5,.75);margin-top:1px;letter-spacing:2px;text-transform:uppercase}
-  .call-timer{margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:rgba(40,100,30,.85);display:none;align-items:center;gap:6px}
+  .call-timer{font-family:'DM Mono',monospace;font-size:12px;color:rgba(40,100,30,.85);display:none;align-items:center;gap:6px;position:absolute;top:20px;right:24px}
   .call-timer.active{display:flex}
   .call-timer .dot{width:6px;height:6px;border-radius:50%;background:rgba(40,140,40,.8);animation:pulse 1.4s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -230,8 +230,8 @@
 
     /* Header */
     .header { padding: 16px 28px 14px; }
-    .logo { width: 180px; height: 180px; }
-    .logo img { width: 180px; height: 180px; }
+    .logo { width: 130px; height: 130px; }
+    .logo img { width: 130px; height: 130px; }
     .header-text h1 { font-size: 15px; }
     .header-text p { font-size: 10px; }
 
@@ -277,8 +277,8 @@
 
     /* Header */
     .header { padding: 12px 16px 10px; }
-    .logo { width: 140px; height: 140px; }
-    .logo img { width: 140px; height: 140px; }
+    .logo { width: 100px; height: 100px; }
+    .logo img { width: 100px; height: 100px; }
     .header-text h1 { font-size: 12px; }
     .header-text p { font-size: 9px; }
     .call-timer { font-size: 11px; }
@@ -335,9 +335,11 @@
   /* ── QUIET ENVIRONMENT BANNER ──────────────────────────────────────── */
   .quiet-banner{
     width:100%;
-    background:rgba(50,20,2,.18);
-    border-bottom:1px solid rgba(80,40,5,.25);
-    padding:10px 24px;
+    max-width:340px;
+    background:rgba(50,20,2,.12);
+    border:1px solid rgba(80,40,5,.2);
+    border-radius:8px;
+    padding:10px 14px;
     display:flex;
     align-items:flex-start;
     gap:10px;
@@ -388,24 +390,24 @@
 <div class="app">
   <div class="header">
     <a href="https://www.utahreia.org/" target="_blank" rel="noopener noreferrer" class="logo"><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA" /></a>
-    <a href="https://www.utahreia.org/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
-      <h1 style="font-size:14px;font-weight:600;color:rgba(30,10,2,.92);letter-spacing:.3px;">Utah REIA Voice Agent</h1>
-      <p style="font-size:10px;color:rgba(60,25,5,.75);margin-top:1px;letter-spacing:2px;text-transform:uppercase;">Real-time conversation</p>
+    <a href="https://www.utahreia.org/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <h1 style="font-size:13px;font-weight:600;color:rgba(30,10,2,.88);letter-spacing:1.5px;text-transform:uppercase;">Utah REIA Voice Agent</h1>
+      <p style="font-size:9px;color:rgba(60,25,5,.6);letter-spacing:3px;text-transform:uppercase;">Real-time conversation</p>
     </a>
     <div class="call-timer" id="callTimer"><span class="dot"></span><span id="timerText">00:00</span></div>
   </div>
   <div class="error-banner" id="errorBanner"></div>
-  <div class="quiet-banner" id="quietBanner">
-    <span class="quiet-banner-icon">&#127897;</span>
-    <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation. A few minutes alone is worth it.</span>
-    <button class="quiet-banner-dismiss" id="quietDismiss" aria-label="Dismiss">&#215;</button>
-  </div>
   <div class="setup-screen" id="setupScreen">
     <div class="orb-stage" id="setupOrb">
       <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
     </div>
     <div class="status-label">Begin your journey</div>
-    <div class="setup-sub">Talk with our AI assistant to find the right resources, strategies, and people for where you are in your investing journey.</div>
+    <div class="setup-sub">Tell us where you are. We'll point you to the right people, tools, and next step.</div>
+    <div class="quiet-banner" id="quietBanner">
+      <span class="quiet-banner-icon">&#127897;</span>
+      <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation.</span>
+      <button class="quiet-banner-dismiss" id="quietDismiss" aria-label="Dismiss">&#215;</button>
+    </div>
     <button class="start-btn" id="startBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
