@@ -242,6 +242,49 @@ export default async function handler(req, res) {
       }
     }
 
+    // Write to readiness_surveys table — Map 1 classification record
+    if (SUPABASE_URL && SUPABASE_KEY && contactId) {
+      try {
+        const baseHeaders2 = {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=minimal'
+        };
+        const surveyData = {
+          contact_id: contactId,
+          survey_id: 'voice-agent-intake',
+          survey_name: 'Voice Agent Intake',
+          survey_type: 'voice_agent',
+          submission_id: 'vapi-' + Date.now(),
+          submitted_at: new Date().toISOString(),
+          source: 'voice_agent',
+          answers: JSON.stringify({
+            callerName,
+            callerPhone,
+            profileType,
+            investorStage,
+            strategies: strategiesArray,
+            blocker,
+            goals,
+            summary,
+            recommendedNextStep,
+            path: (investorStage === 'Exploring' || investorStage === 'Getting Started') ? 'A' : 'B'
+          }),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        await fetch(`${SUPABASE_URL}/rest/v1/readiness_surveys`, {
+          method: 'POST',
+          headers: baseHeaders2,
+          body: JSON.stringify(surveyData)
+        });
+        console.log('Readiness survey written for:', callerName);
+      } catch(e) {
+        console.error('Readiness survey write error:', e.message);
+      }
+    }
+
     return res.status(200).json({ ok: true, ghlStatus: ghlResp.status });
 
   } catch(e) {
