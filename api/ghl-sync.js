@@ -185,22 +185,29 @@ export default async function handler(req, res) {
       }
     }
 
-    // Update contact custom fields directly via GHL API
+    // Update contact custom fields via GHL v2 API using Private Integration Token
     const GHL_API_KEY = process.env.GHL_API_KEY;
-    if (GHL_API_KEY && callerName) {
+    if (GHL_API_KEY && callerPhone) {
       try {
-        // Wait briefly for GHL to create the contact
-        await new Promise(r => setTimeout(r, 3000));
+        // Wait briefly for GHL workflow to create the contact first
+        await new Promise(r => setTimeout(r, 4000));
 
-        // Search for the contact by phone
+        // Search for contact by phone using v2 API
         const searchResp = await fetch(
-          `https://rest.gohighlevel.com/v1/contacts/?phone=${encodeURIComponent(callerPhone)}&locationId=DNirEjy0ejVwbHsaBYrn`,
-          { headers: { 'Authorization': `Bearer ${GHL_API_KEY}`, 'Content-Type': 'application/json' } }
-        ).then(r => r.json());
+          `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(callerPhone)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${GHL_API_KEY}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28'
+            }
+          }
+        );
+        const searchData = await searchResp.json();
+        console.log('GHL search status:', searchResp.status);
 
-        const contact = searchResp.contacts?.[0];
+        const contact = searchData.contacts?.[0];
         if (contact?.id) {
-          // Stage mapping to exact GHL option labels
           const stageMap = {
             'Exploring': 'Exploring / New',
             'Getting Started': 'Getting Started',
@@ -210,20 +217,25 @@ export default async function handler(req, res) {
           };
 
           const updateResp = await fetch(
-            `https://rest.gohighlevel.com/v1/contacts/${contact.id}`,
+            `https://services.leadconnectorhq.com/contacts/${contact.id}`,
             {
               method: 'PUT',
-              headers: { 'Authorization': `Bearer ${GHL_API_KEY}`, 'Content-Type': 'application/json' },
+              headers: {
+                'Authorization': `Bearer ${GHL_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28'
+              },
               body: JSON.stringify({
-                customField: {
-                  swDtahR8SAnG4S34s2a6: stageMap[investorStage] || investorStage,
-                  TCCSXzunxUqJme5YtGSr: summary + (recommendedNextStep ? ' Next step: ' + recommendedNextStep : ''),
-                  mTmRVbyZKGqVXqHvhsX6: profileType
-                }
+                customFields: [
+                  { id: 'swDtahR8SAnG4S34s2a6', field_value: stageMap[investorStage] || investorStage },
+                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType }
+                ]
               })
             }
           );
           console.log('GHL contact fields updated:', updateResp.status);
+        } else {
+          console.log('GHL contact not found for phone:', callerPhone);
         }
       } catch(e) {
         console.error('GHL API update error:', e.message);
