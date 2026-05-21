@@ -81,7 +81,8 @@ export default async function handler(req, res) {
         parts.push(`a replay from our ${r.title} event — ${r.description}`);
       } else if (r.resource_type === 'educator') {
         const who = r.educator_name ? `${r.educator_name}` : r.title;
-        parts.push(`${who} — ${r.educator_specialty || r.description}`);
+        const booking = r.booking_url ? ` You can connect with them at ${r.booking_url}` : '';
+        parts.push(`${who} - ${r.educator_specialty || r.description}.${booking}`);
       } else {
         parts.push(`${r.title} — ${r.description}`);
       }
