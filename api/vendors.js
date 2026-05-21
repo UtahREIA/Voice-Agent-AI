@@ -1,5 +1,4 @@
-// Map 2 Vendor Matching — Vapi Tool Call endpoint
-// Accepts blocker and strategy, returns matching vendors from Supabase
+// Map 2 Vendor Matching — all mapping logic from Supabase, no hardcoded knowledge
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -11,50 +10,7 @@ export default async function handler(req, res) {
   }
 
   const { blocker, strategy } = req.body || {};
-  console.log('Vendor match request — blocker:', blocker, 'strategy:', strategy);
-
-  // Map blocker and strategy to service_type search terms
-  const blockerServiceMap = {
-    'capital':     ['Money Lender', 'Hard Money', 'Private Lender', 'Mortgage'],
-    'deals':       ['Bird Dog', 'Real Estate Agent', 'Wholesaler'],
-    'team':        ['Contractors', 'General Contractor', 'Property Manager'],
-    'education':   ['General Education', 'Coach', 'Educator'],
-    'connections': ['Real Estate Agent', 'Bird Dog'],
-    'numbers':     ['Accountant', 'CPA', 'General Education'],
-    'legal':       ['Attorney', 'Legal'],
-    'management':  ['Property Manager']
-  };
-
-  const strategyServiceMap = {
-    'fix_and_flip':        ['Contractors', 'General Contractor', 'Hard Money', 'Money Lender'],
-    'buy_and_hold':        ['Property Manager', 'Money Lender', 'Real Estate Agent'],
-    'wholesaling':         ['Bird Dog', 'Real Estate Agent', 'Contractors'],
-    'brrrr':               ['Contractors', 'Property Manager', 'Money Lender'],
-    'short_term_rental':   ['Property Manager', 'Real Estate Agent'],
-    'commercial':          ['Commercial', 'Attorney', 'Real Estate Agent'],
-    'creative_financing':  ['Attorney', 'Money Lender'],
-    'notes_and_lending':   ['Money Lender', 'Attorney'],
-    'development':         ['Contractors', 'General Contractor', 'Attorney'],
-    'land':                ['Real Estate Agent', 'Attorney']
-  };
-
-  // Build search terms from blocker and strategy
-  const searchTerms = new Set();
-  if (blocker && blockerServiceMap[blocker.toLowerCase()]) {
-    blockerServiceMap[blocker.toLowerCase()].forEach(t => searchTerms.add(t));
-  }
-  if (strategy) {
-    const stratKey = strategy.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and');
-    if (strategyServiceMap[stratKey]) {
-      strategyServiceMap[stratKey].forEach(t => searchTerms.add(t));
-    }
-  }
-
-  // Default to broad search if no terms matched
-  if (searchTerms.size === 0) {
-    searchTerms.add('Real Estate Agent');
-    searchTerms.add('General Education');
-  }
+  console.log('Vendor match — blocker:', blocker, 'strategy:', strategy);
 
   const baseHeaders = {
     'Content-Type': 'application/json',
@@ -63,38 +19,67 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Query vendors with service_types populated — filter by search terms
+    // 1. Get service types for this blocker and strategy from Supabase mapping table
+    const searchTerms = new Set();
+
+    if (blocker) {
+      const blockerResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/blocker_service_mapping?blocker=eq.${encodeURIComponent(blocker.toLowerCase())}&strategy=is.null&select=service_types`,
+        { headers: baseHeaders }
+      );
+      const blockerMappings = await blockerResp.json();
+      blockerMappings.forEach(m => m.service_types?.forEach(t => searchTerms.add(t)));
+    }
+
+    if (strategy) {
+      const stratKey = strategy.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and');
+      const stratResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/blocker_service_mapping?blocker=eq.strategy&strategy=eq.${encodeURIComponent(stratKey)}&select=service_types`,
+        { headers: baseHeaders }
+      );
+      const stratMappings = await stratResp.json();
+      stratMappings.forEach(m => m.service_types?.forEach(t => searchTerms.add(t)));
+    }
+
+    // Default if no terms found
+    if (searchTerms.size === 0) {
+      searchTerms.add('Real Estate Agent');
+      searchTerms.add('General Education');
+    }
+
+    // 2. Query vendors matching those service types
     const vendorResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contractor_specialties,contacts(full_name,company_name,membership_status)&service_types=not.is.null&limit=50`,
+      `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contacts(full_name,company_name,membership_status,phone,email)&service_types=not.is.null&limit=100`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
 
-    // Filter vendors whose service_types overlap with search terms
+    // Filter by matching service types and active membership
     const terms = Array.from(searchTerms).map(t => t.toLowerCase());
     const matched = vendors.filter(v => {
-      if (!v.service_types || !Array.isArray(v.service_types)) return false;
       if (v.contacts?.membership_status !== 'Active') return false;
-      return v.service_types.some(st => terms.some(t => st.toLowerCase().includes(t)));
-    });
+      return v.service_types?.some(st => terms.some(t => st.toLowerCase().includes(t)));
+    }).slice(0, 5);
 
-    // Format results for Vapi
-    const results = matched.slice(0, 5).map(v => {
-      const name = v.contacts?.company_name || v.contacts?.full_name || 'Unknown';
-      const contact = v.contacts?.company_name ? v.contacts?.full_name : null;
-      const services = v.service_types?.join(', ') || '';
-      return contact ? `${name} (${contact}) — ${services}` : `${name} — ${services}`;
-    });
-
-    let resultText = '';
-    if (results.length > 0) {
-      resultText = `Based on what you need, here are the best matches in the Utah REIA community: ${results.join('; ')}. You can connect with any of these through the vendor directory on our website.`;
-    } else {
-      resultText = `We have vendors in our directory for that need. Check the vendor directory on our website and our team can make a direct introduction based on what you are looking for.`;
+    // Format result
+    if (matched.length === 0) {
+      return res.status(200).json({
+        result: 'We have vendors in our directory for that need. Check the vendor directory on our website or ask us to make a direct introduction.'
+      });
     }
 
-    console.log('Vendor match results:', results.length, 'found');
-    return res.status(200).json({ result: resultText });
+    const names = matched.map(v => {
+      const co = v.contacts?.company_name || v.contacts?.full_name || '';
+      const contact = v.contacts?.company_name ? v.contacts?.full_name : null;
+      const services = v.service_types?.slice(0, 2).join(', ') || '';
+      return contact ? `${co} (${contact}) — ${services}` : `${co} — ${services}`;
+    }).join('; ');
+
+    const category = blocker || strategy || 'that need';
+    const result = `Here are the best matches in our community for ${category}: ${names}. You can connect with any of them through the vendor directory on our website.`;
+
+    console.log(`Vendor match — ${matched.length} vendors found for blocker: ${blocker}, strategy: ${strategy}`);
+    return res.status(200).json({ result });
 
   } catch(e) {
     console.error('Vendor match error:', e.message);

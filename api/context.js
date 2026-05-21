@@ -1,10 +1,12 @@
-// Vapi Tool endpoint — called at the start of every conversation
-// Returns live Utah REIA knowledge: board members, vendors, recent events
+// Utah REIA Live Context — fetches all knowledge dynamically from Supabase and GHL
+// No hardcoded knowledge — everything comes from the live data sources
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const GHL_API_KEY  = process.env.GHL_API_KEY;
+  const GHL_LOCATION = 'DNirEjy0ejVwbHsaBYrn';
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(500).json({ error: 'Supabase not configured' });
@@ -16,89 +18,112 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
 
-  const db = async (path) => {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: baseHeaders });
-    if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`);
-    return r.json();
-  };
-
   try {
-    // Fetch board members with their specialties
-    const boardRaw = await db(
-      `contacts?membership_type=eq.Board Member&membership_status=eq.Active&select=full_name,investor_profiles(investing_types,topics_interested_in),vendor_profiles(service_types)&limit=30`
+    // 1. BOARD MEMBERS from Supabase — using is_board_member flag
+    const boardResp = await fetch(
+      `${SUPABASE_URL}/rest/v1/contacts?is_board_member=eq.true&membership_status=eq.Active&select=full_name,member_role,investing_strategies&limit=30`,
+      { headers: baseHeaders }
     );
+    const boardMembers = await boardResp.json();
 
-    const boardMembers = boardRaw.map(c => {
-      const investing = c.investor_profiles?.investing_types || [];
-      const topics    = c.investor_profiles?.topics_interested_in || null;
-      const services  = c.vendor_profiles?.service_types || [];
-      const details   = [...investing, ...(topics ? [topics] : []), ...services].filter(Boolean);
-      return {
-        name: c.full_name,
-        specialties: details.length > 0 ? details.join(', ') : null
-      };
-    }).filter(b => b.name);
-
-    // Fetch active vendors
-    const vendorRaw = await db(
-      `vendor_profiles?select=service_types,contractor_specialties,contacts(full_name,company_name,membership_status)&limit=50`
+    // 2. ACTIVE VENDORS from Supabase — with service_types populated
+    const vendorResp = await fetch(
+      `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contacts(full_name,company_name,membership_status)&service_types=not.is.null&limit=200`,
+      { headers: baseHeaders }
     );
+    const vendors = await vendorResp.json();
+    const activeVendors = vendors.filter(v =>
+      v.contacts?.membership_status === 'Active' &&
+      v.service_types?.length > 0
+    ).slice(0, 20);
 
-    const vendors = vendorRaw
-      .filter(v => v.contacts?.membership_status === 'Active' && v.service_types?.length > 0)
-      .map(v => ({
-        name: v.contacts?.company_name || v.contacts?.full_name,
-        contact: v.contacts?.company_name ? v.contacts?.full_name : null,
-        services: v.service_types,
-        specialties: v.contractor_specialties || []
-      }))
-      .filter(v => v.name);
+    // 3. UPCOMING EVENTS from GHL custom values
+    let events = [];
+    if (GHL_API_KEY) {
+      try {
+        const ghlResp = await fetch(
+          `https://services.leadconnectorhq.com/locations/${GHL_LOCATION}/customValues`,
+          {
+            headers: {
+              'Authorization': `Bearer ${GHL_API_KEY}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28'
+            }
+          }
+        );
+        const ghlData = await ghlResp.json();
+        const customValues = ghlData.customValues || [];
 
-    // Build context string for Vapi
-    let context = 'LIVE UTAH REIA KNOWLEDGE — updated at call start:\n\n';
+        // Extract event slots 1-9 from GHL custom values
+        const today = new Date();
+        for (let slot = 1; slot <= 9; slot++) {
+          const title    = customValues.find(v => v.name === `${slot} Mtg Title`)?.value;
+          const date2    = customValues.find(v => v.name === `${slot} Mtg Date 2`)?.value;
+          const location = customValues.find(v => v.name === `${slot} Mtg Location Name`)?.value;
+          const times    = customValues.find(v => v.name === `${slot} Mtg Times`)?.value;
+          const link     = customValues.find(v => v.name === `${slot} Mtg Monthly Link`)?.value;
 
+          if (title && date2) {
+            const eventDate = new Date(date2);
+            if (!isNaN(eventDate) && eventDate >= today) {
+              events.push({ title, date: date2, location, times, link });
+            }
+          }
+        }
+        // Sort by date ascending
+        events.sort((a, b) => new Date(a.date) - new Date(b.date));
+      } catch(e) {
+        console.error('GHL events fetch error:', e.message);
+      }
+    }
+
+    // BUILD CONTEXT STRING
+    const lines = ['LIVE UTAH REIA KNOWLEDGE — updated at call start:'];
+
+    // Board members
+    lines.push('\nBOARD MEMBERS & LEADERSHIP:');
     if (boardMembers.length > 0) {
-      context += 'BOARD MEMBERS & LEADERSHIP:\n';
-      boardMembers.forEach(b => {
-        context += '- ' + b.name + (b.specialties ? ' — ' + b.specialties : '') + '\n';
+      boardMembers.forEach(m => {
+        const strategies = m.investing_strategies ? ` — ${m.investing_strategies}` : '';
+        lines.push(`- ${m.full_name}${strategies}`);
       });
-      context += '\n';
+    } else {
+      lines.push('- Data temporarily unavailable');
     }
 
-    if (vendors.length > 0) {
-      context += 'ACTIVE VENDORS & SERVICE PROVIDERS:\n';
-      vendors.forEach(v => {
-        const who  = v.contact && v.contact !== v.name ? v.name + ' (contact: ' + v.contact + ')' : v.name;
-        const svcs = v.services.join(', ');
-        const specs = v.specialties?.length > 0 ? ' — specialties: ' + v.specialties.join(', ') : '';
-        context += '- ' + who + ': ' + svcs + specs + '\n';
+    // Active vendors grouped by service type
+    lines.push('\nACTIVE VENDORS & SERVICE PROVIDERS:');
+    if (activeVendors.length > 0) {
+      activeVendors.forEach(v => {
+        const name = v.contacts?.company_name || v.contacts?.full_name || '';
+        const contact = v.contacts?.company_name ? v.contacts?.full_name : null;
+        const services = v.service_types?.slice(0, 2).join(', ') || '';
+        const contactStr = contact ? ` (contact: ${contact})` : '';
+        lines.push(`- ${name}${contactStr}: ${services}`);
       });
-      context += '\n';
+    } else {
+      lines.push('- Data temporarily unavailable');
     }
 
-    context += 'RECENT EVENTS:\n';
-    context += '- How Deals Are Found, Structured, and Funded (April 2026)\n';
-    context += '- Practical AI for Investors and Real Estate Pros (March 2026)\n';
-    context += '- How Credit Impacts Your Investing Power (March 2026)\n';
-    context += '- Structuring Deals Beyond the Bank (March 2026)\n';
-    context += '- Inside a Real Fix and Flip Project (February 2026)\n';
-    context += '- Smarter Renovations That Drive Flip Profits (February 2026)\n';
-    context += '- Note Investing 101 — Turn Paper into Profit (November 2025)\n';
-    context += '- Raise Private Money Like a Pro (August 2025)\n';
+    // Upcoming events from GHL
+    lines.push('\nUPCOMING EVENTS:');
+    if (events.length > 0) {
+      events.slice(0, 5).forEach(e => {
+        const loc = e.location ? ` at ${e.location}` : '';
+        const time = e.times ? `, ${e.times}` : '';
+        lines.push(`- ${e.title} (${e.date}${time}${loc})`);
+      });
+    } else {
+      lines.push('- Check our website for the full events calendar');
+    }
 
-    console.log('Context built — board:', boardMembers.length, 'vendors:', vendors.length);
-
-    // Return in Vapi tool response format
-    return res.status(200).json({
-      result: context.trim()
-    });
+    const result = lines.join('\n');
+    console.log(`Context built — board: ${boardMembers.length} vendors: ${activeVendors.length} events: ${events.length}`);
+    return res.status(200).json({ result });
 
   } catch(e) {
     console.error('Context error:', e.message);
     console.error('Context error stack:', e.stack);
-    console.error('SUPABASE_URL set:', !!process.env.SUPABASE_URL);
-    console.error('SUPABASE_KEY set:', !!process.env.SUPABASE_SERVICE_KEY);
-    console.error('SUPABASE_URL value:', process.env.SUPABASE_URL ? process.env.SUPABASE_URL.substring(0, 40) : 'MISSING');
     return res.status(200).json({
       result: 'Live community data temporarily unavailable. Use the knowledge in your system prompt.',
       error: e.message
