@@ -161,9 +161,9 @@ export default async function handler(req, res) {
       if (contactId && (investorStage || strategiesArray.length)) {
         const profileData = {
           contact_id: contactId,
-          where_in_journey: stageMap[investorStage] || investorStage || null,
-          investing_types: strategiesArray.length ? strategiesArray : null,
-          goals_6_to_12_months: goals ? [goals] : null,
+          investing_journey_stage: stageMap[investorStage] || investorStage || null,
+          investing_interests: strategiesArray.length ? strategiesArray : null,
+          accomplish_next_6_to_12_months: goals ? [goals] : null,
           updated_at: new Date().toISOString()
         };
         const existingProfile = await fetch(
