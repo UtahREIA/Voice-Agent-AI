@@ -1,194 +1,96 @@
-// Member Recognition — looks up caller by phone number in Supabase
+export const config = { api: { bodyParser: true } };
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+  console.log('member-lookup: method=', req.method);
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method not allowed' });
+  }
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-  console.log('--- member-lookup called ---');
-  console.log('SUPABASE_URL set:', !!SUPABASE_URL);
-  console.log('SUPABASE_KEY set:', !!SUPABASE_KEY);
-  console.log('Request body:', JSON.stringify(req.body));
+  console.log('env ok:', !!SUPABASE_URL, !!SUPABASE_KEY);
 
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('Missing Supabase env vars');
-    return res.status(500).json({ error: 'Supabase not configured' });
-  }
+  const body = req.body;
+  const phone = (body && body.phone) ? String(body.phone) : null;
 
-  // Vapi sends tool parameters nested under message.toolCallList[0].function.arguments
-  // Also support direct POST with phone at top level for testing
-  const body = req.body || {};
-  console.log('Full request body:', JSON.stringify(body).substring(0, 500));
-
-  let phone = body.phone;
-
-  // Try Vapi nested format
-  if (!phone) {
-    try {
-      const toolCall = body?.message?.toolCallList?.[0];
-      phone = toolCall?.function?.arguments?.phone;
-      console.log('Extracted phone from Vapi toolCallList:', phone);
-    } catch(e) {
-      console.log('Vapi format extraction failed:', e.message);
-    }
-  }
-
-  // Try alternate Vapi format
-  if (!phone) {
-    try {
-      phone = body?.message?.toolCalls?.[0]?.function?.arguments?.phone;
-      console.log('Extracted phone from toolCalls:', phone);
-    } catch(e) {}
-  }
+  console.log('phone received:', phone);
 
   if (!phone) {
-    console.log('No phone provided in any format');
-    return res.status(200).json({ found: false, result: 'No phone number provided.' });
+    return res.status(200).json({
+      found: false,
+      result: 'I was not able to retrieve your profile. Let me ask you a few questions to help you better.'
+    });
   }
 
-  const normalized = phone.replace(/\D/g, '');
-  const last10 = normalized.slice(-10);
-  console.log('Phone received:', phone, '| normalized last10:', last10);
-
-  const baseHeaders = {
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_KEY,
-    'Authorization': `Bearer ${SUPABASE_KEY}`
-  };
+  const last10 = phone.replace(/\D/g, '').slice(-10);
+  console.log('last10:', last10);
 
   try {
-    // Fetch all contacts with phones and filter in JS
     const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,profile_type,is_board_member,member_role,last_reia_event&phone=not.is.null&limit=500`,
-      { headers: baseHeaders }
+      `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=not.is.null&limit=500`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      }
     );
 
-    console.log('Supabase contacts fetch status:', resp.status);
-    const allContacts = await resp.json();
-    console.log('Total contacts fetched:', allContacts.length);
+    console.log('supabase status:', resp.status);
+    const all = await resp.json();
+    console.log('contacts count:', Array.isArray(all) ? all.length : 'not array');
 
-    if (!Array.isArray(allContacts)) {
-      console.error('Unexpected contacts response:', JSON.stringify(allContacts));
-      return res.status(200).json({ found: false, result: 'Database error. Please continue.' });
+    const match = Array.isArray(all)
+      ? all.find(c => c.phone && c.phone.replace(/\D/g, '').slice(-10) === last10)
+      : null;
+
+    console.log('match:', match ? match.full_name : 'none');
+
+    if (!match) {
+      return res.status(200).json({
+        found: false,
+        result: 'I was not able to find your profile in our system. Let me ask you a few questions to point you in the right direction.'
+      });
     }
 
-    // Filter by last 10 digits
-    const contacts = allContacts.filter(c => {
-      if (!c.phone) return false;
-      const digits = c.phone.replace(/\D/g, '');
-      const match = digits.slice(-10) === last10;
-      if (match) console.log('MATCH FOUND:', c.full_name, c.phone);
-      return match;
-    });
+    const name = match.full_name?.split(' ')[0] || 'there';
+    const status = match.membership_status || '';
+    const memberType = match.membership_type || '';
+    const isBoard = match.is_board_member || false;
+    const lastEvent = match.last_reia_event || '';
 
-    console.log('Matching contacts:', contacts.length);
+    let greeting = status === 'Active'
+      ? `Welcome back ${name}, great to hear from you again.`
+      : `Hey ${name}, good to connect with you.`;
 
-    if (contacts.length === 0) {
-      console.log('No member found for phone:', last10);
-      return res.status(200).json({ found: false, result: 'not_found' });
+    const facts = [];
+    if (memberType) facts.push(`you are a ${memberType} member`);
+    if (lastEvent) facts.push(`you attended ${lastEvent}`);
+    if (isBoard) facts.push(`you are one of our board members`);
+
+    if (facts.length > 0) {
+      greeting += ` I can see ${facts.slice(0, 2).join(' and ')}.`;
     }
 
-    const contact = contacts[0];
-    const contactId = contact.id;
-    const memberName = contact.full_name?.split(' ')[0] || 'there';
-    const status = contact.membership_status || 'Unknown';
-    const memberType = contact.membership_type || null;
-    const isBoard = contact.is_board_member;
+    greeting += ' What can I help you with today?';
 
-    console.log('Contact found:', memberName, '| status:', status, '| id:', contactId);
-
-    // Fetch investor profile
-    const profileResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months&limit=1`,
-      { headers: baseHeaders }
-    );
-    const profiles = await profileResp.json();
-    const profile = profiles?.[0] || null;
-    console.log('Investor profile found:', !!profile);
-
-    // Fetch event attendance
-    const eventResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/event_attendance?contact_id=eq.${contactId}&select=event_name,attended_at&order=attended_at.desc&limit=3`,
-      { headers: baseHeaders }
-    );
-    const events = await eventResp.json();
-    console.log('Events attended:', events?.length || 0);
-
-    // Fetch last voice agent survey
-    const surveyResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/readiness_surveys?contact_id=eq.${contactId}&source=eq.voice_agent&select=answers,created_at&order=created_at.desc&limit=1`,
-      { headers: baseHeaders }
-    );
-    const surveys = await surveyResp.json();
-    const lastSurvey = surveys?.[0] || null;
-
-    // Build personalized greeting
-    const parts = [];
-
-    if (status === 'Active') {
-      parts.push(`Welcome back ${memberName}, good to hear from you again.`);
-    } else if (status === 'Inactive') {
-      parts.push(`Hey ${memberName}, welcome back, looks like you have been with us before.`);
-    } else {
-      parts.push(`Hey ${memberName}, good to connect with you.`);
-    }
-
-    const knownFacts = [];
-
-    const stage = profile?.investing_journey_stage;
-    if (stage) knownFacts.push(`you are at the ${stage} stage`);
-
-    const strategyList = profile?.investing_interests;
-    if (strategyList?.length > 0) {
-      const stratStr = Array.isArray(strategyList)
-        ? strategyList.slice(0, 2).join(' and ')
-        : strategyList;
-      knownFacts.push(`you have been focused on ${stratStr}`);
-    }
-
-    if (memberType) knownFacts.push(`you are a ${memberType} member`);
-
-    if (contact.last_reia_event && events?.length === 0) {
-      knownFacts.push(`you attended ${contact.last_reia_event}`);
-    }
-
-    if (events?.length > 0) {
-      const names = events.map(e => e.event_name).filter(Boolean).slice(0, 2);
-      if (names.length > 0) knownFacts.push(`you attended ${names.join(' and ')}`);
-    }
-
-    if (lastSurvey?.answers) {
-      try {
-        const answers = typeof lastSurvey.answers === 'string'
-          ? JSON.parse(lastSurvey.answers)
-          : lastSurvey.answers;
-        if (answers.blocker) knownFacts.push(`last time your main blocker was ${answers.blocker}`);
-      } catch(e) {}
-    }
-
-    if (isBoard) knownFacts.push(`you are one of our board members`);
-
-    if (knownFacts.length > 0) {
-      parts.push(`I can see ${knownFacts.slice(0, 3).join(', and ')}.`);
-    }
-
-    parts.push(`What can I help you with today?`);
-
-    const result = parts.join(' ');
-    console.log('Final greeting:', result);
+    console.log('greeting built:', greeting.substring(0, 100));
 
     return res.status(200).json({
       found: true,
-      member_name: memberName,
+      member_name: name,
       membership_status: status,
-      stage: stage || null,
-      strategies: strategyList || null,
-      is_board: isBoard || false,
-      result
+      result: greeting
     });
 
-  } catch(e) {
-    console.error('Member lookup EXCEPTION:', e.message, e.stack);
-    return res.status(200).json({ found: false, result: 'not_found' });
+  } catch (e) {
+    console.error('error:', e.message);
+    return res.status(200).json({
+      found: false,
+      result: 'I was not able to retrieve your profile right now. Let me ask you a few questions instead.'
+    });
   }
 }
