@@ -1,8 +1,6 @@
 export const config = { api: { bodyParser: true } };
 
 export default async function handler(req, res) {
-  console.log('member-lookup: method=', req.method);
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'method not allowed' });
   }
@@ -10,22 +8,24 @@ export default async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-  console.log('env ok:', !!SUPABASE_URL, !!SUPABASE_KEY);
+  const body = req.body || {};
+  const phone = body.phone ? String(body.phone) : null;
+  const last10 = phone ? phone.replace(/\D/g, '').slice(-10) : null;
 
-  const body = req.body;
-  const phone = (body && body.phone) ? String(body.phone) : null;
-
-  console.log('phone received:', phone);
+  // If no phone or env missing return diagnostic info in result
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return res.status(200).json({
+      found: false,
+      result: `DEBUG: Supabase env missing. phone_received=${phone}`
+    });
+  }
 
   if (!phone) {
     return res.status(200).json({
       found: false,
-      result: 'I was not able to retrieve your profile. Let me ask you a few questions to help you better.'
+      result: `DEBUG: No phone received. body_keys=${Object.keys(body).join(',') || 'empty'}`
     });
   }
-
-  const last10 = phone.replace(/\D/g, '').slice(-10);
-  console.log('last10:', last10);
 
   try {
     const resp = await fetch(
@@ -39,20 +39,23 @@ export default async function handler(req, res) {
       }
     );
 
-    console.log('supabase status:', resp.status);
     const all = await resp.json();
-    console.log('contacts count:', Array.isArray(all) ? all.length : 'not array');
 
-    const match = Array.isArray(all)
-      ? all.find(c => c.phone && c.phone.replace(/\D/g, '').slice(-10) === last10)
-      : null;
+    if (!Array.isArray(all)) {
+      return res.status(200).json({
+        found: false,
+        result: `DEBUG: Supabase error. phone=${last10} status=${resp.status}`
+      });
+    }
 
-    console.log('match:', match ? match.full_name : 'none');
+    const match = all.find(c =>
+      c.phone && c.phone.replace(/\D/g, '').slice(-10) === last10
+    );
 
     if (!match) {
       return res.status(200).json({
         found: false,
-        result: 'I was not able to find your profile in our system. Let me ask you a few questions to point you in the right direction.'
+        result: `DEBUG: No match. phone=${last10} total_contacts=${all.length} sample=${all.slice(0,2).map(c=>c.phone).join('|')}`
       });
     }
 
@@ -77,8 +80,6 @@ export default async function handler(req, res) {
 
     greeting += ' What can I help you with today?';
 
-    console.log('greeting built:', greeting.substring(0, 100));
-
     return res.status(200).json({
       found: true,
       member_name: name,
@@ -87,10 +88,9 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
-    console.error('error:', e.message);
     return res.status(200).json({
       found: false,
-      result: 'I was not able to retrieve your profile right now. Let me ask you a few questions instead.'
+      result: `DEBUG: Exception - ${e.message}. phone=${last10}`
     });
   }
 }
