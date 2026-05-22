@@ -39,8 +39,17 @@ export default async function handler(req, res) {
       `${last10.slice(0,3)}-${last10.slice(3,6)}-${last10.slice(6)}`
     ].map(v => encodeURIComponent(v)).join(',');
 
+    // Build digit-only pattern for flexible phone matching
+    // Supabase stores phones as (801) 604-6038 format
+    // We match by checking if the digits of the stored phone contain our last 10 digits
+    const area = last10.slice(0, 3);
+    const mid = last10.slice(3, 6);
+    const end = last10.slice(6);
+    const formattedPhone = `(${area}) ${mid}-${end}`;
+
+    // Try formatted match first, then digit-based fallback
     const contactResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?or=(phone.eq.${encodeURIComponent(last10)},phone.eq.${encodeURIComponent('+1'+last10)},phone.eq.${encodeURIComponent('1'+last10)})&select=id,full_name,membership_status,investing_strategies,is_board_member,member_role&limit=1`,
+      `${SUPABASE_URL}/rest/v1/contacts?or=(phone.eq.${encodeURIComponent(formattedPhone)},phone.eq.${encodeURIComponent(last10)},phone.eq.${encodeURIComponent('+1'+last10)},phone.ilike.${encodeURIComponent('%'+area+'%'+mid+'%'+end+'%')})&select=id,full_name,membership_status,investing_strategies,is_board_member,member_role&limit=1`,
       { headers: baseHeaders }
     );
     const contacts = await contactResp.json();
