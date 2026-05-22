@@ -39,20 +39,30 @@ export default async function handler(req, res) {
       `${last10.slice(0,3)}-${last10.slice(3,6)}-${last10.slice(6)}`
     ].map(v => encodeURIComponent(v)).join(',');
 
-    // Build digit-only pattern for flexible phone matching
-    // Supabase stores phones as (801) 604-6038 format
-    // We match by checking if the digits of the stored phone contain our last 10 digits
+    // Build all phone format variants to try
     const area = last10.slice(0, 3);
     const mid = last10.slice(3, 6);
     const end = last10.slice(6);
     const formattedPhone = `(${area}) ${mid}-${end}`;
 
-    // Try formatted match first, then digit-based fallback
-    const contactResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?or=(phone.eq.${encodeURIComponent(formattedPhone)},phone.eq.${encodeURIComponent(last10)},phone.eq.${encodeURIComponent('+1'+last10)},phone.ilike.${encodeURIComponent('%'+area+'%'+mid+'%'+end+'%')})&select=id,full_name,membership_status,investing_strategies,is_board_member,member_role&limit=1`,
+    console.log('Trying phone formats:', formattedPhone, last10, '+1'+last10);
+
+    // Use Supabase RPC or fetch all and filter in JS
+    // Fetch contacts and filter by phone digits in application layer
+    const allContactsResp = await fetch(
+      `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,profile_type,is_board_member,member_role,last_reia_event,first_meeting_date&phone=not.is.null&limit=500`,
       { headers: baseHeaders }
     );
-    const contacts = await contactResp.json();
+    const allContacts = await allContactsResp.json();
+
+    // Filter in JS by stripping non-digits and comparing last 10
+    const contacts = allContacts.filter(c => {
+      if (!c.phone) return false;
+      const digits = c.phone.replace(/\D/g, '');
+      return digits.slice(-10) === last10;
+    });
+
+    console.log(`Found ${allContacts.length} contacts total, ${contacts.length} matching phone ${last10}`);
 
     if (!contacts || contacts.length === 0) {
       console.log('Member not found for phone:', last10);
@@ -63,8 +73,11 @@ export default async function handler(req, res) {
     const contactId = contact.id;
     const memberName = contact.full_name?.split(' ')[0] || 'there';
     const status = contact.membership_status || 'Unknown';
-    const strategies = contact.investing_strategies;
+    const memberType = contact.membership_type || null;
+    const profileType = contact.profile_type || null;
     const isBoard = contact.is_board_member;
+    const lastEvent = contact.last_reia_event || null;
+    const firstMeeting = contact.first_meeting_date || null;
 
     // Fetch investor profile
     const profileResp = await fetch(
@@ -108,13 +121,23 @@ export default async function handler(req, res) {
     const stage = profile?.investing_journey_stage;
     if (stage) knownFacts.push(`you are at the ${stage} stage`);
 
-    // Strategies
-    const strategyList = strategies || profile?.investing_interests;
+    // Strategies from investor profile
+    const strategyList = profile?.investing_interests;
     if (strategyList && strategyList.length > 0) {
       const stratStr = Array.isArray(strategyList)
         ? strategyList.slice(0, 2).join(' and ')
         : strategyList;
       knownFacts.push(`you have been focused on ${stratStr}`);
+    }
+
+    // Membership type
+    if (memberType) {
+      knownFacts.push(`you are a ${memberType} member`);
+    }
+
+    // Last event from contacts table
+    if (lastEvent && events.length === 0) {
+      knownFacts.push(`you attended ${lastEvent}`);
     }
 
     // Goal
