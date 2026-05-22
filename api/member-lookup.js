@@ -15,10 +15,34 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
-  const { phone } = req.body || {};
+  // Vapi sends tool parameters nested under message.toolCallList[0].function.arguments
+  // Also support direct POST with phone at top level for testing
+  const body = req.body || {};
+  console.log('Full request body:', JSON.stringify(body).substring(0, 500));
+
+  let phone = body.phone;
+
+  // Try Vapi nested format
+  if (!phone) {
+    try {
+      const toolCall = body?.message?.toolCallList?.[0];
+      phone = toolCall?.function?.arguments?.phone;
+      console.log('Extracted phone from Vapi toolCallList:', phone);
+    } catch(e) {
+      console.log('Vapi format extraction failed:', e.message);
+    }
+  }
+
+  // Try alternate Vapi format
+  if (!phone) {
+    try {
+      phone = body?.message?.toolCalls?.[0]?.function?.arguments?.phone;
+      console.log('Extracted phone from toolCalls:', phone);
+    } catch(e) {}
+  }
 
   if (!phone) {
-    console.log('No phone provided');
+    console.log('No phone provided in any format');
     return res.status(200).json({ found: false, result: 'No phone number provided.' });
   }
 
