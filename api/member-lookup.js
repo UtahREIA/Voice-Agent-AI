@@ -1,27 +1,30 @@
 // Member Recognition — looks up caller by phone number in Supabase
-// Called after caller confirms their phone number
-// Returns personalized member profile if found, or not_found signal
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
+  console.log('--- member-lookup called ---');
+  console.log('SUPABASE_URL set:', !!SUPABASE_URL);
+  console.log('SUPABASE_KEY set:', !!SUPABASE_KEY);
+  console.log('Request body:', JSON.stringify(req.body));
+
   if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('Missing Supabase env vars');
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
   const { phone } = req.body || {};
 
   if (!phone) {
-    return res.status(200).json({ found: false, result: 'not_found' });
+    console.log('No phone provided');
+    return res.status(200).json({ found: false, result: 'No phone number provided.' });
   }
 
-  // Normalize phone — strip everything except digits
   const normalized = phone.replace(/\D/g, '');
   const last10 = normalized.slice(-10);
-
-  console.log('Member lookup — phone:', last10);
+  console.log('Phone received:', phone, '| normalized last10:', last10);
 
   const baseHeaders = {
     'Content-Type': 'application/json',
@@ -30,42 +33,34 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Search contacts by phone — try multiple formats
-    const phoneVariants = [
-      last10,
-      `+1${last10}`,
-      `1${last10}`,
-      `(${last10.slice(0,3)}) ${last10.slice(3,6)}-${last10.slice(6)}`,
-      `${last10.slice(0,3)}-${last10.slice(3,6)}-${last10.slice(6)}`
-    ].map(v => encodeURIComponent(v)).join(',');
-
-    // Build all phone format variants to try
-    const area = last10.slice(0, 3);
-    const mid = last10.slice(3, 6);
-    const end = last10.slice(6);
-    const formattedPhone = `(${area}) ${mid}-${end}`;
-
-    console.log('Trying phone formats:', formattedPhone, last10, '+1'+last10);
-
-    // Use Supabase RPC or fetch all and filter in JS
-    // Fetch contacts and filter by phone digits in application layer
-    const allContactsResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,profile_type,is_board_member,member_role,last_reia_event,first_meeting_date&phone=not.is.null&limit=500`,
+    // Fetch all contacts with phones and filter in JS
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,profile_type,is_board_member,member_role,last_reia_event&phone=not.is.null&limit=500`,
       { headers: baseHeaders }
     );
-    const allContacts = await allContactsResp.json();
 
-    // Filter in JS by stripping non-digits and comparing last 10
+    console.log('Supabase contacts fetch status:', resp.status);
+    const allContacts = await resp.json();
+    console.log('Total contacts fetched:', allContacts.length);
+
+    if (!Array.isArray(allContacts)) {
+      console.error('Unexpected contacts response:', JSON.stringify(allContacts));
+      return res.status(200).json({ found: false, result: 'Database error. Please continue.' });
+    }
+
+    // Filter by last 10 digits
     const contacts = allContacts.filter(c => {
       if (!c.phone) return false;
       const digits = c.phone.replace(/\D/g, '');
-      return digits.slice(-10) === last10;
+      const match = digits.slice(-10) === last10;
+      if (match) console.log('MATCH FOUND:', c.full_name, c.phone);
+      return match;
     });
 
-    console.log(`Found ${allContacts.length} contacts total, ${contacts.length} matching phone ${last10}`);
+    console.log('Matching contacts:', contacts.length);
 
-    if (!contacts || contacts.length === 0) {
-      console.log('Member not found for phone:', last10);
+    if (contacts.length === 0) {
+      console.log('No member found for phone:', last10);
       return res.status(200).json({ found: false, result: 'not_found' });
     }
 
@@ -74,27 +69,28 @@ export default async function handler(req, res) {
     const memberName = contact.full_name?.split(' ')[0] || 'there';
     const status = contact.membership_status || 'Unknown';
     const memberType = contact.membership_type || null;
-    const profileType = contact.profile_type || null;
     const isBoard = contact.is_board_member;
-    const lastEvent = contact.last_reia_event || null;
-    const firstMeeting = contact.first_meeting_date || null;
+
+    console.log('Contact found:', memberName, '| status:', status, '| id:', contactId);
 
     // Fetch investor profile
     const profileResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months,what_best_describes_you_now&limit=1`,
+      `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months&limit=1`,
       { headers: baseHeaders }
     );
     const profiles = await profileResp.json();
     const profile = profiles?.[0] || null;
+    console.log('Investor profile found:', !!profile);
 
-    // Fetch recent event attendance
+    // Fetch event attendance
     const eventResp = await fetch(
       `${SUPABASE_URL}/rest/v1/event_attendance?contact_id=eq.${contactId}&select=event_name,attended_at&order=attended_at.desc&limit=3`,
       { headers: baseHeaders }
     );
     const events = await eventResp.json();
+    console.log('Events attended:', events?.length || 0);
 
-    // Fetch most recent voice agent survey
+    // Fetch last voice agent survey
     const surveyResp = await fetch(
       `${SUPABASE_URL}/rest/v1/readiness_surveys?contact_id=eq.${contactId}&source=eq.voice_agent&select=answers,created_at&order=created_at.desc&limit=1`,
       { headers: baseHeaders }
@@ -105,96 +101,70 @@ export default async function handler(req, res) {
     // Build personalized greeting
     const parts = [];
 
-    // Member status intro
     if (status === 'Active') {
-      parts.push(`Welcome back ${memberName} — good to hear from you again.`);
+      parts.push(`Welcome back ${memberName}, good to hear from you again.`);
     } else if (status === 'Inactive') {
-      parts.push(`Hey ${memberName}, welcome back — looks like you have been with us before.`);
+      parts.push(`Hey ${memberName}, welcome back, looks like you have been with us before.`);
     } else {
-      parts.push(`Hey ${memberName}, I found your profile.`);
+      parts.push(`Hey ${memberName}, good to connect with you.`);
     }
 
-    // What we know about them
     const knownFacts = [];
 
-    // Investing stage
     const stage = profile?.investing_journey_stage;
     if (stage) knownFacts.push(`you are at the ${stage} stage`);
 
-    // Strategies from investor profile
     const strategyList = profile?.investing_interests;
-    if (strategyList && strategyList.length > 0) {
+    if (strategyList?.length > 0) {
       const stratStr = Array.isArray(strategyList)
         ? strategyList.slice(0, 2).join(' and ')
         : strategyList;
       knownFacts.push(`you have been focused on ${stratStr}`);
     }
 
-    // Membership type
-    if (memberType) {
-      knownFacts.push(`you are a ${memberType} member`);
+    if (memberType) knownFacts.push(`you are a ${memberType} member`);
+
+    if (contact.last_reia_event && events?.length === 0) {
+      knownFacts.push(`you attended ${contact.last_reia_event}`);
     }
 
-    // Last event from contacts table
-    if (lastEvent && events.length === 0) {
-      knownFacts.push(`you attended ${lastEvent}`);
+    if (events?.length > 0) {
+      const names = events.map(e => e.event_name).filter(Boolean).slice(0, 2);
+      if (names.length > 0) knownFacts.push(`you attended ${names.join(' and ')}`);
     }
 
-    // Goal
-    const goal = profile?.accomplish_next_6_to_12_months;
-    if (goal && Array.isArray(goal) && goal.length > 0) {
-      knownFacts.push(`your goal has been to ${goal[0]}`);
-    }
-
-    // Recent events
-    if (events && events.length > 0) {
-      const eventNames = events.map(e => e.event_name).filter(Boolean).slice(0, 2);
-      if (eventNames.length > 0) {
-        knownFacts.push(`you attended ${eventNames.join(' and ')}`);
-      }
-    }
-
-    // Last voice agent call context
     if (lastSurvey?.answers) {
       try {
         const answers = typeof lastSurvey.answers === 'string'
           ? JSON.parse(lastSurvey.answers)
           : lastSurvey.answers;
-        if (answers.blocker) {
-          knownFacts.push(`last time you mentioned ${answers.blocker} was your main blocker`);
-        }
+        if (answers.blocker) knownFacts.push(`last time your main blocker was ${answers.blocker}`);
       } catch(e) {}
     }
 
-    // Board member acknowledgment
-    if (isBoard) {
-      knownFacts.push(`you are one of our board members`);
-    }
+    if (isBoard) knownFacts.push(`you are one of our board members`);
 
-    // Build the recognition sentence
     if (knownFacts.length > 0) {
-      const factsStr = knownFacts.slice(0, 3).join(', and ');
-      parts.push(`I can see ${factsStr}.`);
+      parts.push(`I can see ${knownFacts.slice(0, 3).join(', and ')}.`);
     }
 
     parts.push(`What can I help you with today?`);
 
     const result = parts.join(' ');
-
-    console.log(`Member found: ${memberName} | status: ${status} | stage: ${stage}`);
+    console.log('Final greeting:', result);
 
     return res.status(200).json({
       found: true,
       member_name: memberName,
       membership_status: status,
-      stage: profile?.investing_journey_stage || null,
+      stage: stage || null,
       strategies: strategyList || null,
       is_board: isBoard || false,
       result
     });
 
   } catch(e) {
-    console.error('Member lookup error:', e.message);
+    console.error('Member lookup EXCEPTION:', e.message, e.stack);
     return res.status(200).json({ found: false, result: 'not_found' });
   }
 }
