@@ -7,23 +7,19 @@ export default async function handler(req, res) {
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
-
   const body = req.body || {};
   const phone = body.phone ? String(body.phone) : null;
   const last10 = phone ? phone.replace(/\D/g, '').slice(-10) : null;
 
-  // If no phone or env missing return diagnostic info in result
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(200).json({
-      found: false,
-      result: `DEBUG: Supabase env missing. phone_received=${phone}`
+      result: `Member profile lookup unavailable. phone_received=${phone}`
     });
   }
 
   if (!phone) {
     return res.status(200).json({
-      found: false,
-      result: `DEBUG: No phone received. body_keys=${Object.keys(body).join(',') || 'empty'}`
+      result: `No phone number received. body_keys=${Object.keys(body).join(',') || 'empty body'}`
     });
   }
 
@@ -43,8 +39,7 @@ export default async function handler(req, res) {
 
     if (!Array.isArray(all)) {
       return res.status(200).json({
-        found: false,
-        result: `DEBUG: Supabase error. phone=${last10} status=${resp.status}`
+        result: `Database error. phone=${last10} status=${resp.status}`
       });
     }
 
@@ -54,8 +49,7 @@ export default async function handler(req, res) {
 
     if (!match) {
       return res.status(200).json({
-        found: false,
-        result: `DEBUG: No match. phone=${last10} total_contacts=${all.length} sample=${all.slice(0,2).map(c=>c.phone).join('|')}`
+        result: `not_found. phone=${last10} total=${all.length} samples=${all.slice(0,3).map(c=>c.phone.replace(/\D/g,'').slice(-10)).join('|')}`
       });
     }
 
@@ -80,17 +74,11 @@ export default async function handler(req, res) {
 
     greeting += ' What can I help you with today?';
 
-    return res.status(200).json({
-      found: true,
-      member_name: name,
-      membership_status: status,
-      result: greeting
-    });
+    return res.status(200).json({ result: greeting });
 
   } catch (e) {
     return res.status(200).json({
-      found: false,
-      result: `DEBUG: Exception - ${e.message}. phone=${last10}`
+      result: `Exception: ${e.message}. phone=${last10}`
     });
   }
 }
