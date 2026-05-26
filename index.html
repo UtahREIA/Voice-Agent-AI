@@ -701,9 +701,11 @@ async function startCall() {
     // Always set liveContext even if contextBlock is empty so memberProfileBlock gets through
     overrides.variableValues.liveContext = (contextBlock || '') + (memberProfileBlock ? '\n\n' + memberProfileBlock : '');
 
-    // Override first message if member profile found
+    // Set first message based on whether member was found
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
-      overrides.firstMessage = "Give me just a moment while I pull up your profile.";
+      overrides.firstMessage = "Aloha, welcome back.";
+    } else {
+      overrides.firstMessage = "Aloha, welcome to Utah REIA. Before we dive in, what is your first name?";
     }
 
     await vapi.start(VAPI_ASSISTANT_ID, overrides);
