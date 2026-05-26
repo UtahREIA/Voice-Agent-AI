@@ -675,6 +675,8 @@ async function startCall() {
           const memberData = await memberResp.json();
           if (memberData.result && !memberData.result.startsWith('not_found') && !memberData.result.startsWith('No phone') && !memberData.result.startsWith('Exception')) {
             memberProfileBlock = 'RETURNING MEMBER PROFILE:\n' + memberData.result;
+            // Extract first name from result for greeting
+            window._memberFirstName = memberData.member_name || '';
             log('Member profile loaded for: ' + preCallPhone, 'ok');
           } else {
             memberProfileBlock = 'MEMBER LOOKUP: No profile found for this phone number. Proceed with normal intake.';
@@ -703,7 +705,10 @@ async function startCall() {
 
     // Set first message based on whether member was found
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
-      overrides.firstMessage = "Aloha, welcome back.";
+      const firstName = window._memberFirstName || '';
+      overrides.firstMessage = firstName
+        ? "Aloha " + firstName + ", glad you reached out to Utah REIA. How can I help you today?"
+        : "Aloha, glad you reached out to Utah REIA. How can I help you today?";
     } else {
       overrides.firstMessage = "Aloha, welcome to Utah REIA. Before we dive in, what is your first name?";
     }
