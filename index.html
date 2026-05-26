@@ -403,6 +403,13 @@
     </div>
     <div class="status-label">Begin your journey</div>
     <div class="setup-sub">Tell us where you are. We'll point you to the right people, tools, and next step.</div>
+    <div style="width:100%;max-width:320px;margin:12px auto 0;">
+      <input type="tel" id="preCallPhone" placeholder="Your phone number (optional)"
+        style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(120,60,10,.25);background:rgba(255,245,230,.6);font-size:14px;font-family:'DM Sans',sans-serif;color:rgba(30,10,2,.85);outline:none;box-sizing:border-box;text-align:center;"
+        inputmode="tel" autocomplete="tel"
+      />
+      <div id="memberGreeting" style="display:none;margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(40,140,30,.1);border:1px solid rgba(40,140,30,.25);font-size:13px;color:rgba(20,80,10,.9);font-family:'DM Sans',sans-serif;text-align:center;line-height:1.5;"></div>
+    </div>
     <div class="quiet-banner" id="quietBanner">
       <span class="quiet-banner-icon">&#127897;</span>
       <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation.</span>
@@ -653,6 +660,34 @@ async function startCall() {
       log('Context fetch failed - using fallback: ' + e.message);
     }
 
+    // Pre-call member lookup using phone number if provided
+    let memberProfileBlock = '';
+    const preCallPhoneInput = document.getElementById('preCallPhone');
+    const preCallPhone = preCallPhoneInput ? preCallPhoneInput.value.trim() : '';
+    if (preCallPhone) {
+      try {
+        const memberResp = await fetch('/api/member-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: preCallPhone })
+        });
+        if (memberResp.ok) {
+          const memberData = await memberResp.json();
+          if (memberData.result && !memberData.result.startsWith('not_found') && !memberData.result.startsWith('No phone') && !memberData.result.startsWith('Exception')) {
+            memberProfileBlock = 'RETURNING MEMBER PROFILE:\n' + memberData.result;
+            log('Member profile loaded for: ' + preCallPhone, 'ok');
+          } else {
+            memberProfileBlock = 'MEMBER LOOKUP: No profile found for this phone number. Proceed with normal intake.';
+            log('Member not found for: ' + preCallPhone);
+          }
+        }
+      } catch(e) {
+        log('Member lookup failed: ' + e.message);
+      }
+    } else {
+      memberProfileBlock = 'MEMBER LOOKUP: No phone provided before call. Collect phone number during intake.';
+    }
+
     // Inject context into Vapi as a system message override
     const overrides = {
       variableValues: {
@@ -664,7 +699,7 @@ async function startCall() {
 
     // Pass context as a variable so Vapi injects it into the conversation
     if (contextBlock) {
-      overrides.variableValues.liveContext = contextBlock;
+      overrides.variableValues.liveContext = contextBlock + (memberProfileBlock ? '\n\n' + memberProfileBlock : '');
     }
 
     await vapi.start(VAPI_ASSISTANT_ID, overrides);
@@ -721,6 +756,31 @@ async function syncToGHL() {
 
 // Event listeners
 startBtn.addEventListener('click', startCall);
+
+// Pre-call phone lookup — check member when they leave the phone field
+const preCallPhoneInput = document.getElementById('preCallPhone');
+const memberGreeting = document.getElementById('memberGreeting');
+if (preCallPhoneInput) {
+  preCallPhoneInput.addEventListener('blur', async () => {
+    const phone = preCallPhoneInput.value.trim();
+    if (phone.replace(/\D/g, '').length >= 10) {
+      try {
+        const resp = await fetch('/api/member-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.result && !data.result.startsWith('not_found') && !data.result.startsWith('No phone') && !data.result.startsWith('Exception')) {
+            memberGreeting.textContent = data.result.split('.')[0] + '.';
+            memberGreeting.style.display = 'block';
+          }
+        }
+      } catch(e) {}
+    }
+  });
+}
 endBtn.addEventListener('click', endCall);
 
 toggleBtn.addEventListener('click', () => {
