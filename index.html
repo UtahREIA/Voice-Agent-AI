@@ -502,7 +502,7 @@ function setStatus(state, text) {
     thinking:  'Thinking...',
     speaking:  'Speaking'
   };
-  if (statusLabel) statusLabel.textContent = labels[state] || text;
+  if (statusLabel) statusLabel.textContent = text || labels[state] || text;
 }
 
 function updateTimer() {
@@ -593,6 +593,23 @@ function initVapi() {
       if (msg.role === 'assistant' && msg.transcriptType === 'final') {
         addMessage('assistant', msg.transcript);
       }
+    }
+
+    // Show thinking state when tool calls are in progress
+    if (msg.type === 'tool-calls' || msg.type === 'tool-call-result') {
+      const toolName = msg.toolCallList?.[0]?.function?.name || msg.toolCalls?.[0]?.function?.name || '';
+      if (toolName === 'getMemberProfile') {
+        setStatus('thinking', 'Finding your profile...');
+      } else {
+        setStatus('thinking', 'Finding resources...');
+      }
+    }
+
+    // Return to speaking when tool result is processed
+    if (msg.type === 'tool-call-result') {
+      setTimeout(() => {
+        if (callActive) setStatus('speaking', 'Speaking');
+      }, 300);
     }
   });
 
