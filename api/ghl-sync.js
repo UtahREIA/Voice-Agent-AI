@@ -1,3 +1,42 @@
+/**
+ * Vapi → GHL + Supabase sync endpoint. This is the call-lifecycle webhook that
+ * Vapi POSTs to for every event during a voice call. We only act on two event
+ * types and ignore the rest with a 200:
+ *
+ *   1) "conversation-update" (mid-call):
+ *      Scans the rolling transcript for a user message that looks like a phone
+ *      number (≥10 digits when non-digits are stripped). If found and we
+ *      haven't already returned a profile for this call (detected via a
+ *      MEMBER_PROFILE: marker in the conversation history), looks the member
+ *      up in Supabase and returns a `messageResponse.content` block that Vapi
+ *      injects into the conversation as a system message. The injected
+ *      profile tells Claude the caller's name, membership tier, journey
+ *      stage, strategies, recent events, and prior blocker so it can skip
+ *      the qualifying questions and personalize the greeting.
+ *
+ *   2) "end-of-call-report" (post-call):
+ *      Reads Vapi structuredOutputs (per-tool extracted fields keyed by output
+ *      ID), then performs three writes:
+ *        a) POSTs a flattened payload to GHL_WEBHOOK_URL (firstName, lastName,
+ *           tags, customFields with hard-coded GHL field IDs) so the GHL
+ *           workflow can create/update the contact.
+ *        b) Upserts the contact + investor_profile in Supabase, keyed by
+ *           email when present, falling back to phone.
+ *        c) After a 4s delay (to let the GHL workflow create the contact),
+ *           searches GHL by phone and PATCHes the contact's custom fields via
+ *           the v2 LeadConnector API.
+ *        d) Writes a row to `readiness_surveys` so downstream analytics can
+ *           track Map 1 (intake) classification, including path A vs B.
+ *
+ * Required env vars: SUPABASE_URL, SUPABASE_SERVICE_KEY, GHL_WEBHOOK_URL,
+ * GHL_API_KEY. Missing vars degrade gracefully (the affected write is skipped
+ * and logged) rather than failing the whole request.
+ *
+ * @param {import('http').IncomingMessage & { body: any, method: string }} req - Vapi webhook POST
+ * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
+ * @returns {Promise<void>} Almost always 200 — Vapi retries on non-2xx and we'd rather
+ *                          swallow errors than have it retry partial side effects
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -7,7 +46,12 @@ export default async function handler(req, res) {
 
     console.log('Vapi event received:', eventType);
 
-    // Handle conversation-update — detect phone number and inject member profile
+    // Handle conversation-update — detect phone number and inject member profile.
+    // Vapi sends this event continuously as the transcript grows. We watch for
+    // the first user utterance that looks like a phone number, do a one-shot
+    // lookup, and return a messageResponse that Vapi injects as a system
+    // message. The MEMBER_PROFILE: marker in subsequent transcripts prevents
+    // us from running the lookup twice in the same call.
     if (eventType === 'conversation-update') {
       const messages = payload.message?.conversation || payload.conversation || [];
       
@@ -156,8 +200,10 @@ export default async function handler(req, res) {
 
     console.log('=== END OF CALL REPORT ===');
 
-    // Vapi structured outputs come as an object keyed by output ID
-    // Each value has { name, result } shape
+    // Vapi structured outputs come as an object keyed by output ID.
+    // Each value has { name, result } shape — we collapse it into a flat
+    // { name: result } map so we can do `structured.callerName` instead of
+    // walking an unstable key set.
     const structuredOutputs = payload.message?.artifact?.structuredOutputs ||
                               payload.artifact?.structuredOutputs || {};
 
@@ -328,7 +374,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // Update contact custom fields via GHL v2 API using Private Integration Token
+    // Update contact custom fields via GHL v2 API using Private Integration Token.
+    // We can't update fields in the same call that creates the contact because
+    // the GHL workflow that creates it runs async — so we wait 4s, search for
+    // the contact by phone, then PATCH the dropdown fields (Investor Stage,
+    // Profile Type) which the webhook payload can't set directly.
     const GHL_API_KEY = process.env.GHL_API_KEY;
     if (GHL_API_KEY && callerPhone) {
       try {

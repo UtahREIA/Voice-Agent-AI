@@ -1,5 +1,40 @@
+// Vercel route config — explicitly enable the body parser because Vapi sends
+// JSON and the function below relies on `req.body` being a parsed object.
 export const config = { api: { bodyParser: true } };
 
+/**
+ * Vapi tool endpoint: looks up an existing Utah REIA member by phone number
+ * and returns a pre-built spoken greeting the agent can read verbatim.
+ *
+ * Unlike ghl-sync.js's conversation-update handler (which scans the transcript
+ * and injects a system message), this endpoint is wired as a regular Vapi tool
+ * call. Because Vapi has multiple request shapes depending on how the tool is
+ * defined, we accept the phone from any of four payload formats:
+ *   1) `body.phone`                                       (direct)
+ *   2) `body.message.toolCallList[0].function.arguments`  (Vapi current)
+ *   3) `body.message.toolCalls[0].function.arguments`     (Vapi legacy)
+ *   4) `body.toolCallList[0].function.arguments`          (top-level variant)
+ * Arguments may arrive as a JSON string or an already-parsed object.
+ *
+ * Phone matching strategy — Supabase's `phone` column has inconsistent
+ * formatting across imports, so we try three exact-match variants in order:
+ *   a) "(801) 555-1234"  (US-formatted, most common in this database)
+ *   b) "8015551234"      (10-digit raw)
+ *   c) "+18015551234"    (E.164)
+ * This avoids a full-table scan over 4,929 contacts.
+ *
+ * On hit, fetches investor_profile, recent event_attendance, and the most
+ * recent voice_agent readiness_survey, then assembles a personalized greeting
+ * built from up to 3 known facts about the caller. On miss, returns a
+ * diagnostic string so Vapi can fall back to the normal qualifying flow.
+ *
+ * Always returns 200 (even on internal errors, returned in `result`) so a
+ * failing lookup never breaks the call.
+ *
+ * @param {import('http').IncomingMessage & { body: any, method: string }} req - Vapi tool POST
+ * @param {import('http').ServerResponse & { status: Function, json: Function }} res
+ * @returns {Promise<void>} 200 `{ result: <greeting>, member_name?: <firstName> }`
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'method not allowed' });

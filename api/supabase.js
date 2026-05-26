@@ -67,6 +67,26 @@ const RECENT_EVENTS = [
   { date: '08/12/2025', title: 'Money in the Mess: A Live Flip Case Study + Construction & Insurance Secrets' },
 ];
 
+/**
+ * Multi-action Supabase proxy endpoint for the Vapi voice agent.
+ *
+ * Acts as a single POST router that fans out into four discrete actions based on
+ * `req.body.action`:
+ *   - "context"  → returns the live knowledge package (board members, vendors,
+ *                  recent events, membership tiers) used to seed Claude at call start
+ *   - "lookup"   → finds an existing contact + investor profile by email
+ *   - "upsert"   → creates or updates a contact + investor profile from the call
+ *   - "matches"  → returns vendor + peer-investor suggestions based on the
+ *                  caller's blocker, stage, and strategy
+ *
+ * Requires SUPABASE_URL and SUPABASE_SERVICE_KEY env vars. All Supabase access
+ * uses the service-role key, so this endpoint must never be exposed publicly
+ * without an auth layer in front of it.
+ *
+ * @param {import('http').IncomingMessage & { body: any, method: string }} req - Vercel-style request; expects POST with JSON body
+ * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res - Vercel-style response
+ * @returns {Promise<void>} Responds with 200 + JSON on success, 4xx/5xx on error
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -84,6 +104,17 @@ export default async function handler(req, res) {
     'Prefer': 'return=representation',
   };
 
+  /**
+   * Thin wrapper around fetch() for the Supabase PostgREST API.
+   * Prepends the project's REST base URL, merges the shared auth headers,
+   * throws on non-2xx (so the outer try/catch returns a uniform 500), and
+   * parses the JSON body. Used by every action below.
+   *
+   * @param {string} path - PostgREST path + query, e.g. `contacts?id=eq.123`
+   * @param {RequestInit} [opts] - Standard fetch options (method, body, extra headers)
+   * @returns {Promise<any>} Parsed JSON response from Supabase
+   * @throws {Error} If Supabase returns a non-2xx status
+   */
   const db = async (path, opts = {}) => {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: { ...baseHeaders, ...(opts.headers || {}) },
@@ -98,6 +129,15 @@ export default async function handler(req, res) {
   try {
 
     // ── CONTEXT: pull live knowledge package for Claude at call start ─────────
+    // Returns four arrays the assistant uses to answer caller questions:
+    //   1) Board members (with their investing/service specialties) so the agent
+    //      can mention specific people by name when relevant.
+    //   2) Active vendors (service providers in the directory) so the agent can
+    //      recommend real members rather than generic services.
+    //   3) Recent past events (hard-coded RECENT_EVENTS — sourced from GHL
+    //      custom-field names, ordered newest first) so the agent can reference
+    //      what the community has been working on.
+    //   4) Membership tier descriptions so the agent can pitch the right tier.
     if (action === 'context') {
 
       // 1. Board members with their specialties
@@ -162,6 +202,9 @@ export default async function handler(req, res) {
     }
 
     // ── LOOKUP: find existing contact + investor profile by email ─────────────
+    // Returns the first matching contact joined with its investor_profiles row,
+    // or null when no contact exists. Email comparison is case-sensitive (uses
+    // PostgREST `eq`), so callers should normalize before hitting this.
     if (action === 'lookup') {
       const { email } = req.body;
       const contacts = await db(
@@ -171,6 +214,13 @@ export default async function handler(req, res) {
     }
 
     // ── UPSERT: save contact + investor profile from voice call ───────────────
+    // Two-step write: (a) create or update the `contacts` row keyed on email,
+    // (b) create or update the matching `investor_profiles` row keyed on the
+    // resulting contact_id. Friendly call-flow values (stage, strategies,
+    // blocker) are translated to the DB's canonical labels via STAGE_MAP /
+    // STRATEGY_MAP / BLOCKER_SERVICES. The blocker is fanned out into the
+    // appropriate domain column (funding_financial, deals_opportunities, etc.)
+    // via conditional spread so we only touch columns that apply.
     if (action === 'upsert') {
       const { contact, profile } = req.body;
 
@@ -243,6 +293,13 @@ export default async function handler(req, res) {
     }
 
     // ── MATCHES: find relevant vendors + peer investors ───────────────────────
+    // Drives the "here are people in our community for you" portion of the call:
+    //   - Vendors: BLOCKER_SERVICES maps the caller's stated blocker
+    //     (capital/deals/team/…) to the service types that solve it, then we
+    //     pull up to 5 vendor_profiles whose service_types overlap (`ov`).
+    //   - Peers: investors at the same journey stage whose investing_types
+    //     intersect with the caller's strategies, capped at 3 to keep the
+    //     spoken response short.
     if (action === 'matches') {
       const { profile } = req.body;
       const blocker    = profile.blocker || '';

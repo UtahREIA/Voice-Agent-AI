@@ -1,5 +1,36 @@
 // Map 2 Vendor Matching — queries vendor_routing_matrix from Supabase
 // Accepts all diagnostic dimensions, returns matched vendor categories and specific vendors
+
+/**
+ * Vendor-matching tool called by the voice agent mid-call. Returns a single
+ * `result` string the agent speaks aloud — up to 4 named active vendors with
+ * their company, contact, and primary services.
+ *
+ * Inputs (all optional):
+ *   - blocker        The caller's stated blocker (capital/deals/team/…)
+ *   - investor_need  More specific need keyword; takes precedence over blocker
+ *   - strategy       Investing strategy for tighter routing (Fix & Flip, BRRRR…)
+ *   - stage          (accepted but currently unused in matching)
+ *   - already_tried  Comma-separated company-name fragments to exclude
+ *
+ * Two-stage match:
+ *   1) vendor_routing_matrix lookup. Tries the exact (need, strategy) row
+ *      first; falls back to a need-only row with strategy=NULL when nothing
+ *      matches. Yields a set of vendor_categories (service-type search terms)
+ *      and vendor_subtypes used for the "who specialize in …" voice clause.
+ *   2) vendor_profiles fan-out filtered to active members whose service_types
+ *      include any of the matrix-derived terms (case-insensitive substring),
+ *      capped at 4.
+ *
+ * Defaults: if step 1 produces no categories, falls back to ["Real Estate
+ * Agent", "General Education"] so the agent always has something to suggest.
+ *
+ * Always returns 200 — generic fallback string on zero matches or any throw.
+ *
+ * @param {import('http').IncomingMessage & { body: any, method: string }} req - POST with diagnostic fields
+ * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
+ * @returns {Promise<void>} 200 `{ result: <spoken response string> }`
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 

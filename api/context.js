@@ -1,5 +1,29 @@
 // Utah REIA Live Context — fetches all knowledge dynamically from Supabase and GHL
 // No hardcoded knowledge — everything comes from the live data sources
+
+/**
+ * Builds a single human-readable "live knowledge" string that gets injected into
+ * the voice agent's system prompt at the very start of each call. Unlike the
+ * `context` action in supabase.js (which returns structured JSON), this endpoint
+ * returns a pre-formatted multi-line string ready to drop into a prompt.
+ *
+ * Pulls three sections from live sources:
+ *   1) BOARD MEMBERS  — Supabase `contacts` where is_board_member=true & Active.
+ *   2) ACTIVE VENDORS — Supabase `vendor_profiles` joined with active contacts
+ *                       and a populated service_types array; capped at 20.
+ *   3) UPCOMING EVENTS — GHL custom values, slots 1–9 (each event has a Title /
+ *                        Date 2 / Location / Times / Link quartet of fields).
+ *                        Filtered to events with date >= today, sorted ascending,
+ *                        top 5 surfaced.
+ *
+ * Always returns 200 — on partial failure (e.g. GHL down) it falls back to a
+ * "data temporarily unavailable" line per section, and on total failure returns
+ * a generic fallback string so the agent can still complete the call.
+ *
+ * @param {import('http').IncomingMessage & { body: any, method: string }} req - POST or GET
+ * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
+ * @returns {Promise<void>} Always responds 200 with `{ result: <string>, error?: <string> }`
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
