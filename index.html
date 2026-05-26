@@ -698,8 +698,12 @@ async function startCall() {
     };
 
     // Pass context as a variable so Vapi injects it into the conversation
-    if (contextBlock) {
-      overrides.variableValues.liveContext = contextBlock + (memberProfileBlock ? '\n\n' + memberProfileBlock : '');
+    // Always set liveContext even if contextBlock is empty so memberProfileBlock gets through
+    overrides.variableValues.liveContext = (contextBlock || '') + (memberProfileBlock ? '\n\n' + memberProfileBlock : '');
+
+    // Override first message if member profile found
+    if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
+      overrides.firstMessage = "Give me just a moment while I pull up your profile.";
     }
 
     await vapi.start(VAPI_ASSISTANT_ID, overrides);
