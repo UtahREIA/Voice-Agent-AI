@@ -65,8 +65,16 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Use Supabase RPC to search by phone digits directly
+    // This avoids fetching all 4929 contacts and handles any format
+    const area = last10.slice(0, 3);
+    const mid = last10.slice(3, 6);
+    const end = last10.slice(6);
+    const formatted = '(' + area + ') ' + mid + '-' + end;
+
+    // Try formatted phone match first (most common format in Supabase)
     const resp = await fetch(
-      SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=not.is.null&limit=500',
+      SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=eq.' + encodeURIComponent(formatted) + '&limit=1',
       {
         headers: {
           'Content-Type': 'application/json',
@@ -76,17 +84,45 @@ export default async function handler(req, res) {
       }
     );
 
-    const all = await resp.json();
+    let matches = await resp.json();
 
-    if (!Array.isArray(all)) {
+    // Fallback: try exact digits match
+    if (!Array.isArray(matches) || matches.length === 0) {
+      const resp2 = await fetch(
+        SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=eq.' + encodeURIComponent(last10) + '&limit=1',
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY
+          }
+        }
+      );
+      matches = await resp2.json();
+    }
+
+    // Fallback: try with +1 prefix
+    if (!Array.isArray(matches) || matches.length === 0) {
+      const resp3 = await fetch(
+        SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=eq.' + encodeURIComponent('+1' + last10) + '&limit=1',
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY
+          }
+        }
+      );
+      matches = await resp3.json();
+    }
+
+    if (!Array.isArray(matches) || matches.length === 0) {
       return res.status(200).json({
-        result: 'Database error. phone=' + last10 + ' status=' + resp.status
+        result: 'not_found. searched=' + formatted + ' and ' + last10
       });
     }
 
-    const match = all.find(c =>
-      c.phone && c.phone.replace(/\D/g, '').slice(-10) === last10
-    );
+    const match = matches[0];
 
     if (!match) {
       return res.status(200).json({
