@@ -188,7 +188,7 @@ export default async function handler(req, res) {
 
     greeting += ' What can I help you with today?';
 
-    return res.status(200).json({ result: greeting });
+    return res.status(200).json({ result: greeting, member_name: firstName });
 
   } catch (e) {
     return res.status(200).json({
