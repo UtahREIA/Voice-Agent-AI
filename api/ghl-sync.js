@@ -7,6 +7,149 @@ export default async function handler(req, res) {
 
     console.log('Vapi event received:', eventType);
 
+    // Handle conversation-update — detect phone number and inject member profile
+    if (eventType === 'conversation-update') {
+      const messages = payload.message?.conversation || payload.conversation || [];
+      
+      // Look for a user message that looks like a phone number (10+ digits when stripped)
+      const phoneMessage = messages
+        .filter(m => m.role === 'user')
+        .reverse()
+        .find(m => {
+          const digits = (m.content || m.message || '').replace(/\D/g, '');
+          return digits.length >= 10;
+        });
+
+      if (!phoneMessage) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const rawPhone = (phoneMessage.content || phoneMessage.message || '');
+      const digits = rawPhone.replace(/\D/g, '').slice(-10);
+
+      // Check if we already did a lookup for this phone in this call
+      // by looking for a system message with MEMBER_PROFILE tag
+      const alreadyLookedUp = messages.some(m =>
+        m.role === 'system' && (m.content || '').includes('MEMBER_PROFILE:')
+      );
+
+      if (alreadyLookedUp) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+      if (!SUPABASE_URL || !SUPABASE_KEY || !digits) {
+        return res.status(200).json({ ok: true });
+      }
+
+      try {
+        // Fetch all contacts and match by last 10 digits
+        const contactResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=not.is.null&limit=500`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+          }
+        );
+
+        const contacts = await contactResp.json();
+        const match = Array.isArray(contacts)
+          ? contacts.find(c => c.phone && c.phone.replace(/\D/g, '').slice(-10) === digits)
+          : null;
+
+        if (!match) {
+          console.log('Member not found for phone:', digits);
+          return res.status(200).json({
+            messageResponse: {
+              content: `MEMBER_PROFILE: not_found. Phone ${digits} was searched but no match found in Utah REIA member database. Continue with normal diagnostic flow.`
+            }
+          });
+        }
+
+        const contactId = match.id;
+        console.log('Member found:', match.full_name, '| id:', contactId);
+
+        // Fetch investor profile
+        const profileResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months&limit=1`,
+          { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+        );
+        const profiles = await profileResp.json();
+        const profile = profiles?.[0] || null;
+
+        // Fetch event attendance
+        const eventResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/event_attendance?contact_id=eq.${contactId}&select=event_name&order=attended_at.desc&limit=3`,
+          { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+        );
+        const events = await eventResp.json();
+
+        // Fetch last voice agent survey
+        const surveyResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/readiness_surveys?contact_id=eq.${contactId}&source=eq.voice_agent&select=answers&order=created_at.desc&limit=1`,
+          { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+        );
+        const surveys = await surveyResp.json();
+
+        // Build member profile summary
+        const name = match.full_name;
+        const firstName = name?.split(' ')[0] || 'there';
+        const status = match.membership_status || '';
+        const memberType = match.membership_type || '';
+        const isBoard = match.is_board_member;
+        const lastEvent = match.last_reia_event || '';
+        const stage = profile?.investing_journey_stage || '';
+        const strategies = profile?.investing_interests || [];
+        const goal = profile?.accomplish_next_6_to_12_months || [];
+        const eventNames = Array.isArray(events) ? events.map(e => e.event_name).filter(Boolean) : [];
+
+        // Last survey blocker
+        let lastBlocker = '';
+        if (surveys?.[0]?.answers) {
+          try {
+            const ans = typeof surveys[0].answers === 'string'
+              ? JSON.parse(surveys[0].answers)
+              : surveys[0].answers;
+            lastBlocker = ans.blocker || '';
+          } catch(e) {}
+        }
+
+        // Build context string for Claude
+        const profileLines = [
+          `MEMBER_PROFILE: FOUND`,
+          `Name: ${name}`,
+          `Membership Status: ${status}`,
+          `Membership Type: ${memberType}`,
+          `Board Member: ${isBoard ? 'Yes' : 'No'}`,
+          stage ? `Investing Stage: ${stage}` : '',
+          strategies?.length ? `Strategies: ${Array.isArray(strategies) ? strategies.join(', ') : strategies}` : '',
+          goal?.length ? `Goal: ${Array.isArray(goal) ? goal[0] : goal}` : '',
+          eventNames.length ? `Events Attended: ${eventNames.join(', ')}` : '',
+          lastEvent && !eventNames.length ? `Last Event: ${lastEvent}` : '',
+          lastBlocker ? `Last Blocker Mentioned: ${lastBlocker}` : '',
+        ].filter(Boolean).join(' | ');
+
+        console.log('Injecting member profile for:', name);
+
+        const injectedContent = 'MEMBER_PROFILE: FOUND | ' + profileLines + ' | This caller is a known Utah REIA member. Greet them by first name ' + firstName + ', acknowledge what you know about them, skip the qualifying question, and ask one focused question based on their profile.';
+
+        return res.status(200).json({
+          messageResponse: {
+            content: injectedContent
+          }
+        });
+
+      } catch(e) {
+        console.error('Member lookup error in conversation-update:', e.message);
+        return res.status(200).json({ ok: true });
+      }
+    }
+
     if (eventType !== 'end-of-call-report') {
       return res.status(200).json({ ok: true, skipped: true, eventType });
     }
