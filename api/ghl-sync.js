@@ -253,10 +253,12 @@ export default async function handler(req, res) {
     // Format phone as (XXX) XXX-XXXX for GHL compatibility
     // Vapi structured outputs return phone as raw digits e.g. 8082190555
     // GHL's Find Contact step matches on formatted phone e.g. (808) 219-0555
+    // Format phone as E.164 (+1XXXXXXXXXX) — this is how GHL stores all US phones
+    // GHL Find Contact matches on +18082190555 not (808) 219-0555
     const rawCallerPhone = structured.callerPhone || '';
     const callerPhoneDigits = rawCallerPhone.replace(/\D/g, '').slice(-10);
     const callerPhone = callerPhoneDigits.length === 10
-      ? '(' + callerPhoneDigits.slice(0,3) + ') ' + callerPhoneDigits.slice(3,6) + '-' + callerPhoneDigits.slice(6)
+      ? '+1' + callerPhoneDigits
       : rawCallerPhone;
 
     console.log('Extracted — name:', callerName, '| phone:', callerPhone, '| stage:', investorStage);
