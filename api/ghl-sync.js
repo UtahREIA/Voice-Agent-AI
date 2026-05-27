@@ -7,9 +7,11 @@ export default async function handler(req, res) {
 
     console.log('Vapi event received:', eventType);
 
+    // Handle conversation-update — detect phone number and inject member profile
     if (eventType === 'conversation-update') {
       const messages = payload.message?.conversation || payload.conversation || [];
-
+      
+      // Look for a user message that looks like a phone number (10+ digits when stripped)
       const phoneMessage = messages
         .filter(m => m.role === 'user')
         .reverse()
@@ -25,7 +27,8 @@ export default async function handler(req, res) {
       const rawPhone = (phoneMessage.content || phoneMessage.message || '');
       const digits = rawPhone.replace(/\D/g, '').slice(-10);
 
-      // Vapi re-fires conversation-update on every turn — bail if we already injected the profile this call.
+      // Check if we already did a lookup for this phone in this call
+      // by looking for a system message with MEMBER_PROFILE tag
       const alreadyLookedUp = messages.some(m =>
         m.role === 'system' && (m.content || '').includes('MEMBER_PROFILE:')
       );
@@ -42,7 +45,7 @@ export default async function handler(req, res) {
       }
 
       try {
-        // Match on the last 10 digits — stored phones may include country code or formatting.
+        // Fetch all contacts and match by last 10 digits
         const contactResp = await fetch(
           `${SUPABASE_URL}/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=not.is.null&limit=500`,
           {
@@ -71,6 +74,7 @@ export default async function handler(req, res) {
         const contactId = match.id;
         console.log('Member found:', match.full_name, '| id:', contactId);
 
+        // Fetch investor profile
         const profileResp = await fetch(
           `${SUPABASE_URL}/rest/v1/investor_profiles?contact_id=eq.${contactId}&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months&limit=1`,
           { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
@@ -78,18 +82,21 @@ export default async function handler(req, res) {
         const profiles = await profileResp.json();
         const profile = profiles?.[0] || null;
 
+        // Fetch event attendance
         const eventResp = await fetch(
           `${SUPABASE_URL}/rest/v1/event_attendance?contact_id=eq.${contactId}&select=event_name&order=attended_at.desc&limit=3`,
           { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
         );
         const events = await eventResp.json();
 
+        // Fetch last voice agent survey
         const surveyResp = await fetch(
           `${SUPABASE_URL}/rest/v1/readiness_surveys?contact_id=eq.${contactId}&source=eq.voice_agent&select=answers&order=created_at.desc&limit=1`,
           { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
         );
         const surveys = await surveyResp.json();
 
+        // Build member profile summary
         const name = match.full_name;
         const firstName = name?.split(' ')[0] || 'there';
         const status = match.membership_status || '';
@@ -101,6 +108,7 @@ export default async function handler(req, res) {
         const goal = profile?.accomplish_next_6_to_12_months || [];
         const eventNames = Array.isArray(events) ? events.map(e => e.event_name).filter(Boolean) : [];
 
+        // Last survey blocker
         let lastBlocker = '';
         if (surveys?.[0]?.answers) {
           try {
@@ -111,6 +119,7 @@ export default async function handler(req, res) {
           } catch(e) {}
         }
 
+        // Build context string for Claude
         const profileLines = [
           `MEMBER_PROFILE: FOUND`,
           `Name: ${name}`,
@@ -147,11 +156,12 @@ export default async function handler(req, res) {
 
     console.log('=== END OF CALL REPORT ===');
 
-    // Vapi delivers structured outputs keyed by output ID with shape { name, result } —
-    // flatten to a name -> result map so downstream lookups can use field names directly.
+    // Vapi structured outputs come as an object keyed by output ID
+    // Each value has { name, result } shape
     const structuredOutputs = payload.message?.artifact?.structuredOutputs ||
                               payload.artifact?.structuredOutputs || {};
 
+    // Build a name -> result map
     const structured = {};
     for (const key of Object.keys(structuredOutputs)) {
       const item = structuredOutputs[key];
@@ -163,7 +173,12 @@ export default async function handler(req, res) {
     console.log('Structured data:', JSON.stringify(structured));
 
     const callerName    = structured.callerName    || '';
-    const callerPhone   = structured.callerPhone   || '';
+    const rawCallerPhone = structured.callerPhone || '';
+    // Format phone as (XXX) XXX-XXXX for GHL compatibility
+    const callerPhoneDigits = rawCallerPhone.replace(/\D/g, '').slice(-10);
+    const callerPhone = callerPhoneDigits.length === 10
+      ? '(' + callerPhoneDigits.slice(0,3) + ') ' + callerPhoneDigits.slice(3,6) + '-' + callerPhoneDigits.slice(6)
+      : rawCallerPhone;
     const callerEmail   = structured.callerEmail   || '';
     const profileType   = structured.profileType   || 'Investor';
     const investorStage = structured.investorStage || '';
@@ -180,10 +195,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: true, reason: 'no contact info' });
     }
 
+    // Convert strategies string to array
     const strategiesArray = Array.isArray(strategies)
       ? strategies
       : strategies.split(',').map(s => s.trim()).filter(Boolean);
 
+    // Build GHL payload
     const nameParts = callerName.trim().split(' ');
     const firstName = nameParts[0] || '';
     const lastName  = nameParts.slice(1).join(' ') || '';
@@ -193,8 +210,7 @@ export default async function handler(req, res) {
       lastName,
       email:  callerEmail || '',
       phone:  callerPhone,
-      // Duplicated as top-level fields so GHL workflows can map them via {{inboundWebhookRequest.*}}
-      // without parsing the customFields array.
+      // Flat fields for easy GHL workflow mapping via {{inboundWebhookRequest.*}}
       investorStage,
       strategies: strategiesArray.join(', '),
       blocker,
@@ -204,6 +220,10 @@ export default async function handler(req, res) {
       profileType,
       tags: [
         'Voice Agent Lead',
+        'voice-agent-call-complete',
+        structured.tier ? 'VA Tier: ' + structured.tier : null,
+        structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
+        structured.bookingRequired === 'true' ? 'va-booking-required' : null,
         investorStage ? 'Stage: ' + investorStage : null,
         blocker       ? 'Blocker: ' + blocker     : null,
         ...strategiesArray.map(s => 'Strategy: ' + s)
@@ -249,6 +269,7 @@ export default async function handler(req, res) {
     const ghlBody = await ghlResp.text();
     console.log('GHL sync status:', ghlResp.status, ghlBody.substring(0, 200));
 
+    // Supabase upsert
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
@@ -327,15 +348,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // The inbound webhook above triggers a GHL workflow that creates the contact;
-    // we then patch dropdown custom fields directly via the v2 API because workflow
-    // inbound-webhook actions can't write to dropdown-type fields reliably.
+    // Update contact custom fields via GHL v2 API using Private Integration Token
     const GHL_API_KEY = process.env.GHL_API_KEY;
     if (GHL_API_KEY && callerPhone) {
       try {
-        // Give the GHL workflow a head start to create the contact before we PATCH it.
+        // Wait briefly for GHL workflow to create the contact first
         await new Promise(r => setTimeout(r, 4000));
 
+        // Search for contact by phone using v2 API
         const searchResp = await fetch(
           `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(callerPhone)}`,
           {
@@ -385,8 +405,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Persist the call as a Map 1 (intake/classification) readiness-survey row so
-    // returning-member lookups above can surface the prior blocker.
+    // Write to readiness_surveys table — Map 1 classification record
     if (SUPABASE_URL && SUPABASE_KEY && contactId) {
       try {
         const baseHeaders2 = {
