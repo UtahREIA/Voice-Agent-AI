@@ -254,17 +254,71 @@ export default async function handler(req, res) {
     // Vapi structured outputs return phone as raw digits e.g. 8082190555
     // GHL's Find Contact step matches on formatted phone e.g. (808) 219-0555
     // Format phone as E.164 (+1XXXXXXXXXX) — this is how GHL stores all US phones
-    // GHL Find Contact matches on +18082190555 not (808) 219-0555
-    const rawCallerPhone = structured.callerPhone || '';
+    // GHL Find Contact step matches on +18082190555 not (808) 219-0555
+    //
+    // callerPhone comes from the structured output — captured when agent asks for phone during intake
+    // preCallPhone comes from index.html variable injection — captured from the widget before the call
+    // For returning members, the agent skips intake so callerPhone is empty.
+    // We fall back to preCallPhone in that case.
+    //
+    // Variable values are available at payload.message?.call?.metadata or
+    // payload.call?.metadata or payload.message?.assistant?.variableValues
+    const variableValues = payload.message?.call?.metadata?.variableValues
+      || payload.message?.assistant?.variableValues
+      || payload.call?.metadata?.variableValues
+      || {};
+
+    const rawCallerPhone = structured.callerPhone
+      || variableValues.preCallPhone
+      || '';
     const callerPhoneDigits = rawCallerPhone.replace(/\D/g, '').slice(-10);
     const callerPhone = callerPhoneDigits.length === 10
       ? '+1' + callerPhoneDigits
       : rawCallerPhone;
 
+    // Final fallback — extract CALLER_PHONE from the system prompt liveContext
+    // liveContext is injected by index.html and always contains CALLER_PHONE: XXXXXXXXXX
+    // when a returning member was recognized pre-call
+    let phoneFromContext = '';
+    try {
+      const messages = payload.message?.artifact?.transcript || '';
+      const systemPrompt = payload.message?.call?.systemPrompt
+        || payload.message?.assistant?.model?.messages?.[0]?.content
+        || '';
+      const phoneMatch = systemPrompt.match(/CALLER_PHONE:\s*([\d\s\-\(\)\+]+)/);
+      if (phoneMatch) {
+        phoneFromContext = phoneMatch[1].trim();
+      }
+    } catch(e) {}
+
+    // Apply context phone if structured and variable sources are both empty
+    const finalRawPhone = structured.callerPhone
+      || variableValues.preCallPhone
+      || phoneFromContext
+      || '';
+
+    const finalDigits = finalRawPhone.replace(/\D/g, '').slice(-10);
+    const resolvedPhone = finalDigits.length === 10
+      ? '+1' + finalDigits
+      : callerPhone; // keep original if no better source found
+
+    // Override callerPhone with the resolved value if it was empty
+    if (!structured.callerPhone && resolvedPhone) {
+      console.log('callerPhone was empty — resolved from fallback:', resolvedPhone);
+    }
+
+    // Use resolved phone going forward
+    const effectivePhone = resolvedPhone || callerPhone;
+
+    console.log('Phone sources — structured:', structured.callerPhone,
+      '| preCallPhone:', variableValues.preCallPhone,
+      '| fromContext:', phoneFromContext,
+      '| final:', effectivePhone);
+
     console.log('Extracted — name:', callerName, '| phone:', callerPhone, '| stage:', investorStage);
 
     // Skip sync entirely if we have no way to identify the contact
-    if (!callerName && !callerPhone) {
+    if (!callerName && !effectivePhone) {
       console.log('No contact info — skipping GHL sync');
       return res.status(200).json({ ok: true, skipped: true, reason: 'no contact info' });
     }
@@ -290,7 +344,7 @@ export default async function handler(req, res) {
       firstName,
       lastName,
       email:  callerEmail || '',
-      phone:  callerPhone,   // Formatted as (XXX) XXX-XXXX for GHL Find Contact matching
+      phone:  effectivePhone,   // Formatted as E.164 e.g. +18082190555 — matches GHL storage format
 
       // Flat fields accessible in GHL workflow as {{inboundWebhookRequest.*}}
       investorStage,
@@ -373,7 +427,7 @@ export default async function handler(req, res) {
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
     let contactId; // Used later for survey write
 
-    if (SUPABASE_URL && SUPABASE_KEY && (callerPhone || callerEmail)) {
+    if (SUPABASE_URL && SUPABASE_KEY && (effectivePhone || callerEmail)) {
       const baseHeaders = {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
@@ -393,7 +447,7 @@ export default async function handler(req, res) {
       // Look up existing contact by phone (preferred) or email
       const lookupField = callerEmail
         ? `email=eq.${encodeURIComponent(callerEmail)}`
-        : `phone=eq.${encodeURIComponent(callerPhone)}`;
+        : `phone=eq.${encodeURIComponent(effectivePhone)}`;
 
       const existing = await fetch(
         `${SUPABASE_URL}/rest/v1/contacts?${lookupField}&select=id&limit=1`,
@@ -406,7 +460,7 @@ export default async function handler(req, res) {
         await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${contactId}`, {
           method: 'PATCH',
           headers: baseHeaders,
-          body: JSON.stringify({ full_name: callerName, phone: callerPhone, updated_at: new Date().toISOString() })
+          body: JSON.stringify({ full_name: callerName, phone: effectivePhone, updated_at: new Date().toISOString() })
         });
         console.log('Supabase contact updated:', contactId);
       } else {
@@ -417,7 +471,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             full_name:    callerName,
             email:        callerEmail || null,
-            phone:        callerPhone,
+            phone:        effectivePhone,
             profile_type: profileType,
             created_at:   new Date().toISOString(),
             updated_at:   new Date().toISOString()
@@ -462,7 +516,7 @@ export default async function handler(req, res) {
     // Private Integration Token. We wait 4 seconds first to allow the GHL workflow
     // to create the contact before we try to update it.
     const GHL_API_KEY = process.env.GHL_API_KEY;
-    if (GHL_API_KEY && callerPhone) {
+    if (GHL_API_KEY && effectivePhone) {
       try {
         // Wait for GHL workflow to finish creating/finding the contact
         await new Promise(r => setTimeout(r, 4000));
@@ -513,7 +567,7 @@ export default async function handler(req, res) {
           );
           console.log('GHL v2 contact fields updated:', updateResp.status);
         } else {
-          console.log('GHL v2 contact not found for phone:', callerPhone);
+          console.log('GHL v2 contact not found for phone:', effectivePhone);
         }
       } catch(e) {
         // Non-fatal — log error but don't crash the whole sync
@@ -544,7 +598,7 @@ export default async function handler(req, res) {
           source:       'voice_agent',
           answers: JSON.stringify({
             callerName,
-            callerPhone,
+            effectivePhone,
             profileType,
             investorStage,
             strategies:          strategiesArray,
