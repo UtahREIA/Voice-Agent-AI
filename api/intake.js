@@ -63,35 +63,29 @@ export default async function handler(req, res) {
 
   try {
 
-    // --- STEP 1: Fetch stage context ---
-    // Get the full stage description so Claude can speak knowledgeably about
-    // the caller's situation without hardcoded text in the system prompt
-    let stageContext = null;
-    if (stage) {
-      const stageResp = await fetch(
-        SUPABASE_URL + '/rest/v1/intake_stages?stage_key=eq.' + encodeURIComponent(stage) + '&select=*&limit=1',
-        { headers }
-      );
-      const stageData = await stageResp.json();
-      stageContext = Array.isArray(stageData) && stageData.length > 0 ? stageData[0] : null;
-    }
-
-    // --- STEP 2: Count how many dimensions we have ---
-    // We need at least 3 before routing. If fewer, return the next question to ask.
+    // --- STEP 1 & 2: Fetch stage context and routing rules in parallel ---
+    // Running both fetches simultaneously cuts response time roughly in half
     const dimensions = [stage, strategy, blocker, goal, already_tried].filter(Boolean);
     const dimensionCount = dimensions.length;
 
+    const [stageData, allRulesData] = await Promise.all([
+      stage
+        ? fetch(SUPABASE_URL + '/rest/v1/intake_stages?stage_key=eq.' + encodeURIComponent(stage) + '&select=*&limit=1', { headers }).then(r => r.json()).catch(() => [])
+        : Promise.resolve([]),
+      fetch(SUPABASE_URL + '/rest/v1/intake_routing_rules?is_active=eq.true&order=priority.asc&select=*', { headers }).then(r => r.json()).catch(() => [])
+    ]);
+
+    const stageContext = Array.isArray(stageData) && stageData.length > 0 ? stageData[0] : null;
+    const allRules = Array.isArray(allRulesData) ? allRulesData : [];
+
     // --- STEP 3: Find the next question to ask if not enough dimensions ---
-    // Query intake_questions ordered by priority, filtered by path and stage
     if (dimensionCount < 3) {
-      // Determine which dimensions we are still missing
       const missingDimensions = [];
       if (!strategy) missingDimensions.push('strategy');
       if (!blocker) missingDimensions.push('blocker');
       if (!goal) missingDimensions.push('goal');
       if (!already_tried) missingDimensions.push('already_tried');
 
-      // Find the highest priority question for the first missing dimension
       const nextDimension = missingDimensions[0];
       if (nextDimension) {
         const qResp = await fetch(
@@ -129,20 +123,8 @@ export default async function handler(req, res) {
     }
 
     // --- STEP 4: Find the best matching routing rule ---
-    // Query rules in priority order, trying most specific match first:
-    // stage + strategy + blocker → stage + blocker → stage only → catch-all
+    // allRules already fetched in parallel above — no additional fetch needed
     let matchedRule = null;
-
-    // Build query with available dimensions
-    // Try exact match on all three dimensions first
-    const stageFilter = stage ? '&stage_key=eq.' + encodeURIComponent(stage) : '&stage_key=is.null';
-    const pathFilter = '&path=in.(both,' + encodeURIComponent(path) + ')';
-
-    const rulesResp = await fetch(
-      SUPABASE_URL + '/rest/v1/intake_routing_rules?is_active=eq.true&order=priority.asc&select=*',
-      { headers }
-    );
-    const allRules = await rulesResp.json();
 
     if (Array.isArray(allRules) && allRules.length > 0) {
       // Score each rule by specificity — more matching dimensions = higher score

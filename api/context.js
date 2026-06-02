@@ -1,29 +1,5 @@
 // Utah REIA Live Context — fetches all knowledge dynamically from Supabase and GHL
 // No hardcoded knowledge — everything comes from the live data sources
-
-/**
- * Builds a single human-readable "live knowledge" string that gets injected into
- * the voice agent's system prompt at the very start of each call. Unlike the
- * `context` action in supabase.js (which returns structured JSON), this endpoint
- * returns a pre-formatted multi-line string ready to drop into a prompt.
- *
- * Pulls three sections from live sources:
- *   1) BOARD MEMBERS  — Supabase `contacts` where is_board_member=true & Active.
- *   2) ACTIVE VENDORS — Supabase `vendor_profiles` joined with active contacts
- *                       and a populated service_types array; capped at 20.
- *   3) UPCOMING EVENTS — GHL custom values, slots 1–9 (each event has a Title /
- *                        Date 2 / Location / Times / Link quartet of fields).
- *                        Filtered to events with date >= today, sorted ascending,
- *                        top 5 surfaced.
- *
- * Always returns 200 — on partial failure (e.g. GHL down) it falls back to a
- * "data temporarily unavailable" line per section, and on total failure returns
- * a generic fallback string so the agent can still complete the call.
- *
- * @param {import('http').IncomingMessage & { body: any, method: string }} req - POST or GET
- * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
- * @returns {Promise<void>} Always responds 200 with `{ result: <string>, error?: <string> }`
- */
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
@@ -43,14 +19,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 1. BOARD MEMBERS from Supabase — using is_board_member flag
-    const boardResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?is_board_member=eq.true&membership_status=eq.Active&select=full_name,member_role,investing_strategies&limit=30`,
-      { headers: baseHeaders }
-    );
-    const boardMembers = await boardResp.json();
-
-    // 2. ACTIVE VENDORS from Supabase — with service_types populated
+    // 1. ACTIVE VENDORS from Supabase — with service_types populated
     const vendorResp = await fetch(
       `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contacts(full_name,company_name,membership_status)&service_types=not.is.null&limit=200`,
       { headers: baseHeaders }
@@ -101,19 +70,22 @@ export default async function handler(req, res) {
       }
     }
 
+    // 3. UTAH REIA TOOLS & CALCULATORS from Supabase education_resources
+    // These are platform tools available to investors — NOT external websites
+    let tools = [];
+    try {
+      const toolsResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/education_resources?select=resource_name,resource_type,description,url,strategies,stages&resource_type=eq.tool&is_active=eq.true&limit=20`,
+        { headers: baseHeaders }
+      );
+      const toolsData = await toolsResp.json();
+      if (Array.isArray(toolsData)) tools = toolsData;
+    } catch(e) {
+      console.error('Tools fetch error:', e.message);
+    }
+
     // BUILD CONTEXT STRING
     const lines = ['LIVE UTAH REIA KNOWLEDGE — updated at call start:'];
-
-    // Board members
-    lines.push('\nBOARD MEMBERS & LEADERSHIP:');
-    if (boardMembers.length > 0) {
-      boardMembers.forEach(m => {
-        const strategies = m.investing_strategies ? ` — ${m.investing_strategies}` : '';
-        lines.push(`- ${m.full_name}${strategies}`);
-      });
-    } else {
-      lines.push('- Data temporarily unavailable');
-    }
 
     // Active vendors grouped by service type
     lines.push('\nACTIVE VENDORS & SERVICE PROVIDERS:');
@@ -129,6 +101,23 @@ export default async function handler(req, res) {
       lines.push('- Data temporarily unavailable');
     }
 
+    // Utah REIA tools and calculators
+    lines.push('\nUTAH REIA TOOLS & CALCULATORS — mention these proactively when a caller asks about analyzing deals, running numbers, or needs a calculation tool. These are free and available to all Utah REIA investors:');
+    if (tools.length > 0) {
+      tools.forEach(t => {
+        const strategies = t.strategies?.slice(0, 2).join(', ') || '';
+        lines.push(`- ${t.resource_name}: ${t.description || ''}${strategies ? ' (for: ' + strategies + ')' : ''}`);
+      });
+    } else {
+      // Hardcoded fallback if Supabase returns no tools
+      // These are confirmed Utah REIA platform tools
+      lines.push('- Fix and Flip Calculator: analyze deal numbers before making an offer');
+      lines.push('- BRRRR Calculator: evaluate buy, rehab, rent, refinance, repeat deals');
+      lines.push('- Rental Property Calculator: analyze cash flow and returns on rental investments');
+      lines.push('- Wholesale Deal Analyzer: calculate maximum allowable offer for wholesale deals');
+      lines.push('- Short Term Rental Estimator: project STR revenue and occupancy');
+    }
+
     // Upcoming events from GHL
     lines.push('\nUPCOMING EVENTS:');
     if (events.length > 0) {
@@ -142,7 +131,7 @@ export default async function handler(req, res) {
     }
 
     const result = lines.join('\n');
-    console.log(`Context built — board: ${boardMembers.length} vendors: ${activeVendors.length} events: ${events.length}`);
+    console.log(`Context built — vendors: ${activeVendors.length} events: ${events.length}`);
     return res.status(200).json({ result });
 
   } catch(e) {
