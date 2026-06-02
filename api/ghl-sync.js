@@ -347,7 +347,17 @@ export default async function handler(req, res) {
       phone:  effectivePhone,   // Formatted as E.164 e.g. +18082190555 — matches GHL storage format
 
       // Flat fields accessible in GHL workflow as {{inboundWebhookRequest.*}}
+      // These must be top-level keys — nested fields like customFields[] are NOT
+      // accessible via {{inboundWebhookRequest.*}} variables in GHL workflow steps
       investorStage,
+      stackSummary:   structured.stackSummary  || summary || '',
+      alreadyTried:   structured.alreadyTried  || '',
+      vendorMatches:  structured.vendorMatches || '',
+      toolMatches:    structured.toolMatches   || '',
+      educatorMatch:  structured.educatorMatch  || '',
+      bookingUrl:     structured.bookingUrl     || '',
+      handoffChannel: structured.handoffChannel || 'sms',
+      tier:           structured.tier           || '1_info',
       strategies: strategiesArray.join(', '),
       blocker,
       goals,
