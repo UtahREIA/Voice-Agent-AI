@@ -45,6 +45,22 @@ export default async function handler(req, res) {
   }
 
   // Extract all dimensions from request body
+  // Extract tool arguments from all possible Vapi request formats
+  // Vapi sends arguments nested inside toolCallList[0].function.arguments as a JSON string
+  function extractArgs(body) {
+    if (body && (body.stage !== undefined || body.blocker !== undefined || body.path !== undefined)) {
+      return body;
+    }
+    try {
+      const args = body?.message?.toolCallList?.[0]?.function?.arguments
+        || body?.message?.toolCalls?.[0]?.function?.arguments
+        || body?.toolCallList?.[0]?.function?.arguments;
+      if (args) return typeof args === 'string' ? JSON.parse(args) : args;
+    } catch(e) {}
+    return body || {};
+  }
+
+  const vapiArgs = extractArgs(req.body);
   const {
     stage = '',
     strategy = '',
@@ -53,7 +69,7 @@ export default async function handler(req, res) {
     already_tried = '',
     goal = '',
     readiness = ''
-  } = req.body || {};
+  } = vapiArgs;
 
   const headers = {
     'Content-Type': 'application/json',

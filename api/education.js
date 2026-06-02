@@ -1,35 +1,5 @@
 // Map 3 Education Alignment — queries education_routing_matrix from Supabase
 // Accepts all 6 diagnostic dimensions, returns matched education track and resources
-
-/**
- * Education-matching tool called by the voice agent mid-call. Returns a single
- * `result` string the agent reads aloud — a 1–3 item spoken recommendation
- * stack (calculator, event replay, educator, lead magnet, …) tuned to where the
- * caller is in their investing journey.
- *
- * Inputs (all optional, more = better match):
- *   - stage           Caller's journey stage (e.g. "Active Investor")
- *   - strategy        Investing strategy (e.g. "Fix & Flip")
- *   - goal            6–12 month goal string
- *   - blocker         What's stopping them (capital/deals/team/…)
- *   - resource_type   Hard filter to one type (calculator/event_replay/…)
- *   - already_tried   Comma-separated list of resources to exclude
- *   - readiness       (accepted but currently unused in matching)
- *   - capital_range   (accepted but currently unused in matching)
- *
- * Two-stage match:
- *   1) education_routing_matrix lookup by (stage, strategy) → high-level track
- *   2) education_resources fan-out, scored by overlap with the 4 main
- *      dimensions (stage +3, strategy +3, goal +2, blocker +2, educator-for-
- *      experienced bonus +1). Top 3 by score are surfaced.
- *
- * Always returns 200 — falls back to a generic "we have a lot of resources"
- * sentence when nothing matches or the DB call throws.
- *
- * @param {import('http').IncomingMessage & { body: any, method: string }} req - POST with the 6 diagnostic fields
- * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
- * @returns {Promise<void>} 200 `{ result: <spoken response string> }`
- */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -40,6 +10,23 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
+  // Extract tool arguments from all possible Vapi request formats
+  // Vapi sends arguments nested inside toolCallList[0].function.arguments as a JSON string
+  // not directly in req.body — this caused "No result returned" errors on every tool call
+  function extractArgs(body) {
+    if (body && (body.stage !== undefined || body.strategy !== undefined || body.blocker !== undefined)) {
+      return body; // direct body format
+    }
+    try {
+      const args = body?.message?.toolCallList?.[0]?.function?.arguments
+        || body?.message?.toolCalls?.[0]?.function?.arguments
+        || body?.toolCallList?.[0]?.function?.arguments;
+      if (args) return typeof args === 'string' ? JSON.parse(args) : args;
+    } catch(e) {}
+    return body || {};
+  }
+
+  const args = extractArgs(req.body);
   const {
     stage,
     strategy,
@@ -49,7 +36,7 @@ export default async function handler(req, res) {
     already_tried,
     readiness,
     capital_range
-  } = req.body || {};
+  } = args;
 
   console.log('Education match — stage:', stage, 'strategy:', strategy, 'goal:', goal, 'blocker:', blocker);
 
