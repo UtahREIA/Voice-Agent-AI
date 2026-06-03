@@ -310,6 +310,99 @@ export default async function handler(req, res) {
     // Use resolved phone going forward
     const effectivePhone = resolvedPhone || callerPhone;
 
+    // --- VENDOR LOOKUP: fetch vendor phone for two-sided warm intro ---
+    // When a vendor is matched during the call, we look up their contact in Supabase.
+    // We join vendor_profiles to contacts to get the phone number since company_phone
+    // is not yet populated on most vendor records — contact.phone is the reliable fallback.
+    // The vendor gets an SMS intro with the caller's profile so they can follow up directly.
+    let vendorPhone = '';
+    let vendorName = '';
+    let vendorCompany = '';
+    const matchedVendorName = structured.vendorMatches ? structured.vendorMatches.split(',')[0].trim() : '';
+
+    if (matchedVendorName && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      try {
+        const supaHeaders = {
+          'Content-Type': 'application/json',
+          'apikey': process.env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+        };
+
+        // Search vendor_profiles by full_name matching the first word of the matched vendor name
+        // Then join to contacts to get their phone number
+        const firstWord = encodeURIComponent(matchedVendorName.split(' ')[0]);
+        const vendorResp = await fetch(
+          `${process.env.SUPABASE_URL}/rest/v1/vendor_profiles?select=full_name,company_phone,company_email,contact_id&full_name=ilike.*${firstWord}*&limit=1`,
+          { headers: supaHeaders }
+        );
+        const vendorData = await vendorResp.json();
+
+        if (Array.isArray(vendorData) && vendorData.length > 0) {
+          const vendor = vendorData[0];
+          vendorName = vendor.full_name || matchedVendorName;
+          vendorCompany = vendor.full_name || matchedVendorName;
+
+          // Try company_phone first, fall back to contact.phone from contacts table
+          if (vendor.company_phone) {
+            vendorPhone = vendor.company_phone;
+          } else if (vendor.contact_id) {
+            // Look up personal phone from contacts table
+            const contactResp = await fetch(
+              `${process.env.SUPABASE_URL}/rest/v1/contacts?select=phone,full_name&id=eq.${vendor.contact_id}&limit=1`,
+              { headers: supaHeaders }
+            );
+            const contactData = await contactResp.json();
+            if (Array.isArray(contactData) && contactData.length > 0) {
+              vendorPhone = contactData[0].phone || '';
+              vendorName = contactData[0].full_name || vendorName;
+            }
+          }
+
+          // Format vendor phone as E.164 for GHL SMS delivery
+          const vendorDigits = vendorPhone.replace(/\D/g, '').slice(-10);
+          if (vendorDigits.length === 10) {
+            vendorPhone = '+1' + vendorDigits;
+          }
+
+          console.log('Vendor found for warm intro:', vendorCompany, '| phone:', vendorPhone);
+        } else {
+          console.log('No vendor found in Supabase for:', matchedVendorName);
+        }
+      } catch(e) {
+        console.error('Vendor lookup error:', e.message);
+      }
+    }
+
+    // --- EDUCATOR BOOKING URL LOOKUP ---
+    // When an educator is matched (educatorMatch structured output has a value),
+    // look up their booking URL from Supabase education_resources and add it to
+    // the GHL payload so the workflow can send the correct booking link via SMS.
+    let educatorBookingUrl = structured.bookingUrl || '';
+    const matchedEducatorName = structured.educatorMatch || '';
+
+    if (matchedEducatorName && !educatorBookingUrl && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      try {
+        const firstWord = encodeURIComponent(matchedEducatorName.split(' ')[0]);
+        const eduResp = await fetch(
+          `${process.env.SUPABASE_URL}/rest/v1/education_resources?select=booking_url,educator_name&educator_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': process.env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+            }
+          }
+        );
+        const eduData = await eduResp.json();
+        if (Array.isArray(eduData) && eduData.length > 0 && eduData[0].booking_url) {
+          educatorBookingUrl = eduData[0].booking_url;
+          console.log('Educator booking URL resolved:', educatorBookingUrl);
+        }
+      } catch(e) {
+        console.error('Educator booking URL lookup error:', e.message);
+      }
+    }
+
     console.log('Phone sources — structured:', structured.callerPhone,
       '| preCallPhone:', variableValues.preCallPhone,
       '| fromContext:', phoneFromContext,
@@ -355,9 +448,16 @@ export default async function handler(req, res) {
       vendorMatches:  structured.vendorMatches || '',
       toolMatches:    structured.toolMatches   || '',
       educatorMatch:  structured.educatorMatch  || '',
-      bookingUrl:     structured.bookingUrl     || '',
+      bookingUrl:     educatorBookingUrl || structured.bookingUrl || '', // resolved from Supabase or structured output
       handoffChannel: structured.handoffChannel || 'sms',
       tier:           structured.tier           || '1_info',
+
+      // Vendor warm intro fields — used by GHL workflow to send parallel SMS to vendor
+      // vendorPhone is the matched vendor's phone number from Supabase vendor_profiles
+      // vendorName and vendorCompany identify the vendor in the workflow
+      vendorPhone:    vendorPhone,
+      vendorName:     vendorName,
+      vendorCompany:  vendorCompany,
       strategies: strategiesArray.join(', '),
       blocker,
       goals,
@@ -398,7 +498,7 @@ export default async function handler(req, res) {
         { id: 's6q99vaJ472SDrn3lKfS', field_value: structured.eventMatch     || '' },  // Event Match
         { id: 'A6oIIJNzdW2MdVTYX9I5', field_value: structured.educatorMatch  || '' },  // Educator Match
         { id: 'RVqXpTjVxGxqggfhFghA', field_value: structured.bookingRequired || 'false' },     // Booking Required
-        { id: 'stkOiKKMZh2H1EEBb47z', field_value: structured.bookingUrl     || '' },  // Booking URL
+        { id: 'stkOiKKMZh2H1EEBb47z', field_value: educatorBookingUrl || structured.bookingUrl || '' }, // Booking URL — resolved from Supabase
         { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel  || 'sms' }, // Handoff Channel
         { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },                        // Vendor Contacted (default)
 

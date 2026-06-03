@@ -161,8 +161,54 @@ export default async function handler(req, res) {
       result = `Here is the stack for where you are. First, ${parts[0]}. Second, ${parts[1]}. Third, ${parts[2]}.`;
     }
 
-    console.log(`Education match — track: ${results.length > 0 ? results[0].track_name : 'none'}, resources: ${scored.length} scored`);
-    return res.status(200).json({ result });
+    // --- EDUCATOR LOOKUP ---
+    // After matching a track, look up the best educator for this stage+strategy
+    // from education_resources table. This adds Mohammed's name and booking URL
+    // to the response so Claude can deliver a complete, personalized recommendation.
+    let educatorResult = '';
+    let educatorName = '';
+    let bookingUrl = '';
+
+    try {
+      // Build filter to match educator specialties against caller's stage and strategy
+      const educatorResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/education_resources?select=educator_name,educator_specialty,booking_url,stages,strategies&is_active=eq.true&resource_type=neq.tool&limit=10`,
+        { headers: baseHeaders }
+      );
+      const educators = await educatorResp.json();
+
+      if (Array.isArray(educators) && educators.length > 0) {
+        // Score educators by how well they match the caller's stage and strategy
+        const scoredEducators = educators
+          .filter(e => e.educator_name && e.booking_url) // must have name and booking URL
+          .map(e => {
+            let score = 0;
+            if (e.stages && stageKey && e.stages.includes(stageKey)) score += 10;
+            if (e.strategies && strategyKey && e.strategies.includes(strategyKey)) score += 5;
+            return { ...e, score };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        const bestEducator = scoredEducators[0];
+        if (bestEducator && bestEducator.score > 0) {
+          educatorName = bestEducator.educator_name;
+          bookingUrl = bestEducator.booking_url;
+          educatorResult = ` I would also connect you with ${educatorName} who specializes in ${bestEducator.educator_specialty}. You can book a session at ${bookingUrl}.`;
+        }
+      }
+    } catch(e) {
+      console.error('Educator lookup error:', e.message);
+    }
+
+    // Append educator recommendation to result if found
+    const finalResult = result + educatorResult;
+
+    console.log(`Education match — track: ${results.length > 0 ? results[0].track_name : 'none'}, educator: ${educatorName || 'none'}, resources: ${scored.length} scored`);
+    return res.status(200).json({
+      result: finalResult,
+      educator_name: educatorName,
+      booking_url: bookingUrl
+    });
 
   } catch(e) {
     console.error('Education match error:', e.message);
