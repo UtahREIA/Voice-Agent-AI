@@ -474,6 +474,12 @@ export default async function handler(req, res) {
         structured.tier         ? 'VA Tier: ' + structured.tier              : null,
         structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
         structured.bookingRequired === 'true' ? 'va-booking-required'         : null,
+        // va-vendor-matched fires when a vendor phone was resolved from Supabase
+        // This tag is used by the GHL workflow If/Else branch to trigger vendor warm intro SMS
+        vendorPhone ? 'va-vendor-matched' : null,
+        // va-vendor-matched fires when a vendor phone was resolved from Supabase
+        // This tag is used by the GHL workflow If/Else branch to trigger vendor warm intro SMS
+        vendorPhone ? 'va-vendor-matched' : null,
         investorStage           ? 'Stage: ' + investorStage                  : null,
         blocker                 ? 'Blocker: ' + blocker                      : null,
         ...strategiesArray.map(s => 'Strategy: ' + s)
