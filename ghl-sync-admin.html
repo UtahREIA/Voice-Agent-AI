@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utah REIA — GHL Object Sync Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #1a1a1a; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+  .tab { padding: 8px 18px; border-radius: 8px; border: 1.5px solid #ddd; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: #555; }
+  .tab.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+  .form-section { display: none; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .form-section.active { display: block; }
+  .form-row { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  input, textarea, select { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; transition: border-color .2s; }
+  input:focus, textarea:focus, select:focus { border-color: #1a1a2e; }
+  textarea { min-height: 80px; resize: vertical; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .hint { font-size: 11px; color: #888; margin-top: 3px; }
+  .btn { padding: 11px 24px; background: #1a1a2e; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .btn:hover { background: #2d2d4e; }
+  .btn:disabled { background: #aaa; cursor: not-allowed; }
+  .result { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-family: monospace; display: none; }
+  .result.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  .result.error { background: #fce4ec; color: #c62828; border: 1px solid #f48fb1; }
+  .section-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #1a1a2e; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { margin: 0; text-transform: none; font-size: 14px; font-weight: 500; color: #333; }
+</style>
+</head>
+<body>
+
+<h1>Utah REIA — GHL Object Sync</h1>
+<p class="subtitle">Manually sync Vendor, Educator, and Course records from GHL to Supabase</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('vendor')">Vendor & Resources</button>
+  <button class="tab" onclick="switchTab('educator')">Educators & Mentors</button>
+  <button class="tab" onclick="switchTab('course')">Educational Courses</button>
+</div>
+
+<!-- VENDOR FORM -->
+<div id="tab-vendor" class="form-section active">
+  <div class="section-title">Vendor & Resources Record</div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>GHL Record ID *</label>
+      <input type="text" id="v-id" placeholder="e.g. abc123xyz" />
+      <div class="hint">Copy from GHL URL when viewing the record</div>
+    </div>
+    <div class="form-row">
+      <label>Company Name *</label>
+      <input type="text" id="v-name" placeholder="e.g. Copa Capital Partners" />
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Company Phone</label>
+      <input type="text" id="v-phone" placeholder="+18015551234" />
+    </div>
+    <div class="form-row">
+      <label>Company Email</label>
+      <input type="text" id="v-email" placeholder="info@company.com" />
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Business Description</label>
+    <textarea id="v-desc" placeholder="What does this company do for investors?"></textarea>
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Company Tagline</label>
+      <input type="text" id="v-tagline" placeholder="Short tagline" />
+    </div>
+    <div class="form-row">
+      <label>Company Website</label>
+      <input type="text" id="v-website" placeholder="https://company.com" />
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Company City</label>
+      <input type="text" id="v-city" placeholder="Salt Lake City" />
+    </div>
+    <div class="form-row">
+      <label>Company State</label>
+      <input type="text" id="v-state" placeholder="UT" />
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Contractor Speciality</label>
+    <input type="text" id="v-contractor" placeholder="e.g. General Contractor, Plumber" />
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Funding & Financial (comma separated)</label>
+      <input type="text" id="v-funding" placeholder="Hard Money, Private Money, DSCR" />
+    </div>
+    <div class="form-row">
+      <label>Deals & Opportunities (comma separated)</label>
+      <input type="text" id="v-deals" placeholder="Wholesale, Off Market, MLS" />
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Team & Vendors (comma separated)</label>
+      <input type="text" id="v-team" placeholder="Contractors, Property Manager" />
+    </div>
+    <div class="form-row">
+      <label>Investor Types (comma separated)</label>
+      <input type="text" id="v-investors" placeholder="Fix & Flip, Buy & Hold, Wholesale" />
+    </div>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="v-enroll" />
+    <label for="v-enroll">Enroll Vendor Match (opted in to receive investor leads)</label>
+  </div>
+  <button class="btn" onclick="syncVendor()">Sync Vendor to Supabase</button>
+  <div class="result" id="v-result"></div>
+</div>
+
+<!-- EDUCATOR FORM -->
+<div id="tab-educator" class="form-section">
+  <div class="section-title">Educators & Mentors Record</div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>GHL Record ID *</label>
+      <input type="text" id="e-id" placeholder="Copy from GHL URL" />
+    </div>
+    <div class="form-row">
+      <label>Educator Name *</label>
+      <input type="text" id="e-name" placeholder="e.g. Mohammed Alhareb" />
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Educational Topics (comma separated)</label>
+    <input type="text" id="e-topics" placeholder="Creative Financing, Fix & Flip, Raising Capital" />
+  </div>
+  <div class="form-row">
+    <label>Educational Level (comma separated)</label>
+    <input type="text" id="e-level" placeholder="Exploring, New, Getting Started, Active" />
+  </div>
+  <div class="form-row">
+    <label>Educators URL (booking link)</label>
+    <input type="text" id="e-url" placeholder="https://utahreia.org/meet-name" />
+  </div>
+  <div class="form-row">
+    <label>Commercial Asset Types (comma separated)</label>
+    <input type="text" id="e-assets" placeholder="Residential, Commercial, Notes" />
+  </div>
+  <button class="btn" onclick="syncEducator()">Sync Educator to Supabase</button>
+  <div class="result" id="e-result"></div>
+</div>
+
+<!-- COURSE FORM -->
+<div id="tab-course" class="form-section">
+  <div class="section-title">Educational Courses Record</div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>GHL Record ID *</label>
+      <input type="text" id="c-id" placeholder="Copy from GHL URL" />
+    </div>
+    <div class="form-row">
+      <label>Course Name *</label>
+      <input type="text" id="c-name" placeholder="e.g. Raising Private Money 101" />
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Educational Topics (comma separated)</label>
+    <input type="text" id="c-topics" placeholder="Raising Capital, Creative Financing" />
+  </div>
+  <div class="form-row">
+    <label>Educational Level (comma separated)</label>
+    <input type="text" id="c-level" placeholder="Exploring, New, Getting Started" />
+  </div>
+  <div class="two-col">
+    <div class="form-row">
+      <label>Video URL</label>
+      <input type="text" id="c-video" placeholder="https://youtube.com/..." />
+    </div>
+    <div class="form-row">
+      <label>Education URL</label>
+      <input type="text" id="c-edu-url" placeholder="https://community.utahreia.org/..." />
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Commercial Asset Types (comma separated)</label>
+    <input type="text" id="c-assets" placeholder="Fix & Flip, Buy & Hold" />
+  </div>
+  <div class="two-col">
+    <div class="checkbox-row">
+      <input type="checkbox" id="c-paid" />
+      <label for="c-paid">Paid Education</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="c-membership" />
+      <label for="c-membership">Membership Required</label>
+    </div>
+  </div>
+  <button class="btn" onclick="syncCourse()">Sync Course to Supabase</button>
+  <div class="result" id="c-result"></div>
+</div>
+
+<script>
+// GHL Inbound Webhook URL — triggers the GHL workflow which forwards to Vercel
+const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/DNirEjy0ejVwbHsaBYrn/webhook-trigger/8708f97e-964d-47af-bf82-16a80cf2bd79';
+
+// Direct Vercel endpoint — used as fallback if GHL webhook is not set up yet
+const VERCEL_ENDPOINT = 'https://voice-agent-ai-nu.vercel.app/api/sync-ghl-objects';
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function showResult(id, ok, message) {
+  const el = document.getElementById(id);
+  el.className = 'result ' + (ok ? 'success' : 'error');
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
+async function sendToVercel(payload, resultId, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Syncing...';
+  try {
+    const resp = await fetch(VERCEL_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      showResult(resultId, true, `Synced: ${data.name || payload.company_name || payload.educators_name || payload.educational_courses} → ${data.table}`);
+    } else {
+      showResult(resultId, false, `Error: ${data.error || JSON.stringify(data)}`);
+    }
+  } catch(e) {
+    showResult(resultId, false, `Failed: ${e.message}`);
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = btnEl.textContent.replace('Syncing...', 'Sync to Supabase');
+  }
+}
+
+function syncVendor() {
+  const id = document.getElementById('v-id').value.trim();
+  const name = document.getElementById('v-name').value.trim();
+  if (!id || !name) { showResult('v-result', false, 'GHL Record ID and Company Name are required'); return; }
+  sendToVercel({
+    object_type: 'vendor_resources',
+    ghl_record_id: id,
+    company_name: name,
+    company_phone: document.getElementById('v-phone').value.trim(),
+    company_email: document.getElementById('v-email').value.trim(),
+    business_description: document.getElementById('v-desc').value.trim(),
+    company_tagline: document.getElementById('v-tagline').value.trim(),
+    company_website: document.getElementById('v-website').value.trim(),
+    company_city: document.getElementById('v-city').value.trim(),
+    company_state: document.getElementById('v-state').value.trim(),
+    contractor_speciality: document.getElementById('v-contractor').value.trim(),
+    funding_financial: document.getElementById('v-funding').value.trim(),
+    deals_opportunities: document.getElementById('v-deals').value.trim(),
+    team_vendors: document.getElementById('v-team').value.trim(),
+    investor_types: document.getElementById('v-investors').value.trim(),
+    enroll_vendor_match: document.getElementById('v-enroll').checked
+  }, 'v-result', document.querySelector('#tab-vendor .btn'));
+}
+
+function syncEducator() {
+  const id = document.getElementById('e-id').value.trim();
+  const name = document.getElementById('e-name').value.trim();
+  if (!id || !name) { showResult('e-result', false, 'GHL Record ID and Educator Name are required'); return; }
+  sendToVercel({
+    object_type: 'educators_mentors',
+    ghl_record_id: id,
+    educators_name: name,
+    educational_topics: document.getElementById('e-topics').value.trim(),
+    educational_level: document.getElementById('e-level').value.trim(),
+    educators_url: document.getElementById('e-url').value.trim(),
+    commercial_asset_types: document.getElementById('e-assets').value.trim()
+  }, 'e-result', document.querySelector('#tab-educator .btn'));
+}
+
+function syncCourse() {
+  const id = document.getElementById('c-id').value.trim();
+  const name = document.getElementById('c-name').value.trim();
+  if (!id || !name) { showResult('c-result', false, 'GHL Record ID and Course Name are required'); return; }
+  sendToVercel({
+    object_type: 'educational_courses',
+    ghl_record_id: id,
+    educational_courses: name,
+    educational_topics: document.getElementById('c-topics').value.trim(),
+    educational_level: document.getElementById('c-level').value.trim(),
+    video_url: document.getElementById('c-video').value.trim(),
+    education_url: document.getElementById('c-edu-url').value.trim(),
+    commercial_asset_types: document.getElementById('c-assets').value.trim(),
+    paid_education: document.getElementById('c-paid').checked,
+    membership_required: document.getElementById('c-membership').checked
+  }, 'c-result', document.querySelector('#tab-course .btn'));
+}
+</script>
+</body>
+</html>
