@@ -34,7 +34,16 @@ export default async function handler(req, res) {
     already_tried
   } = vapiArgs || {};
 
-  console.log('Vendor match — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need);
+  // DEBUG — log the raw body structure to see what Vapi is actually sending
+  console.log('Vendor raw body keys:', Object.keys(req.body || {}));
+  console.log('Vendor args extracted — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need);
+
+  // If no args extracted, return debug info in result so Claude can speak it
+  if (!blocker && !investor_need && !strategy && !stage) {
+    return res.status(200).json({
+      result: 'DEBUG vendor: no args received. Body keys: ' + Object.keys(req.body || {}).join(',')
+    });
+  }
 
   const baseHeaders = {
     'Content-Type': 'application/json',
