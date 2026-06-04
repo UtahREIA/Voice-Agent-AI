@@ -70,7 +70,40 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. UTAH REIA TOOLS & CALCULATORS from Supabase education_resources
+    // 3. EDUCATORS & MENTORS from ghl_educators_mentors (synced from GHL)
+    let ghlEducators = [];
+    try {
+      const eduResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=20`,
+        { headers: baseHeaders }
+      );
+      const eduData = await eduResp.json();
+      if (Array.isArray(eduData)) ghlEducators = eduData;
+    } catch(e) { console.error('GHL educators fetch error:', e.message); }
+
+    // 4. VENDOR RESOURCES from ghl_vendor_resources (synced from GHL)
+    let ghlVendors = [];
+    try {
+      const vendResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,investor_types&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
+        { headers: baseHeaders }
+      );
+      const vendData = await vendResp.json();
+      if (Array.isArray(vendData)) ghlVendors = vendData;
+    } catch(e) { console.error('GHL vendors fetch error:', e.message); }
+
+    // 5. EDUCATIONAL COURSES from ghl_educational_courses (synced from GHL)
+    let ghlCourses = [];
+    try {
+      const courseResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ghl_educational_courses?select=course_name,educational_topics,educational_level,video_url,education_url,paid_education&is_active=eq.true&limit=20`,
+        { headers: baseHeaders }
+      );
+      const courseData = await courseResp.json();
+      if (Array.isArray(courseData)) ghlCourses = courseData;
+    } catch(e) { console.error('GHL courses fetch error:', e.message); }
+
+    // 6. UTAH REIA TOOLS & CALCULATORS from Supabase education_resources
     // These are platform tools available to investors — NOT external websites
     let tools = [];
     try {
@@ -116,6 +149,39 @@ export default async function handler(req, res) {
       lines.push('- Rental Property Calculator: analyze cash flow and returns on rental investments');
       lines.push('- Wholesale Deal Analyzer: calculate maximum allowable offer for wholesale deals');
       lines.push('- Short Term Rental Estimator: project STR revenue and occupancy');
+    }
+
+    // GHL Educators & Mentors
+    if (ghlEducators.length > 0) {
+      lines.push('\nEDUCATORS & MENTORS (available for booking — mention proactively when relevant):');
+      ghlEducators.forEach(e => {
+        const topics = Array.isArray(e.educational_topics) ? e.educational_topics.join(', ') : '';
+        const levels = Array.isArray(e.educational_level) ? e.educational_level.join(', ') : '';
+        lines.push(`- ${e.educators_name}: ${topics}${levels ? ' | Level: ' + levels : ''}${e.educators_url ? ' | Book: ' + e.educators_url : ''}`);
+      });
+    }
+
+    // GHL Vendor Resources (opted in to vendor match)
+    if (ghlVendors.length > 0) {
+      lines.push('\nVENDOR PARTNERS (actively enrolled for investor connections):');
+      ghlVendors.forEach(v => {
+        const services = [
+          ...(v.funding_financial || []),
+          ...(v.deals_opportunities || []),
+          ...(v.team_vendors || [])
+        ].slice(0, 3).join(', ');
+        lines.push(`- ${v.company_name}: ${v.business_description || services || 'Real estate vendor partner'}`);
+      });
+    }
+
+    // GHL Educational Courses
+    if (ghlCourses.length > 0) {
+      lines.push('\nEDUCATIONAL COURSES (available to investors):');
+      ghlCourses.forEach(course => {
+        const topics = Array.isArray(course.educational_topics) ? course.educational_topics.join(', ') : '';
+        const url = course.education_url || course.video_url || '';
+        lines.push(`- ${course.course_name}: ${topics}${url ? ' | ' + url : ''}${course.paid_education ? ' (paid)' : ' (free)'}`);
+      });
     }
 
     // Upcoming events from GHL
