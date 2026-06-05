@@ -330,33 +330,20 @@ export default async function handler(req, res) {
 
         // Search vendor_profiles by full_name matching the first word of the matched vendor name
         // Then join to contacts to get their phone number
+        // Search ghl_vendor_resources (synced from GHL custom objects) by company name
+        // This is now the source of truth for vendor phone numbers
         const firstWord = encodeURIComponent(matchedVendorName.split(' ')[0]);
         const vendorResp = await fetch(
-          `${process.env.SUPABASE_URL}/rest/v1/vendor_profiles?select=full_name,company_phone,company_email,contact_id&full_name=ilike.*${firstWord}*&limit=1`,
+          `${process.env.SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone&company_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
           { headers: supaHeaders }
         );
         const vendorData = await vendorResp.json();
 
         if (Array.isArray(vendorData) && vendorData.length > 0) {
           const vendor = vendorData[0];
-          vendorName = vendor.full_name || matchedVendorName;
-          vendorCompany = vendor.full_name || matchedVendorName;
-
-          // Try company_phone first, fall back to contact.phone from contacts table
-          if (vendor.company_phone) {
-            vendorPhone = vendor.company_phone;
-          } else if (vendor.contact_id) {
-            // Look up personal phone from contacts table
-            const contactResp = await fetch(
-              `${process.env.SUPABASE_URL}/rest/v1/contacts?select=phone,full_name&id=eq.${vendor.contact_id}&limit=1`,
-              { headers: supaHeaders }
-            );
-            const contactData = await contactResp.json();
-            if (Array.isArray(contactData) && contactData.length > 0) {
-              vendorPhone = contactData[0].phone || '';
-              vendorName = contactData[0].full_name || vendorName;
-            }
-          }
+          vendorName = vendor.company_name || matchedVendorName;
+          vendorCompany = vendor.company_name || matchedVendorName;
+          vendorPhone = vendor.company_phone || '';
 
           // Format vendor phone as E.164 for GHL SMS delivery
           const vendorDigits = vendorPhone.replace(/\D/g, '').slice(-10);
@@ -383,8 +370,9 @@ export default async function handler(req, res) {
     if (matchedEducatorName && !educatorBookingUrl && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       try {
         const firstWord = encodeURIComponent(matchedEducatorName.split(' ')[0]);
+        // Use ghl_educators_mentors as source of truth for educator booking URLs
         const eduResp = await fetch(
-          `${process.env.SUPABASE_URL}/rest/v1/education_resources?select=booking_url,educator_name&educator_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
+          `${process.env.SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_url,educators_name&educators_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
           {
             headers: {
               'Content-Type': 'application/json',
@@ -394,8 +382,8 @@ export default async function handler(req, res) {
           }
         );
         const eduData = await eduResp.json();
-        if (Array.isArray(eduData) && eduData.length > 0 && eduData[0].booking_url) {
-          educatorBookingUrl = eduData[0].booking_url;
+        if (Array.isArray(eduData) && eduData.length > 0 && eduData[0].educators_url) {
+          educatorBookingUrl = eduData[0].educators_url;
           console.log('Educator booking URL resolved:', educatorBookingUrl);
         }
       } catch(e) {

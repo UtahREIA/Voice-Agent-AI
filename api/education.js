@@ -171,8 +171,9 @@ export default async function handler(req, res) {
 
     try {
       // Build filter to match educator specialties against caller's stage and strategy
+      // Query ghl_educators_mentors (synced from GHL custom objects) — source of truth for educators
       const educatorResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_resources?select=educator_name,educator_specialty,booking_url,stages,strategies&is_active=eq.true&resource_type=neq.tool&limit=10`,
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=10`,
         { headers: baseHeaders }
       );
       const educators = await educatorResp.json();
@@ -180,20 +181,23 @@ export default async function handler(req, res) {
       if (Array.isArray(educators) && educators.length > 0) {
         // Score educators by how well they match the caller's stage and strategy
         const scoredEducators = educators
-          .filter(e => e.educator_name && e.booking_url) // must have name and booking URL
+          .filter(e => e.educators_name && e.educators_url)
           .map(e => {
             let score = 0;
-            if (e.stages && stageKey && e.stages.includes(stageKey)) score += 10;
-            if (e.strategies && strategyKey && e.strategies.includes(strategyKey)) score += 5;
+            const levels = (e.educational_level || []).map(l => l.toLowerCase());
+            const topics = (e.educational_topics || []).map(t => t.toLowerCase());
+            if (stageKey && levels.some(l => l.includes(stageKey.replace('_', ' ')))) score += 10;
+            if (strategyKey && topics.some(t => t.includes(strategyKey.replace('_', ' ')))) score += 5;
             return { ...e, score };
           })
           .sort((a, b) => b.score - a.score);
 
         const bestEducator = scoredEducators[0];
         if (bestEducator && bestEducator.score > 0) {
-          educatorName = bestEducator.educator_name;
-          bookingUrl = bestEducator.booking_url;
-          educatorResult = ` I would also connect you with ${educatorName} who specializes in ${bestEducator.educator_specialty}. You can book a session at ${bookingUrl}.`;
+          educatorName = bestEducator.educators_name;
+          bookingUrl = bestEducator.educators_url;
+          const specialty = (bestEducator.educational_topics || []).slice(0, 2).join(' and ');
+          educatorResult = ' I would also connect you with ' + educatorName + ' who specializes in ' + (specialty || 'real estate investing') + '. You can book a session at ' + bookingUrl + '.';
         }
       }
     } catch(e) {

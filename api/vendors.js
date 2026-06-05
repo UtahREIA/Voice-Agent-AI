@@ -89,50 +89,65 @@ export default async function handler(req, res) {
       searchTerms.add('General Education');
     }
 
-    // Step 2 — query vendor_profiles filtered by matched service types
+    // Step 2 — query ghl_vendor_resources (synced from GHL custom objects)
+    // This replaces vendor_profiles as the source of truth for vendor data
+    // ghl_vendor_resources contains company_name, phone, description, and partner categories
     const vendorResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contacts(full_name,company_name,membership_status,phone)&service_types=not.is.null&limit=200`,
+      `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,other_vendor_services,investor_types,enroll_vendor_match&is_active=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
 
-    // Filter by service type match and active membership
     const alreadyTriedList = already_tried
       ? already_tried.toLowerCase().split(',').map(s => s.trim())
       : [];
 
     const terms = Array.from(searchTerms).map(t => t.toLowerCase());
-    const matched = vendors
+
+    // Match vendors by checking all partner category arrays against search terms
+    const matched = Array.isArray(vendors) ? vendors
       .filter(v => {
-        if (v.contacts?.membership_status !== 'Active') return false;
-        // Filter out already tried vendors
-        const vendorName = (v.contacts?.company_name || v.contacts?.full_name || '').toLowerCase();
+        // Filter out already tried vendors by company name
+        const vendorName = (v.company_name || '').toLowerCase();
         if (alreadyTriedList.some(tried => vendorName.includes(tried))) return false;
-        return v.service_types?.some(st => terms.some(t => st.toLowerCase().includes(t)));
+
+        // Check all service category fields for a match
+        const allServices = [
+          ...(v.funding_financial || []),
+          ...(v.deals_opportunities || []),
+          ...(v.team_vendors || []),
+          ...(v.attorney_subclass || []),
+          ...(v.operations || []),
+          ...(v.development_land || []),
+          ...(v.education_tech_tools || []),
+          ...(v.other_vendor_services ? [v.other_vendor_services] : []),
+          ...(v.investor_types || []),
+        ].map(s => s.toLowerCase());
+
+        return terms.some(t => allServices.some(s => s.includes(t)));
       })
-      .slice(0, 4);
+      .slice(0, 3) : [];
 
     // Build natural spoken response
     if (matched.length === 0) {
       return res.status(200).json({
-        result: `We have vendors in our community for that need. I will make sure someone from our team follows up with specific names based on your situation.`
+        result: 'We have vendors in our community for that need. Our team will follow up with specific recommendations based on your situation.'
       });
     }
 
     const names = matched.map(v => {
-      const co = v.contacts?.company_name || v.contacts?.full_name || '';
-      const contact = v.contacts?.company_name ? v.contacts?.full_name : null;
-      const services = v.service_types?.slice(0, 2).join(', ') || '';
-      return contact ? `${co} — contact ${contact} — ${services}` : `${co} — ${services}`;
+      const desc = v.business_description
+        ? v.business_description.split('.')[0]
+        : '';
+      return desc ? v.company_name + ' — ' + desc : v.company_name;
     }).join('; ');
 
-    // Include subtype context in response
     const subtypes = matrixRows.flatMap(r => r.vendor_subtypes || []).slice(0, 2).join(' and ');
-    const context = subtypes ? ` who specialize in ${subtypes}` : '';
+    const context = subtypes ? ' who specialize in ' + subtypes : '';
 
-    const result = `Here are the best matches in our community${context}: ${names}. These are all active Utah REIA members.`;
+    const result = 'Here are the best matches in our community' + context + ': ' + names + '. I can also connect you with one of them directly after this call.';
 
-    console.log(`Vendor match — ${matched.length} vendors found, categories: ${Array.from(searchTerms).join(', ')}`);
+    console.log('Vendor match — ' + matched.length + ' vendors found from ghl_vendor_resources, categories: ' + Array.from(searchTerms).join(', '));
     return res.status(200).json({ result });
 
   } catch(e) {
