@@ -465,9 +465,6 @@ export default async function handler(req, res) {
         // va-vendor-matched fires when a vendor phone was resolved from Supabase
         // This tag is used by the GHL workflow If/Else branch to trigger vendor warm intro SMS
         vendorPhone ? 'va-vendor-matched' : null,
-        // va-vendor-matched fires when a vendor phone was resolved from Supabase
-        // This tag is used by the GHL workflow If/Else branch to trigger vendor warm intro SMS
-        vendorPhone ? 'va-vendor-matched' : null,
         investorStage           ? 'Stage: ' + investorStage                  : null,
         blocker                 ? 'Blocker: ' + blocker                      : null,
         ...strategiesArray.map(s => 'Strategy: ' + s)
@@ -663,9 +660,14 @@ export default async function handler(req, res) {
               },
               body: JSON.stringify({
                 customFields: [
+                  // SINGLE_OPTIONS fields — must use v2 API, cannot be set via webhook payload
                   { id: 'swDtahR8SAnG4S34s2a6', field_value: ghlStageMap[investorStage] || investorStage },
-                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType }
-                ]
+                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
+                  { id: 'Q1k7VrrG1gp0eIvg0M1h', field_value: structured.tier || '1_info' },
+                  { id: 'RVqXpTjVxGxqggfhFghA', field_value: structured.bookingRequired || 'false' },
+                  { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel || 'sms' },
+                  { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' }
+                ].filter(f => f.field_value)
               })
             }
           );
