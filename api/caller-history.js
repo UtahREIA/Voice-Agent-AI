@@ -123,10 +123,11 @@ export default async function handler(req, res) {
         { headers }
       ).then(r => r.json()).catch(() => []),
 
-      // Past voice agent surveys — previous call summaries
+      // Past voice agent calls from voice_agent_calls table
+      // This is the dedicated table for voice agent history
       fetch(
-        SUPABASE_URL + '/rest/v1/readiness_surveys?contact_id=eq.' + contactId +
-        '&source=eq.voice_agent&select=answers,created_at&order=created_at.desc&limit=5',
+        SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + contactId +
+        '&select=summary,blocker,goals,strategies,educator_match,vendor_matches,tool_matches,booking_url,recommended_next,stack_summary,created_at&order=created_at.desc&limit=5',
         { headers }
       ).then(r => r.json()).catch(() => []),
 
@@ -151,17 +152,20 @@ export default async function handler(req, res) {
     const events = Array.isArray(eventData) ? eventData : [];
 
     // --- STEP 3: Parse past voice agent call data ---
+    // voice_agent_calls has flat columns — no JSON parsing needed
     const pastCalls = surveys.map(s => {
       try {
-        const answers = typeof s.answers === 'string' ? JSON.parse(s.answers) : s.answers;
         return {
           date: s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
-          stage: answers?.investorStage || '',
-          strategies: Array.isArray(answers?.strategies) ? answers.strategies.join(', ') : (answers?.strategies || ''),
-          blocker: answers?.blocker || '',
-          goals: answers?.goals || '',
-          summary: answers?.summary || '',
-          recommendedNext: answers?.recommendedNextStep || ''
+          strategies: Array.isArray(s.strategies) ? s.strategies.join(', ') : (s.strategies || ''),
+          blocker: s.blocker || '',
+          goals: s.goals || '',
+          summary: s.summary || '',
+          recommendedNext: s.recommended_next || '',
+          educatorMatch: s.educator_match || '',
+          vendorMatches: s.vendor_matches || '',
+          bookingUrl: s.booking_url || '',
+          stackSummary: s.stack_summary || ''
         };
       } catch(e) {
         return null;

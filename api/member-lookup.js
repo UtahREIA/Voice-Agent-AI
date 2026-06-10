@@ -225,9 +225,10 @@ export default async function handler(req, res) {
     // what was discussed, recommended, and what they have already tried
     let historyBlock = '';
     try {
+      // Read from voice_agent_calls — dedicated table for voice agent history
       const surveyResp = await fetch(
-        SUPABASE_URL + '/rest/v1/readiness_surveys?contact_id=eq.' + match.id +
-        '&source=eq.voice_agent&select=answers,created_at&order=created_at.desc&limit=3',
+        SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + match.id +
+        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=3',
         { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
       );
       const surveys = await surveyResp.json();
@@ -235,16 +236,12 @@ export default async function handler(req, res) {
       if (Array.isArray(surveys) && surveys.length > 0) {
         const historyParts = surveys.map(s => {
           try {
-            const ans = typeof s.answers === 'string' ? JSON.parse(s.answers) : s.answers;
             const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-            const summary = ans?.summary || '';
-            const recommended = ans?.recommendedNextStep || '';
-            const blocker = ans?.blocker || '';
             return [
               date ? 'Call on ' + date : 'Previous call',
-              summary ? 'Summary: ' + summary.slice(0, 100) : '',
-              blocker ? 'Blocker was: ' + blocker : '',
-              recommended ? 'Recommended: ' + recommended.slice(0, 80) : ''
+              s.summary ? 'Summary: ' + s.summary.slice(0, 100) : '',
+              s.blocker ? 'Blocker was: ' + s.blocker : '',
+              s.recommended_next ? 'Recommended: ' + s.recommended_next.slice(0, 80) : ''
             ].filter(Boolean).join('. ');
           } catch(e) { return null; }
         }).filter(Boolean);

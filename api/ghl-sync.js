@@ -555,15 +555,42 @@ export default async function handler(req, res) {
         'Veteran':             'veteran'
       };
 
-      // Look up existing contact by phone (preferred) or email
-      const lookupField = callerEmail
-        ? `email=eq.${encodeURIComponent(callerEmail)}`
-        : `phone=eq.${encodeURIComponent(effectivePhone)}`;
+      // Look up existing contact by phone or email
+      // Try multiple phone formats since Supabase stores phones in various formats
+      // E.164 (+18082190555), formatted ((808) 219-0555), raw digits (8082190555)
+      let existing = [];
 
-      const existing = await fetch(
-        `${SUPABASE_URL}/rest/v1/contacts?${lookupField}&select=id&limit=1`,
-        { headers: baseHeaders }
-      ).then(r => r.json()).catch(() => []);
+      if (callerEmail) {
+        existing = await fetch(
+          `${SUPABASE_URL}/rest/v1/contacts?email=eq.${encodeURIComponent(callerEmail)}&select=id&limit=1`,
+          { headers: baseHeaders }
+        ).then(r => r.json()).catch(() => []);
+      }
+
+      // Try formatted phone (XXX) XXX-XXXX — most common Supabase format
+      if (!existing.length && callerPhoneDigits) {
+        const formattedPhone = '(' + callerPhoneDigits.slice(0,3) + ') ' + callerPhoneDigits.slice(3,6) + '-' + callerPhoneDigits.slice(6);
+        existing = await fetch(
+          `${SUPABASE_URL}/rest/v1/contacts?phone=eq.${encodeURIComponent(formattedPhone)}&select=id&limit=1`,
+          { headers: baseHeaders }
+        ).then(r => r.json()).catch(() => []);
+      }
+
+      // Try E.164 format (+1XXXXXXXXXX)
+      if (!existing.length && effectivePhone) {
+        existing = await fetch(
+          `${SUPABASE_URL}/rest/v1/contacts?phone=eq.${encodeURIComponent(effectivePhone)}&select=id&limit=1`,
+          { headers: baseHeaders }
+        ).then(r => r.json()).catch(() => []);
+      }
+
+      // Try raw digits
+      if (!existing.length && callerPhoneDigits) {
+        existing = await fetch(
+          `${SUPABASE_URL}/rest/v1/contacts?phone=eq.${encodeURIComponent(callerPhoneDigits)}&select=id&limit=1`,
+          { headers: baseHeaders }
+        ).then(r => r.json()).catch(() => []);
+      }
 
       if (existing.length > 0) {
         // Contact exists — update name and phone only (don't overwrite other fields)
@@ -691,11 +718,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // --- STEP 7: Write readiness survey to Supabase ---
-    // Records a Map 1 classification entry for every voice agent call
-    // Used for analytics, routing history, and re-engagement campaigns
-    // Only writes if we have a contactId from STEP 5
-    if (SUPABASE_URL && SUPABASE_KEY && contactId) {
+    // --- STEP 7: Write voice agent call history to Supabase ---
+    // Stores every call in voice_agent_calls — dedicated to voice agent history.
+    // NOTE: readiness_surveys is reserved for GHL form submissions only.
+    // Writes for ALL callers regardless of whether contactId was resolved.
+    if (SUPABASE_URL && SUPABASE_KEY) {
       try {
         const baseHeaders2 = {
           'Content-Type': 'application/json',
@@ -704,41 +731,42 @@ export default async function handler(req, res) {
           'Prefer': 'return=minimal'
         };
 
-        const surveyData = {
-          contact_id:   contactId,
-          survey_id:    'voice-agent-intake',
-          survey_name:  'Voice Agent Intake',
-          survey_type:  'voice_agent',
-          submission_id: 'vapi-' + Date.now(),
-          submitted_at: new Date().toISOString(),
-          source:       'voice_agent',
-          answers: JSON.stringify({
-            callerName,
-            effectivePhone,
-            profileType,
-            investorStage,
-            strategies:          strategiesArray,
-            blocker,
-            goals,
-            summary,
-            recommendedNextStep,
-            // Path A = new/exploring investors needing education
-            // Path B = active investors needing vendors or resources
-            path: (investorStage === 'Exploring' || investorStage === 'Getting Started') ? 'A' : 'B'
-          }),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+        const callRecord = {
+          contact_id:       contactId || null,
+          caller_name:      callerName || '',
+          caller_phone:     effectivePhone || '',
+          caller_email:     callerEmail || '',
+          investor_stage:   investorStage || '',
+          profile_type:     profileType || '',
+          path:             (investorStage === 'Exploring' || investorStage === 'Getting Started') ? 'A' : 'B',
+          tier:             structured.tier || '1_info',
+          strategies:       strategiesArray.length ? strategiesArray : null,
+          blocker:          blocker || '',
+          goals:            goals || '',
+          already_tried:    structured.alreadyTried || '',
+          summary:          summary || '',
+          vendor_matches:   structured.vendorMatches || '',
+          tool_matches:     structured.toolMatches || '',
+          educator_match:   structured.educatorMatch || '',
+          booking_url:      educatorBookingUrl || structured.bookingUrl || '',
+          booking_required: structured.bookingRequired === 'true',
+          stack_summary:    structured.stackSummary || summary || '',
+          recommended_next: structured.recommendedNextStep || recommendedNextStep || '',
+          handoff_channel:  structured.handoffChannel || 'sms',
+          vendor_contacted: 'unknown',
+          vapi_call_id:     payload.message?.call?.id || payload.call?.id || null,
+          created_at:       new Date().toISOString(),
+          updated_at:       new Date().toISOString()
         };
 
-        await fetch(`${SUPABASE_URL}/rest/v1/readiness_surveys`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_calls`, {
           method: 'POST',
           headers: baseHeaders2,
-          body: JSON.stringify(surveyData)
+          body: JSON.stringify(callRecord)
         });
-        console.log('Readiness survey written for:', callerName);
+        console.log('Voice agent call history written for:', callerName);
       } catch(e) {
-        // Non-fatal — log but don't crash
-        console.error('Readiness survey write error:', e.message);
+        console.error('Voice agent call history write error:', e.message);
       }
     }
 
