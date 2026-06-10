@@ -108,12 +108,14 @@ export default async function handler(req, res) {
       if (Array.isArray(courseData)) ghlCourses = courseData;
     } catch(e) { console.error('GHL courses fetch error:', e.message); }
 
-    // 6. UTAH REIA TOOLS & CALCULATORS from Supabase education_resources
-    // These are platform tools available to investors — NOT external websites
+    // 6. UTAH REIA TOOLS & CALCULATORS from ghl_tools_resources
+    // Synced from GHL custom object: custom_objects.tools_resources
+    // This is now the source of truth for tools — replaces education_resources tool lookup
+    // Includes member URL, non-member URL, membership_required, and paid_resource flags
     let tools = [];
     try {
       const toolsResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_resources?select=resource_name,resource_type,description,url,strategies,stages&resource_type=eq.tool&is_active=eq.true&limit=20`,
+        `${SUPABASE_URL}/rest/v1/ghl_tools_resources?select=resource_title,educational_topics,educational_level,resource_url,resource_url_nonmember,membership_required,paid_resource&is_active=eq.true&order=resource_title.asc&limit=20`,
         { headers: baseHeaders }
       );
       const toolsData = await toolsResp.json();
@@ -143,17 +145,17 @@ export default async function handler(req, res) {
     lines.push('\nUTAH REIA TOOLS & CALCULATORS — mention these proactively when a caller asks about analyzing deals, running numbers, or needs a calculation tool. These are free and available to all Utah REIA investors:');
     if (tools.length > 0) {
       tools.forEach(t => {
-        const strategies = t.strategies?.slice(0, 2).join(', ') || '';
-        lines.push(`- ${t.resource_name}: ${t.description || ''}${strategies ? ' (for: ' + strategies + ')' : ''}`);
+        const topics = Array.isArray(t.educational_topics) ? t.educational_topics.slice(0,2).join(', ') : '';
+        // Show member URL for recognized members, non-member URL for guests
+        // The voice agent should use resource_url for members and resource_url_nonmember for non-members
+        const memberNote = t.membership_required ? ' (membership required)' : ' (free)';
+        const paidNote = t.paid_resource ? ' (paid add-on)' : '';
+        lines.push(`- ${t.resource_title}${topics ? ' — for: ' + topics : ''}${memberNote}${paidNote} | Member URL: ${t.resource_url || ''} | Guest URL: ${t.resource_url_nonmember || t.resource_url || ''}`);
       });
     } else {
-      // Hardcoded fallback if Supabase returns no tools
-      // These are confirmed Utah REIA platform tools
-      lines.push('- Fix and Flip Calculator: analyze deal numbers before making an offer');
-      lines.push('- BRRRR Calculator: evaluate buy, rehab, rent, refinance, repeat deals');
-      lines.push('- Rental Property Calculator: analyze cash flow and returns on rental investments');
-      lines.push('- Wholesale Deal Analyzer: calculate maximum allowable offer for wholesale deals');
-      lines.push('- Short Term Rental Estimator: project STR revenue and occupancy');
+      // Hardcoded fallback if ghl_tools_resources is empty
+      lines.push('- BRRRR Calculator: evaluate buy, rehab, rent, refinance, repeat deals (membership required)');
+      lines.push('- Build Scope AI Rehab Estimator: estimate rehab and new build costs (paid add-on)');
     }
 
     // GHL Educators & Mentors
