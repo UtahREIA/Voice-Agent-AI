@@ -207,9 +207,42 @@ export default async function handler(req, res) {
     // Append educator recommendation to result if found
     const finalResult = result + educatorResult;
 
+    // --- TOOLS LOOKUP from tools_routing_matrix ---
+    // Query tools that match this caller's stage and strategy
+    // This surfaces calculator and tool recommendations alongside education tracks
+    let toolResult = '';
+    try {
+      // Try stage + strategy match first, fall back to strategy only
+      let toolRows = [];
+      if (stageKey && strategyKey) {
+        const toolResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/tools_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&order=priority.asc&limit=2`,
+          { headers: baseHeaders }
+        );
+        toolRows = await toolResp.json();
+      }
+      if (!Array.isArray(toolRows) || toolRows.length === 0) {
+        const toolResp2 = await fetch(
+          `${SUPABASE_URL}/rest/v1/tools_routing_matrix?stage=is.null&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&order=priority.asc&limit=2`,
+          { headers: baseHeaders }
+        );
+        toolRows = await toolResp2.json();
+      }
+
+      if (Array.isArray(toolRows) && toolRows.length > 0) {
+        const topTool = toolRows[0];
+        toolResult = ' I also recommend the ' + topTool.tool_title + ' — ' + topTool.recommendation_reason;
+      }
+    } catch(e) {
+      console.error('Tools routing lookup error:', e.message);
+    }
+
+    // Append tool recommendation to final result if found
+    const finalResultWithTool = finalResult + toolResult;
+
     console.log(`Education match — track: ${results.length > 0 ? results[0].track_name : 'none'}, educator: ${educatorName || 'none'}, resources: ${scored.length} scored`);
     return res.status(200).json({
-      result: finalResult,
+      result: finalResultWithTool,
       educator_name: educatorName,
       booking_url: bookingUrl
     });
