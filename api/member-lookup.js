@@ -171,11 +171,23 @@ export default async function handler(req, res) {
     const strategies = profile?.investing_interests || [];
     const eventNames = Array.isArray(events) ? events.map(e => e.event_name).filter(Boolean) : [];
 
+    // Extract insights from past voice agent calls
     let lastBlocker = '';
-    if (Array.isArray(surveys) && surveys[0]?.answers) {
+    let lastRecommendation = '';
+    let pastCallCount = 0;
+    let lastCallDate = '';
+
+    if (Array.isArray(surveys) && surveys.length > 0) {
+      pastCallCount = surveys.length;
       try {
-        const ans = typeof surveys[0].answers === 'string' ? JSON.parse(surveys[0].answers) : surveys[0].answers;
+        const ans = typeof surveys[0].answers === 'string'
+          ? JSON.parse(surveys[0].answers)
+          : surveys[0].answers;
         lastBlocker = ans?.blocker || '';
+        lastRecommendation = ans?.recommendedNextStep || '';
+        lastCallDate = surveys[0].created_at
+          ? new Date(surveys[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : '';
       } catch(e) {}
     }
 
@@ -196,9 +208,60 @@ export default async function handler(req, res) {
       greeting += ' I can see ' + facts.slice(0, 3).join(', and ') + '.';
     }
 
-    greeting += ' What can I help you with today?';
+    // Reference past calls if they exist
+    if (pastCallCount > 0 && lastCallDate) {
+      if (lastBlocker) {
+        greeting += ' Last time you called on ' + lastCallDate + ' you were working through ' + lastBlocker + '.';
+      } else if (lastRecommendation) {
+        greeting += ' Last time you called we recommended ' + lastRecommendation.slice(0, 80) + '.';
+      }
+      greeting += ' How has that been going?';
+    } else {
+      greeting += ' What can I help you with today?';
+    }
 
-    return res.status(200).json({ result: greeting, member_name: firstName });
+    // --- FETCH PAST VOICE AGENT CALL HISTORY ---
+    // Pull last 3 voice agent surveys for this contact to surface
+    // what was discussed, recommended, and what they have already tried
+    let historyBlock = '';
+    try {
+      const surveyResp = await fetch(
+        SUPABASE_URL + '/rest/v1/readiness_surveys?contact_id=eq.' + match.id +
+        '&source=eq.voice_agent&select=answers,created_at&order=created_at.desc&limit=3',
+        { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+      );
+      const surveys = await surveyResp.json();
+
+      if (Array.isArray(surveys) && surveys.length > 0) {
+        const historyParts = surveys.map(s => {
+          try {
+            const ans = typeof s.answers === 'string' ? JSON.parse(s.answers) : s.answers;
+            const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+            const summary = ans?.summary || '';
+            const recommended = ans?.recommendedNextStep || '';
+            const blocker = ans?.blocker || '';
+            return [
+              date ? 'Call on ' + date : 'Previous call',
+              summary ? 'Summary: ' + summary.slice(0, 100) : '',
+              blocker ? 'Blocker was: ' + blocker : '',
+              recommended ? 'Recommended: ' + recommended.slice(0, 80) : ''
+            ].filter(Boolean).join('. ');
+          } catch(e) { return null; }
+        }).filter(Boolean);
+
+        if (historyParts.length > 0) {
+          historyBlock = ' PAST CALL HISTORY (' + historyParts.length + ' previous call' +
+            (historyParts.length > 1 ? 's' : '') + '): ' + historyParts.join(' || ');
+        }
+      }
+    } catch(e) {
+      console.error('History fetch error:', e.message);
+    }
+
+    // Append history to greeting so Claude can reference it immediately
+    const fullResult = greeting + (historyBlock ? ' ' + historyBlock : '');
+
+    return res.status(200).json({ result: fullResult, member_name: firstName });
 
   } catch (e) {
     return res.status(200).json({
