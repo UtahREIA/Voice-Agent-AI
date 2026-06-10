@@ -26,12 +26,14 @@ export default async function handler(req, res) {
   try {
     // 1. ACTIVE VENDORS from Supabase — with service_types populated
     const vendorResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/vendor_profiles?select=service_types,contacts(full_name,company_name,membership_status)&service_types=not.is.null&limit=200`,
+      // vendor_profiles joins to contacts via contact_id
+// Use ghl_vendor_resources instead which has company_name directly
+`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,funding_financial,business_description,enroll_vendor_match&is_active=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
     const activeVendors = vendors.filter(v =>
-      v.contacts?.membership_status === 'Active' &&
+      v.company_name &&
       v.service_types?.length > 0
     ).slice(0, 20);
 
@@ -131,10 +133,10 @@ export default async function handler(req, res) {
     lines.push('\nACTIVE VENDORS & SERVICE PROVIDERS:');
     if (activeVendors.length > 0) {
       activeVendors.forEach(v => {
-        const name = v.contacts?.company_name || v.contacts?.full_name || '';
-        const contact = v.contacts?.company_name ? v.contacts?.full_name : null;
-        const services = v.service_types?.slice(0, 2).join(', ') || '';
-        const contactStr = contact ? ` (contact: ${contact})` : '';
+        const name = v.company_name || '';
+        const contact = null;
+        const services = (v.funding_financial || []).slice(0, 2).join(', ') || v.business_description?.slice(0,50) || '';
+        const contactStr = '';
         lines.push(`- ${name}${contactStr}: ${services}`);
       });
     } else {
