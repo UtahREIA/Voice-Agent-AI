@@ -647,7 +647,7 @@ async function startCall() {
     // Fetch live context from Supabase before starting the call
     let contextBlock = '';
     try {
-      const ctxResp = await fetch('/api/context', {
+      const ctxResp = await fetch('https://voice-agent-ai-nu.vercel.app/api/context', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -667,7 +667,7 @@ async function startCall() {
     const preCallPhone = preCallPhoneInput ? preCallPhoneInput.value.trim() : '';
     if (preCallPhone) {
       try {
-        const memberResp = await fetch('/api/member-lookup', {
+        const memberResp = await fetch('https://voice-agent-ai-nu.vercel.app/api/member-lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: preCallPhone })
@@ -724,9 +724,18 @@ async function startCall() {
       overrides.firstMessage = firstName
         ? "Aloha " + firstName + ", glad you reached out to Utah REIA. How can I help you today?"
         : "Aloha, glad you reached out to Utah REIA. How can I help you today?";
+      // Inject Mahalo closing rule as a variable so system prompt can reference it
+      overrides.variableValues.closingWord = 'Mahalo';
+      // Append closing rule to liveContext so it is visible regardless of which path fires
+      overrides.variableValues.liveContext = (overrides.variableValues.liveContext || '') +
+        '\n\nCLOSING RULE — NON-NEGOTIABLE: You MUST end every call by saying Mahalo. Never say Goodbye, Bye, Take care, or any other closing word. Only Mahalo.';
     } else {
       overrides.firstMessage = "Aloha, welcome to Utah REIA. Before we dive in, what is your first name?";
     }
+
+    // Inject closing rule reminder into the assistant messages for every call
+    // This ensures the system prompt rules apply regardless of which greeting path is used
+
 
     await vapi.start(VAPI_ASSISTANT_ID, overrides);
     log('Vapi started');
