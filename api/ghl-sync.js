@@ -431,7 +431,17 @@ export default async function handler(req, res) {
       // These must be top-level keys — nested fields like customFields[] are NOT
       // accessible via {{inboundWebhookRequest.*}} variables in GHL workflow steps
       investorStage,
-      stackSummary:   structured.stackSummary  || summary || '',
+      // Append booking URL to stack summary if educator was matched
+      // This ensures the URL always appears in the SMS even if Claude omitted it
+      stackSummary: (() => {
+        let s = structured.stackSummary || summary || '';
+        const bookingUrl = educatorBookingUrl || structured.bookingUrl || '';
+        const educatorName = structured.educatorMatch || '';
+        if (bookingUrl && s && !s.includes(bookingUrl)) {
+          s = s + (educatorName ? ' Book ' + educatorName + ': ' : ' Book here: ') + bookingUrl;
+        }
+        return s.slice(0, 300); // keep under SMS limit
+      })(),
       alreadyTried:   structured.alreadyTried  || '',
       vendorMatches:  structured.vendorMatches || '',
       toolMatches:    structured.toolMatches   || '',
