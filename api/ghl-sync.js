@@ -447,6 +447,18 @@ export default async function handler(req, res) {
       toolMatches:    structured.toolMatches   || '',
       educatorMatch:  structured.educatorMatch  || '',
       bookingUrl:     educatorBookingUrl || structured.bookingUrl || '', // resolved from Supabase or structured output
+
+      // ---- INVESTOR QUESTIONNAIRE TEXT FIELDS ----
+      // These populate the same fields the GHL web form collects
+      // Sent as top-level keys so GHL workflow can write them via Update Contact Field
+      investorStageLabel: ghlStageMap[investorStage] || investorStage || '',
+      investingInterests: strategiesArray.join(', ') || '',
+      accomplishNext12:   goals || '',
+      fundingNeeds:       blocker === 'capital' ? 'Private Money / Hard Money' : '',
+      dealNeeds:          blocker === 'deals' ? 'Off Market Deals' : '',
+      teamNeeds:          (blocker === 'team' || blocker === 'contractors') ? 'Contractors' : '',
+      wantsMentor:        structured.bookingRequired === 'true' ? 'Yes' : '',
+      wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
       handoffChannel: structured.handoffChannel || 'sms',
       tier:           structured.tier           || '1_info',
 
@@ -686,12 +698,50 @@ export default async function handler(req, res) {
         const contact = searchData.contacts?.[0];
         if (contact?.id) {
           // Map stage names to GHL SINGLE_OPTIONS picklist values
+          // Map voice agent stage values to exact GHL picklist option labels
           const ghlStageMap = {
-            'Exploring':           'Exploring / New',
-            'Getting Started':     'Getting Started',
-            'Active Investor':     'Active Investor',
-            'Experienced Investor':'Experienced Investor',
-            'Veteran':             'Veteran / Operator'
+            'Exploring':              'Exploring / New',
+            'exploring':              'Exploring / New',
+            'Getting Started':        'Getting Started',
+            'getting_started':        'Getting Started',
+            'Active Investor':        'Active Investor',
+            'active':                 'Active Investor',
+            'Experienced Investor':   'Experienced Investor',
+            'experienced':            'Experienced Investor',
+            'Veteran':                'Veteran / Operator',
+            'veteran':                'Veteran / Operator',
+            'Veteran / Operator':     'Veteran / Operator',
+          };
+
+          // Map strategy keys to exact GHL "What type of investing" picklist values
+          const strategyToGHL = {
+            'fix_and_flip':       'Fix & Flip',
+            'buy_and_hold':       'Buy & Hold / Rentals',
+            'brrrr':              'Buy & Hold / Rentals',
+            'wholesale':          'Wholesaling',
+            'wholesaling':        'Wholesaling',
+            'short_term_rental':  'Short Term Rentals',
+            'creative_financing': 'Creative Financing',
+            'development':        'New Construction / Development',
+            'notes_lending':      'Notes / Lending',
+            'raising_capital':    'Syndication / Capital Raising',
+            'syndication':        'Syndication / Capital Raising',
+            'commercial':         'Commercial Real Estate',
+            'multi_family':       'Commercial Real Estate',
+            'not_sure':           "I'm not sure yet, I'm here to learn",
+          };
+
+          // Map goals to GHL "What are you trying to accomplish" picklist values
+          const goalToGHL = {
+            'first_deal':         'Close my first deal',
+            'passive_income':     'Build passive income / cash flow',
+            'portfolio':          'Build a real estate portfolio',
+            'financial_freedom':  'Achieve financial freedom',
+            'replace_income':     'Replace my W2 income',
+            'scale':              'Scale my existing portfolio',
+            'capital':            'Raise capital or private money',
+            'connections':        'Connect with other investors',
+            'education':          'Learn more about investing',
           };
 
           // Update SINGLE_OPTIONS and MULTIPLE_OPTIONS fields that cannot be
@@ -725,16 +775,16 @@ export default async function handler(req, res) {
                   { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
 
                   // What type of investing are you most interested in? (MULTIPLE_OPTIONS)
-                  // Sends first strategy from the strategies array
+                  // Map strategy key to exact GHL picklist label
                   ...(strategiesArray.length > 0 ? [{
                     id: 'hf9VEhcVwgyNXP3qbzsA',
-                    field_value: strategiesArray[0]
+                    field_value: strategyToGHL[strategiesArray[0]?.toLowerCase()] || strategiesArray[0]
                   }] : []),
 
-                  // What are you trying to accomplish in the next 6-12 months? (MULTIPLE_OPTIONS)
+                  // What are you trying to accomplish in the next 6 to 12 months? (MULTIPLE_OPTIONS)
                   ...(goals ? [{
                     id: 't150aKjUz1KvU183CtJw',
-                    field_value: goals.split(',')[0].trim()
+                    field_value: goals.split(',')[0].trim().slice(0, 100)
                   }] : []),
 
                   // Would you like us to connect you with a mentor? (SINGLE_OPTIONS)
@@ -757,6 +807,37 @@ export default async function handler(req, res) {
                     id: 'A6d3LiW4tm4sRYgKkexW',
                     field_value: 'Private Money / Hard Money'
                   }] : []),
+
+                  // Deals & Opportunities — set if blocker is deals or wholesale strategy
+                  ...(blocker === 'deals' || (strategiesArray || []).some(s => s.toLowerCase().includes('wholesale')) ? [{
+                    id: 'xRQGkFLJLgH0L3RQUxKF',
+                    field_value: 'Off Market Deals'
+                  }] : []),
+
+                  // Team & Vendors — set if blocker is team or contractors
+                  ...(blocker === 'team' || blocker === 'contractors' ? [{
+                    id: 'oiMoxdyO8wHRWl8ECyug',
+                    field_value: 'Contractors'
+                  }] : []),
+
+                  // Select Commercial Asset Types — set if strategy is commercial
+                  ...((strategiesArray || []).some(s => ['commercial','multi_family','self_storage','assisted_living'].includes(s.toLowerCase())) ? [{
+                    id: 'fSCzPFTuniRg0Lce2CCf',
+                    field_value: strategiesArray.find(s => ['commercial','multi_family','self_storage','assisted_living'].includes(s.toLowerCase())) || 'Multi-Family'
+                  }] : []),
+
+                  // Do you want access to off-market opportunities?
+                  ...(blocker === 'deals' ? [{
+                    id: 'a51p8NV5scymqkF2sXbr',
+                    field_value: 'Yes'
+                  }] : []),
+
+                  // Message field — call summary (LARGE_TEXT, can be set via v2 API)
+                  ...(summary ? [{
+                    id: 'TCCSXzunxUqJme5YtGSr',
+                    field_value: summary.slice(0, 500)
+                  }] : []),
+
                 ].filter(f => f.field_value)
               })
             }
