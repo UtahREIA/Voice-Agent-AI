@@ -450,6 +450,16 @@ export default async function handler(req, res) {
       handoffChannel: structured.handoffChannel || 'sms',
       tier:           structured.tier           || '1_info',
 
+      // ── INVESTOR QUESTIONNAIRE FIELDS ────────────────────────────────────
+      // Populated from voice agent conversation — mirrors the GHL intake form
+      // so the investor profile is complete whether they called or filled the form
+      investingJourney:   ghlStageMap[investorStage] || investorStage || '',
+      investingInterests: strategiesArray.slice(0, 3).join(', ') || '',
+      accomplish6to12:    goals || '',
+      whatDescribesYou:   profileType || '',
+      wantsMentor:        structured.bookingRequired === 'true' ? 'Yes' : '',
+      wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
+
       // Vendor warm intro fields — used by GHL workflow to send parallel SMS to vendor
       // vendorPhone is the matched vendor's phone number from Supabase vendor_profiles
       // vendorName and vendorCompany identify the vendor in the workflow
@@ -697,13 +707,56 @@ export default async function handler(req, res) {
               },
               body: JSON.stringify({
                 customFields: [
-                  // SINGLE_OPTIONS fields — must use v2 API, cannot be set via webhook payload
-                  { id: 'swDtahR8SAnG4S34s2a6', field_value: ghlStageMap[investorStage] || investorStage },
-                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
+                  // ── VOICE AGENT FIELDS ──────────────────────────────────
                   { id: 'Q1k7VrrG1gp0eIvg0M1h', field_value: structured.tier || '1_info' },
                   { id: 'RVqXpTjVxGxqggfhFghA', field_value: structured.bookingRequired || 'false' },
                   { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel || 'sms' },
-                  { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' }
+                  { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },
+
+                  // ── INVESTOR QUESTIONNAIRE FIELDS ────────────────────────
+                  // These fields mirror the GHL intake form — populated from
+                  // voice agent conversation so the profile is complete whether
+                  // the investor filled out the form or called in.
+
+                  // Where are you in your investing journey? (SINGLE_OPTIONS)
+                  { id: 'swDtahR8SAnG4S34s2a6', field_value: ghlStageMap[investorStage] || investorStage },
+
+                  // Profile type (SINGLE_OPTIONS)
+                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
+
+                  // What type of investing are you most interested in? (MULTIPLE_OPTIONS)
+                  // Sends first strategy from the strategies array
+                  ...(strategiesArray.length > 0 ? [{
+                    id: 'hf9VEhcVwgyNXP3qbzsA',
+                    field_value: strategiesArray[0]
+                  }] : []),
+
+                  // What are you trying to accomplish in the next 6-12 months? (MULTIPLE_OPTIONS)
+                  ...(goals ? [{
+                    id: 't150aKjUz1KvU183CtJw',
+                    field_value: goals.split(',')[0].trim()
+                  }] : []),
+
+                  // Would you like us to connect you with a mentor? (SINGLE_OPTIONS)
+                  ...(structured.bookingRequired === 'true' ? [{
+                    id: 'kKWtIpls9sY2W4BZJMi8',
+                    field_value: 'Yes'
+                  }] : []),
+
+                  // Would you like us to connect you with professionals? (SINGLE_OPTIONS)
+                  ...(structured.vendorMatches ? [{
+                    id: 'K0oXRPbezNJdlHutBGOa',
+                    field_value: 'Yes'
+                  }] : []),
+
+                  // Would you like us to connect with other investors? (SINGLE_OPTIONS)
+                  { id: 'lcemjR9gDTWWgKWrG7bU', field_value: 'Yes' },
+
+                  // Funding & Financial needs (MULTIPLE_OPTIONS)
+                  ...(blocker === 'capital' || structured.tier === '2_vendor' ? [{
+                    id: 'A6d3LiW4tm4sRYgKkexW',
+                    field_value: 'Private Money / Hard Money'
+                  }] : []),
                 ].filter(f => f.field_value)
               })
             }
