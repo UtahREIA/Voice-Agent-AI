@@ -34,16 +34,7 @@ export default async function handler(req, res) {
     already_tried
   } = vapiArgs || {};
 
-  // DEBUG — log the raw body structure to see what Vapi is actually sending
-  console.log('Vendor raw body keys:', Object.keys(req.body || {}));
-  console.log('Vendor args extracted — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need);
-
-  // If no args extracted, return debug info in result so Claude can speak it
-  if (!blocker && !investor_need && !strategy && !stage) {
-    return res.status(200).json({
-      result: 'DEBUG vendor: no args received. Body keys: ' + Object.keys(req.body || {}).join(',')
-    });
-  }
+  console.log('Vendor args — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need, 'stage:', stage);
 
   const baseHeaders = {
     'Content-Type': 'application/json',
@@ -52,41 +43,224 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Normalize inputs
-    const needKey = (investor_need || blocker || '').toLowerCase().replace(/ /g, '_');
-    const strategyKey = (strategy || '').toLowerCase().replace(/ /g, '_').replace(/ and /g, '_and_');
+    // --- STEP 1: Map blocker/need to vendor_routing_matrix investor_need values ---
+    // The matrix uses specific investor_need keys — map caller inputs to those keys
+    const needMapping = {
+      // Blocker mappings
+      'capital':          'funding',
+      'funding':          'funding',
+      'money':            'funding',
+      'lender':           'funding',
+      'loan':             'funding',
+      'deals':            'deals',
+      'deal_flow':        'deals',
+      'finding_deals':    'deals',
+      'team':             'contractors',
+      'contractors':      'contractors',
+      'contractor':       'contractors',
+      'legal':            'legal',
+      'attorney':         'legal',
+      'education':        'education',
+      'management':       'property_management',
+      'property_management': 'property_management',
+      'connections':      'team_building',
+      'build_network':    'team_building',
+      'calculators':      'calculators',
+      'tools':            'calculators',
+      'deal_tools':       'calculators',
+      'market_data':      'market_data',
+      'comps':            'market_data',
+      'data':             'market_data',
+      'networking':       'networking',
+      'partners':         'networking',
+      'joint_venture':    'networking',
+      'accountability':   'accountability',
+      'coaching':         'accountability',
+      'mentor':           'accountability',
+      'guidance':         'accountability',
+      'accounting':       'accounting',
+      'tax':              'accounting',
+      'tax_optimization': 'accounting',
+      'insurance':            'insurance',
+      'title':                'title',
+      'escrow':               'title',
+      'closing':              'title',
+      'title_escrow':         'title',
+      'appraisal':            'appraisal',
+      'inspection':           'inspection',
+      'inspector':            'inspection',
+      'meth_testing':         'inspection',
+      'home_inspection':      'inspection',
+      'development_land':     'development_land',
+      'land':                 'development_land',
+      'entitlement':          'development_land',
+      'zoning':               'development_land',
+      'syndication':          'capital_raising',
+      'raising_capital':      'capital_raising',
+      'capital_raising':      'capital_raising',
+      'private_money':        'funding',
+      'hard_money':           'funding',
+      'dscr':                 'funding',
+      'mortgage':             'funding',
+      'construction':         'contractors',
+      'rehab':                'contractors',
+      'renovation':           'contractors',
+      'remodel':              'contractors',
+      'electrician':          'electrical',
+      'plumber':              'plumbing',
+      'plumbing':             'plumbing',
+      'hvac':                 'hvac',
+      'roofing':              'roofing',
+      'flooring':             'flooring',
+      'drywall':              'drywall',
+      'painting':             'painting',
+      'framing':              'framing',
+      'concrete':             'concrete',
+      'foundation':           'foundation',
+      'landscaping':          'landscaping',
+      'demolition':           'demolition',
+      'restoration':          'restoration',
+      'direct_mail':          'deals',
+      'skip_tracing':         'market_data',
+      'lists':                'market_data',
+      'va':                   'team',
+      'virtual_assistant':    'team',
+      'marketing':            'team',
+      'cpa':                  'accounting',
+      'bookkeeper':           'accounting',
+      'asset_protection':     'legal',
+      'entity_formation':     'legal',
+      'llc':                  'legal',
+      '1031':                 'legal',
+      'tax_strategy':         'accounting',
+      'property_manager':     'operations',
+      'pm':                   'operations',
+      'coach':                'accountability',
+      'guidance':             'accountability',
+      'partners':             'networking',
+      'joint_venture':        'networking',
+    };
 
-    // Step 1 — query vendor_routing_matrix for need x strategy match
+    // Fix title_escrow → title (actual matrix key)
+    const needKeyFix = { 'title_escrow': 'title', 'team_building': 'team', 'property_management': 'operations' };
+
+    // --- STRATEGY NORMALIZATION ---
+    const strategyMapping = {
+      'fix_and_flip':       'fix_and_flip',
+      'fix__flip':          'fix_and_flip',
+      'flipping':           'fix_and_flip',
+      'flip':               'fix_and_flip',
+      'buy_and_hold':       'buy_and_hold',
+      'buy__hold':          'buy_and_hold',
+      'buy__hold__rentals': 'buy_and_hold',
+      'rentals':            'buy_and_hold',
+      'rental':             'buy_and_hold',
+      'brrrr':              'brrrr',
+      'wholesale':          'wholesale',
+      'wholesaling':        'wholesale',
+      'short_term_rental':  'short_term_rental',
+      'str':                'short_term_rental',
+      'airbnb':             'short_term_rental',
+      'vrbo':               'short_term_rental',
+      'creative_financing': 'creative_financing',
+      'creative_finance':   'creative_financing',
+      'subject_to':         'creative_financing',
+      'seller_finance':     'creative_financing',
+      'development':        'development',
+      'new_construction':   'development',
+      'land_development':   'development',
+      'notes_lending':      'notes_lending',
+      'notes_and_lending':  'notes_lending',
+      'note_investing':     'notes_lending',
+      'lending':            'notes_lending',
+      'raising_capital':    'raising_capital',
+      'capital_raising':    'raising_capital',
+      'private_money':      'raising_capital',
+      'syndication':        'syndication',
+      'commercial':         'commercial',
+      'multi_family':       'multi_family',
+      'multifamily':        'multi_family',
+      'house_hacking':      'house_hacking',
+      'out_of_state':       'out_of_state',
+      'remote_investing':   'out_of_state',
+      'passive_investing':  'passive_investing',
+      'tax_deeds':          'tax_deeds_liens',
+      'tax_deeds_liens':    'tax_deeds_liens',
+      'farm_land':          'farm_land',
+      'land_entitlement':   'land_entitlement',
+      'assisted_living':    'assisted_living',
+      'self_storage':       'self_storage',
+      'mobile_home':        'mobile_home',
+      'hotel':              'hotel',
+      'retail':             'retail',
+      'industrial':         'industrial',
+      'rv_parks':           'rv_parks',
+      'mid_term_coliving':  'mid_term_coliving',
+      'tax_optimization':   'tax_optimization',
+    };
+
+    const rawNeed = (investor_need || blocker || '').toLowerCase().replace(/ /g, '_');
+    const mappedNeed = needMapping[rawNeed] || rawNeed;
+    const needKey = needKeyFix[mappedNeed] || mappedNeed;
+
+    const rawStrategy = (strategy || '').toLowerCase().replace(/ /g, '_');
+    const strategyKey = strategyMapping[rawStrategy] || rawStrategy;
+
+    console.log('Vendor routing — raw need:', rawNeed, '→ mapped need:', needKey, '| strategy:', strategyKey);
+
+    // --- STEP 2: Query vendor_routing_matrix ---
+    // Try stage + need + strategy first, then need + strategy, then need only
     let matrixRows = [];
 
     // Try exact need + strategy match first
     if (needKey && strategyKey) {
       const exactResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?investor_need=eq.${encodeURIComponent(needKey)}&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=vendor_categories,vendor_subtypes,connection_methods&order=priority.asc&limit=2`,
+        `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?investor_need=eq.${encodeURIComponent(needKey)}&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=investor_need,vendor_categories,vendor_subtypes,connection_methods&order=priority.asc&limit=3`,
         { headers: baseHeaders }
       );
       matrixRows = await exactResp.json();
     }
 
     // Fall back to need only if no strategy match
-    if (matrixRows.length === 0 && needKey) {
-      const needResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?investor_need=eq.${encodeURIComponent(needKey)}&strategy=is.null&is_active=eq.true&select=vendor_categories,vendor_subtypes,connection_methods&order=priority.asc&limit=2`,
-        { headers: baseHeaders }
-      );
-      matrixRows = await needResp.json();
+    if (!Array.isArray(matrixRows) || matrixRows.length === 0) {
+      if (needKey) {
+        const needResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?investor_need=eq.${encodeURIComponent(needKey)}&strategy=is.null&is_active=eq.true&select=investor_need,vendor_categories,vendor_subtypes,connection_methods&order=priority.asc&limit=3`,
+          { headers: baseHeaders }
+        );
+        matrixRows = await needResp.json();
+      }
     }
 
-    // Extract service types from matrix
+    // Fall back to strategy only if still no match
+    if (!Array.isArray(matrixRows) || matrixRows.length === 0) {
+      if (strategyKey) {
+        const stratResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=investor_need,vendor_categories,vendor_subtypes,connection_methods&order=priority.asc&limit=3`,
+          { headers: baseHeaders }
+        );
+        matrixRows = await stratResp.json();
+      }
+    }
+
+    if (!Array.isArray(matrixRows)) matrixRows = [];
+
+    // Extract vendor categories and subtypes from matrix rows
     const searchTerms = new Set();
+    const searchSubtypes = new Set();
     matrixRows.forEach(row => {
-      row.vendor_categories?.forEach(c => searchTerms.add(c));
+      row.vendor_categories?.forEach(c => searchTerms.add(c.toLowerCase()));
+      row.vendor_subtypes?.forEach(s => searchSubtypes.add(s.toLowerCase()));
     });
 
-    // Default if nothing matched
+    // Default search terms if nothing matched in matrix
     if (searchTerms.size === 0) {
-      searchTerms.add('Real Estate Agent');
-      searchTerms.add('General Education');
+      if (needKey.includes('fund') || rawNeed === 'capital') searchTerms.add('money_lender_private__hard_money');
+      else if (needKey.includes('contract')) searchTerms.add('contractor');
+      else if (needKey.includes('deal')) searchTerms.add('real_estate_agent');
+      else if (needKey.includes('legal')) searchTerms.add('attorney');
+      else if (needKey.includes('manag')) searchTerms.add('property_manager');
+      else searchTerms.add('real_estate_agent');
     }
 
     // Step 2 — query ghl_vendor_resources (synced from GHL custom objects)
@@ -104,14 +278,13 @@ export default async function handler(req, res) {
 
     const terms = Array.from(searchTerms).map(t => t.toLowerCase());
 
-    // Match vendors by checking all partner category arrays against search terms
-    const matched = Array.isArray(vendors) ? vendors
-      .filter(v => {
-        // Filter out already tried vendors by company name
+    // Match vendors against matrix categories and subtypes
+    // Priority: match on subtype (more specific) > match on category (broader)
+    const scoredVendors = Array.isArray(vendors) ? vendors
+      .map(v => {
         const vendorName = (v.company_name || '').toLowerCase();
-        if (alreadyTriedList.some(tried => vendorName.includes(tried))) return false;
+        if (alreadyTriedList.some(tried => vendorName.includes(tried))) return null;
 
-        // Check all service category fields for a match
         const allServices = [
           ...(v.funding_financial || []),
           ...(v.deals_opportunities || []),
@@ -122,11 +295,23 @@ export default async function handler(req, res) {
           ...(v.education_tech_tools || []),
           ...(v.other_vendor_services ? [v.other_vendor_services] : []),
           ...(v.investor_types || []),
-        ].map(s => s.toLowerCase());
+        ].map(s => s.toLowerCase().replace(/ /g, '_'));
 
-        return terms.some(t => allServices.some(s => s.includes(t)));
+        let score = 0;
+        // Higher score for subtype match (more precise)
+        if (Array.from(searchSubtypes).some(st => allServices.some(s => s.includes(st)))) score += 10;
+        // Lower score for category match (broader)
+        if (terms.some(t => allServices.some(s => s.includes(t)))) score += 5;
+        // Bonus for enrolled vendors
+        if (v.enroll_vendor_match) score += 3;
+
+        return score > 0 ? { ...v, score } : null;
       })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 3) : [];
+
+    const matched = scoredVendors;
 
     // Build natural spoken response
     if (matched.length === 0) {

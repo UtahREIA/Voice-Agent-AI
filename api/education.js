@@ -49,22 +49,140 @@ export default async function handler(req, res) {
   try {
     const results = [];
 
-    // Normalize inputs
-    const stageKey = (stage || '').toLowerCase().replace(/ /g, '_').replace('/', '_');
-    const strategyKey = (strategy || '').toLowerCase().replace(/ /g, '_').replace(/ and /g, '_and_');
+    // --- STAGE NORMALIZATION ---
+    // Map all possible caller stage inputs to education_routing_matrix stage keys
+    const stageMapping = {
+      'exploring':        'exploring',
+      'new':              'exploring',
+      'beginner':         'exploring',
+      'just_starting':    'exploring',
+      'getting_started':  'getting_started',
+      'first_deal':       'getting_started',
+      'active':           'active',
+      'active_investor':  'active',
+      'experienced':      'experienced',
+      'advanced':         'experienced',
+      'veteran':          'veteran',
+      'operator':         'veteran',
+      'veteran__operator':'veteran',
+    };
+    const rawStage = (stage || '').toLowerCase().replace(/ /g, '_').replace('/', '_');
+    const stageKey = stageMapping[rawStage] || rawStage;
 
-    // Step 1 — query education_routing_matrix for stage x strategy match
+    // --- STRATEGY NORMALIZATION ---
+    // Map all possible caller strategy inputs to education_routing_matrix strategy keys
+    const strategyMapping = {
+      'fix_and_flip':         'fix_and_flip',
+      'fix__flip':            'fix_and_flip',
+      'flipping':             'fix_and_flip',
+      'flip':                 'fix_and_flip',
+      'buy_and_hold':         'buy_and_hold',
+      'buy__hold':            'buy_and_hold',
+      'buy__hold__rentals':   'buy_and_hold',
+      'rentals':              'buy_and_hold',
+      'rental':               'buy_and_hold',
+      'wholesale':            'wholesale',
+      'wholesaling':          'wholesale',
+      'wholesaling':          'wholesaling',
+      'brrrr':                'brrrr',
+      'buy_rehab_rent_refinance_repeat': 'brrrr',
+      'short_term_rental':    'short_term_rental',
+      'str':                  'short_term_rental',
+      'airbnb':               'short_term_rental',
+      'vrbo':                 'short_term_rental',
+      'creative_financing':   'creative_financing',
+      'creative_finance':     'creative_financing',
+      'subject_to':           'creative_financing',
+      'seller_finance':       'creative_financing',
+      'development':          'development',
+      'land_development':     'development',
+      'new_construction':     'development',
+      'notes_lending':        'notes_and_lending',
+      'notes_and_lending':    'notes_and_lending',
+      'note_investing':       'notes_and_lending',
+      'lending':              'notes_and_lending',
+      'raising_capital':      'raising_capital',
+      'private_money':        'raising_capital',
+      'capital_raising':      'raising_capital',
+      'commercial':           'commercial',
+      'multi_family':         'commercial',
+      'multifamily':          'commercial',
+      'syndication':          'raising_capital',
+      'not_sure':             'not_sure_yet',
+      'not_sure_yet':         'not_sure_yet',
+      'unsure':               'not_sure_yet',
+      'tax_optimization':     'tax_optimization',
+      'tax_strategy':         'tax_optimization',
+      'tax_deeds':            'tax_deeds',
+      'tax_deeds_liens':      'tax_deeds',
+      'out_of_state':         'out_of_state',
+      'remote_investing':     'out_of_state',
+      'mentoring_others':     'mentoring_others',
+      'house_hacking':        'buy_and_hold',
+      'mid_term_coliving':    'short_term_rental',
+      'passive_investing':    'raising_capital',
+      'assisted_living':      'commercial',
+      'self_storage':         'commercial',
+      'mobile_home':          'commercial',
+      'hotel':                'commercial',
+      'retail':               'commercial',
+      'industrial':           'commercial',
+      'rv_parks':             'commercial',
+      'farm_land':            'development',
+      'land_entitlement':     'development',
+    };
+    const rawStrategy = (strategy || '').toLowerCase().replace(/ /g, '_');
+    const strategyKey = strategyMapping[rawStrategy] || rawStrategy;
+
+    // --- STEP 1: Three-tier matrix lookup ---
+    // Tier 1: exact stage + strategy match
+    // Tier 2: same stage, any strategy (stage-level track)
+    // Tier 3: any stage, same strategy (strategy foundation)
+    let matrixRow = null;
+
     if (stageKey && strategyKey) {
-      const matrixResp = await fetch(
+      // Try exact match first (also try wholesaling variant)
+      const exactResp = await fetch(
         `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
         { headers: baseHeaders }
       );
-      const matrixData = await matrixResp.json();
+      const exactData = await exactResp.json();
+      if (Array.isArray(exactData) && exactData.length > 0) matrixRow = exactData[0];
 
-      if (matrixData.length > 0) {
-        const track = matrixData[0];
-        results.push({ type: 'track', ...track });
+      // Try wholesaling as alternate key if wholesale didn't match
+      if (!matrixRow && (strategyKey === 'wholesale' || strategyKey === 'wholesaling')) {
+        const altKey = strategyKey === 'wholesale' ? 'wholesaling' : 'wholesale';
+        const altResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(altKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
+          { headers: baseHeaders }
+        );
+        const altData = await altResp.json();
+        if (Array.isArray(altData) && altData.length > 0) matrixRow = altData[0];
       }
+    }
+
+    // Tier 2: fall back to stage only
+    if (!matrixRow && stageKey) {
+      const stageResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
+        { headers: baseHeaders }
+      );
+      const stageData = await stageResp.json();
+      if (Array.isArray(stageData) && stageData.length > 0) matrixRow = stageData[0];
+    }
+
+    // Tier 3: fall back to strategy only
+    if (!matrixRow && strategyKey) {
+      const stratResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/education_routing_matrix?strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
+        { headers: baseHeaders }
+      );
+      const stratData = await stratResp.json();
+      if (Array.isArray(stratData) && stratData.length > 0) matrixRow = stratData[0];
+    }
+
+    if (matrixRow) {
+      results.push({ type: 'track', ...matrixRow });
     }
 
     // Step 2 — query education_resources table for specific resources
@@ -122,10 +240,15 @@ export default async function handler(req, res) {
     // Build natural spoken response
     const parts = [];
 
-    // Lead with track if found
+    // Lead with track if found — include resource titles for concrete delivery
     if (results.length > 0) {
       const track = results[0];
-      parts.push(`Based on where you are, the right track for you is ${track.track_name}. ${track.description}`);
+      const topResources = (track.resource_titles || []).slice(0, 2).join(' and ');
+      const deliveryMethods = (track.delivery_methods || []).join(' or ');
+      let trackIntro = `The right track for you is the ${track.track_name}. ${track.description}`;
+      if (topResources) trackIntro += ` Start with: ${topResources}.`;
+      if (deliveryMethods) trackIntro += ` Delivered via ${deliveryMethods}.`;
+      parts.push(trackIntro);
     }
 
     // Add top matched resources
