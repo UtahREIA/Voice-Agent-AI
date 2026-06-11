@@ -45,6 +45,41 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
 
+  // --- HAVERSINE DISTANCE CALCULATOR ---
+  // Returns distance in miles between two lat/lng points
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 3958.8; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // --- ZIP CODE COORDINATES LOOKUP ---
+  // Uses free Zippopotam.us API to get lat/lng for a zip code
+  async function getZipCoords(zip) {
+    if (!zip || zip.length < 5) return null;
+    try {
+      const resp = await fetch(`https://api.zippopotam.us/us/${zip}`, {
+        signal: AbortSignal.timeout(3000)
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const place = data.places?.[0];
+      if (!place) return null;
+      return {
+        lat: parseFloat(place.latitude),
+        lng: parseFloat(place.longitude),
+        city: place['place name'],
+        state: place['state abbreviation']
+      };
+    } catch(e) {
+      return null;
+    }
+  }
+
   try {
     // --- STEP 1: Map blocker/need to vendor_routing_matrix investor_need values ---
     // The matrix uses specific investor_need keys — map caller inputs to those keys
@@ -211,6 +246,7 @@ export default async function handler(req, res) {
 
     console.log('Vendor routing — raw need:', rawNeed, '→ mapped need:', needKey, '| strategy:', strategyKey);
 
+
     // --- STEP 2: Query vendor_routing_matrix ---
     // Try stage + need + strategy first, then need + strategy, then need only
     let matrixRows = [];
@@ -285,18 +321,20 @@ export default async function handler(req, res) {
     // Fetch configurable radius and other settings from vendor_match_config
     let radiusMiles = 100; // default
     let maxVendors = 3;
-    let requireEnrolled = false;
+    let fallbackToStatewide = true;
     try {
+      // Fetch from app_settings table (setting_key column)
       const configResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/vendor_match_config?select=config_key,config_value`,
+        `${SUPABASE_URL}/rest/v1/app_settings?setting_key=in.(vendor_match_radius_miles,vendor_match_fallback_radius_miles)&select=setting_key,value`,
         { headers: baseHeaders }
       );
       const configs = await configResp.json();
       if (Array.isArray(configs)) {
-        configs.forEach(c => {
-          if (c.config_key === 'radius_miles') radiusMiles = parseInt(c.config_value) || 100;
-          if (c.config_key === 'max_vendors_returned') maxVendors = parseInt(c.config_value) || 3;
-          if (c.config_key === 'require_enrolled') requireEnrolled = c.config_value === 'true';
+        configs.forEach(s => {
+          if (s.setting_key === 'vendor_match_radius_miles') radiusMiles = parseInt(s.value) || 100;
+          if (s.setting_key === 'vendor_match_fallback_radius_miles') {
+            fallbackToStatewide = parseInt(s.value) > 0;
+          }
         });
       }
     } catch(e) {
@@ -326,14 +364,17 @@ export default async function handler(req, res) {
     if (callerZip) {
       try {
         const zipResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/zip_code_locations?zip_code=eq.${callerZip}&select=latitude,longitude,city,county&limit=1`,
-          { headers: baseHeaders }
+          `https://api.zippopotam.us/us/${callerZip}`,
+          { headers: { 'Accept': 'application/json' } }
         );
-        const zipData = await zipResp.json();
-        if (Array.isArray(zipData) && zipData.length > 0) {
-          callerLat = zipData[0].latitude;
-          callerLon = zipData[0].longitude;
-          console.log('Caller location resolved:', callerZip, '→', callerLat, callerLon);
+        if (zipResp.ok) {
+          const zipData = await zipResp.json();
+          const place = zipData.places?.[0];
+          if (place) {
+            callerLat = parseFloat(place.latitude);
+            callerLon = parseFloat(place.longitude);
+            console.log('Caller location resolved:', callerZip, '→', callerLat, callerLon);
+          }
         }
       } catch(e) {
         console.error('Zip lookup error:', e.message);
@@ -345,7 +386,7 @@ export default async function handler(req, res) {
       .map(v => {
         const vendorName = (v.company_name || '').toLowerCase();
         if (alreadyTriedList.some(tried => vendorName.includes(tried))) return null;
-        if (requireEnrolled && !v.enroll_vendor_match) return null;
+        
 
         // --- GEOGRAPHIC FILTER using Haversine distance ---
         let geoScore = 0;
@@ -361,8 +402,10 @@ export default async function handler(req, res) {
           if (distanceMiles <= radiusMiles) {
             // Score inversely proportional to distance — closer = higher score
             geoScore = Math.max(1, Math.round(10 - (distanceMiles / radiusMiles) * 9));
+          } else if (fallbackToStatewide && v.serves_statewide) {
+            geoScore = 1; // outside radius but statewide fallback
           } else {
-            return null; // outside radius — exclude
+            return null; // outside radius and no fallback
           }
         } else if (callerZip && v.service_zip_codes?.includes(callerZip)) {
           geoScore = 10; // exact zip match
