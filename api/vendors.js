@@ -31,7 +31,10 @@ export default async function handler(req, res) {
     strategy,
     investor_need,
     stage,
-    already_tried
+    already_tried,
+    zip_code,
+    city,
+    state
   } = vapiArgs || {};
 
   console.log('Vendor args — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need, 'stage:', stage);
@@ -267,7 +270,7 @@ export default async function handler(req, res) {
     // This replaces vendor_profiles as the source of truth for vendor data
     // ghl_vendor_resources contains company_name, phone, description, and partner categories
     const vendorResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,other_vendor_services,investor_types,enroll_vendor_match&is_active=eq.true&limit=50`,
+      `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,other_vendor_services,investor_types,enroll_vendor_match,service_areas,service_zip_codes,service_counties,serves_statewide,serves_national,service_radius_miles,primary_zip_code&is_active=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
@@ -278,12 +281,104 @@ export default async function handler(req, res) {
 
     const terms = Array.from(searchTerms).map(t => t.toLowerCase());
 
-    // Match vendors against matrix categories and subtypes
-    // Priority: match on subtype (more specific) > match on category (broader)
+    // --- LOAD CONFIG ---
+    // Fetch configurable radius and other settings from vendor_match_config
+    let radiusMiles = 100; // default
+    let maxVendors = 3;
+    let requireEnrolled = false;
+    try {
+      const configResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/vendor_match_config?select=config_key,config_value`,
+        { headers: baseHeaders }
+      );
+      const configs = await configResp.json();
+      if (Array.isArray(configs)) {
+        configs.forEach(c => {
+          if (c.config_key === 'radius_miles') radiusMiles = parseInt(c.config_value) || 100;
+          if (c.config_key === 'max_vendors_returned') maxVendors = parseInt(c.config_value) || 3;
+          if (c.config_key === 'require_enrolled') requireEnrolled = c.config_value === 'true';
+        });
+      }
+    } catch(e) {
+      console.error('Config fetch error:', e.message);
+    }
+
+    // --- HAVERSINE DISTANCE CALCULATION ---
+    // Returns distance in miles between two lat/lng points
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 3958.8; // Earth radius in miles
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    // --- CALLER LOCATION LOOKUP ---
+    // Look up caller lat/lng from zip code in zip_code_locations table
+    const callerZip = (zip_code || '').replace(/[^0-9]/g, '').slice(0, 5);
+    const callerCity = (city || '').toLowerCase();
+    const callerState = (state || 'UT').toUpperCase();
+    let callerLat = null;
+    let callerLon = null;
+
+    if (callerZip) {
+      try {
+        const zipResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/zip_code_locations?zip_code=eq.${callerZip}&select=latitude,longitude,city,county&limit=1`,
+          { headers: baseHeaders }
+        );
+        const zipData = await zipResp.json();
+        if (Array.isArray(zipData) && zipData.length > 0) {
+          callerLat = zipData[0].latitude;
+          callerLon = zipData[0].longitude;
+          console.log('Caller location resolved:', callerZip, '→', callerLat, callerLon);
+        }
+      } catch(e) {
+        console.error('Zip lookup error:', e.message);
+      }
+    }
+
+    // Match vendors against matrix categories, subtypes, and geographic radius
     const scoredVendors = Array.isArray(vendors) ? vendors
       .map(v => {
         const vendorName = (v.company_name || '').toLowerCase();
         if (alreadyTriedList.some(tried => vendorName.includes(tried))) return null;
+        if (requireEnrolled && !v.enroll_vendor_match) return null;
+
+        // --- GEOGRAPHIC FILTER using Haversine distance ---
+        let geoScore = 0;
+        let distanceMiles = null;
+
+        if (v.serves_national) {
+          geoScore = 5; // national vendor — always included
+        } else if (v.serves_statewide && callerState === 'UT') {
+          geoScore = 4; // statewide Utah vendor — always included
+        } else if (callerLat && callerLon && v.latitude && v.longitude) {
+          // Calculate exact distance using Haversine formula
+          distanceMiles = haversineDistance(callerLat, callerLon, v.latitude, v.longitude);
+          if (distanceMiles <= radiusMiles) {
+            // Score inversely proportional to distance — closer = higher score
+            geoScore = Math.max(1, Math.round(10 - (distanceMiles / radiusMiles) * 9));
+          } else {
+            return null; // outside radius — exclude
+          }
+        } else if (callerZip && v.service_zip_codes?.includes(callerZip)) {
+          geoScore = 10; // exact zip match
+        } else if (callerCity && v.service_areas?.some(a => a.toLowerCase().includes(callerCity))) {
+          geoScore = 7; // city match
+        } else if (!callerZip && !callerLat) {
+          geoScore = 3; // no location provided — include with low geo score
+        } else if (v.service_areas?.some(a =>
+          a.toLowerCase().includes('salt lake') ||
+          a.toLowerCase().includes('utah county') ||
+          a.toLowerCase().includes('wasatch')
+        )) {
+          geoScore = 2; // Wasatch Front default
+        }
+
+        if (geoScore === 0) return null;
 
         const allServices = [
           ...(v.funding_financial || []),
@@ -297,7 +392,7 @@ export default async function handler(req, res) {
           ...(v.investor_types || []),
         ].map(s => s.toLowerCase().replace(/ /g, '_'));
 
-        let score = 0;
+        let score = geoScore; // start with geographic relevance
         // Higher score for subtype match (more precise)
         if (Array.from(searchSubtypes).some(st => allServices.some(s => s.includes(st)))) score += 10;
         // Lower score for category match (broader)
@@ -305,11 +400,11 @@ export default async function handler(req, res) {
         // Bonus for enrolled vendors
         if (v.enroll_vendor_match) score += 3;
 
-        return score > 0 ? { ...v, score } : null;
+        return score > 0 ? { ...v, score, distanceMiles } : null;
       })
       .filter(Boolean)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3) : [];
+      .slice(0, maxVendors) : [];
 
     const matched = scoredVendors;
 
@@ -324,7 +419,8 @@ export default async function handler(req, res) {
       const desc = v.business_description
         ? v.business_description.split('.')[0]
         : '';
-      return desc ? v.company_name + ' — ' + desc : v.company_name;
+      const dist = v.distanceMiles ? ` (${Math.round(v.distanceMiles)} miles away)` : '';
+      return desc ? v.company_name + ' — ' + desc + dist : v.company_name + dist;
     }).join('; ');
 
     const subtypes = matrixRows.flatMap(r => r.vendor_subtypes || []).slice(0, 2).join(' and ');
