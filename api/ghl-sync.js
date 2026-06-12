@@ -218,6 +218,36 @@ export default async function handler(req, res) {
     console.log('=== END OF CALL REPORT ===');
 
     // =========================================================
+    // DEDUPLICATION — Prevent processing the same call twice
+    // Vapi sometimes sends end-of-call-report multiple times
+    // Check voice_agent_calls table for existing vapi_call_id
+    // =========================================================
+    const vapiCallId = payload.message?.call?.id || payload.call?.id || null;
+
+    if (vapiCallId && SUPABASE_URL && SUPABASE_KEY) {
+      try {
+        const dedupResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/voice_agent_calls?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=id&limit=1`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+          }
+        );
+        const existing = await dedupResp.json();
+        if (Array.isArray(existing) && existing.length > 0) {
+          console.log(`Duplicate end-of-call-report detected for call ${vapiCallId} — skipping`);
+          return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate_call_id' });
+        }
+      } catch(e) {
+        console.error('Dedup check error:', e.message);
+        // Non-fatal — proceed with processing
+      }
+    }
+
+    // =========================================================
     // PATH 2: END-OF-CALL-REPORT — Post-call sync pipeline
     // =========================================================
 
