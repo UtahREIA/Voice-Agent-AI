@@ -187,7 +187,7 @@ export default async function handler(req, res) {
 
     // Step 2 — query education_resources table for specific resources
     const resourceResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/education_resources?is_active=eq.true&select=title,resource_type,stages,strategies,goals,blockers,description,educator_name,educator_specialty,booking_url,priority&order=priority.asc&limit=100`,
+      `${SUPABASE_URL}/rest/v1/ghl_educational_courses?is_active=eq.true&select=course_name,educational_topics,educational_level,video_url,education_url,paid_education,membership_required&order=course_name.asc&limit=100`,
       { headers: baseHeaders }
     );
     const resources = await resourceResp.json();
@@ -286,7 +286,7 @@ export default async function handler(req, res) {
 
     // --- EDUCATOR LOOKUP ---
     // After matching a track, look up the best educator for this stage+strategy
-    // from education_resources table. This adds Mohammed's name and booking URL
+    // from ghl_educational_courses table. This adds Mohammed's name and booking URL
     // to the response so Claude can deliver a complete, personalized recommendation.
     let educatorResult = '';
     let educatorName = '';

@@ -1,29 +1,5 @@
-// Syncs educator data from GHL to Supabase education_resources table
+// Syncs educator data from GHL to Supabase ghl_educators_mentors table
 // Called by GHL workflow when a contact is tagged as a speaker
-
-/**
- * Webhook sink that mirrors GHL "educator/speaker" contacts into the Supabase
- * `education_resources` table so the voice agent's education-matching logic can
- * recommend them. Fired by a GoHighLevel workflow whenever a contact is tagged
- * as a speaker (or their pipeline status changes).
- *
- * Behavior:
- *   - `name` is required; everything else is optional.
- *   - `pipeline_status` is mapped to `is_active`: any status string containing
- *     "active", "approved", or "confirmed" → true; missing status → true;
- *     anything else → false (so removing the active tag deactivates them).
- *   - `bio` + `takeaways` are concatenated and truncated to 500 chars for the
- *     resource description.
- *   - `strategies` and `stages` accept either an array or a comma-separated
- *     string. If `stages` isn't provided, defaults to the four investor stages
- *     above "exploring" — the assumption is educators rarely help true beginners.
- *   - Upserts on (educator_name, resource_type='educator'): PATCH if a row
- *     already exists, POST otherwise.
- *
- * @param {import('http').IncomingMessage & { body: any, method: string }} req - POST with educator fields
- * @param {import('http').ServerResponse & { status: Function, json: Function, end: Function }} res
- * @returns {Promise<void>} 200 `{ ok: true, action: 'inserted'|'updated', name }` on success
- */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -98,7 +74,7 @@ export default async function handler(req, res) {
 
     // Check if educator already exists
     const existing = await fetch(
-      `${SUPABASE_URL}/rest/v1/education_resources?educator_name=eq.${encodeURIComponent(name)}&resource_type=eq.educator&select=id&limit=1`,
+      `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?educator_name=eq.${encodeURIComponent(name)}&educators_name=eq.${encodeURIComponent(name)}&select=id&limit=1`,
       { headers: baseHeaders }
     );
     const existingData = await existing.json();
@@ -106,7 +82,7 @@ export default async function handler(req, res) {
     if (existingData.length > 0) {
       // Update existing record
       const updateResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_resources?id=eq.${existingData[0].id}`,
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?id=eq.${existingData[0].id}`,
         {
           method: 'PATCH',
           headers: { ...baseHeaders, 'Prefer': 'return=minimal' },
@@ -118,7 +94,7 @@ export default async function handler(req, res) {
     } else {
       // Insert new record
       const insertResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_resources`,
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors`,
         {
           method: 'POST',
           headers: { ...baseHeaders, 'Prefer': 'return=minimal' },
