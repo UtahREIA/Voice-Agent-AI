@@ -144,7 +144,10 @@ export default async function handler(req, res) {
     }
 
     // Utah REIA tools and calculators
-    lines.push('\nUTAH REIA TOOLS & CALCULATORS — mention these proactively when a caller asks about analyzing deals, running numbers, or needs a calculation tool. These are free and available to all Utah REIA investors:');
+    // PROPERTY LISTINGS
+  lines.push('\nPROPERTY LISTINGS & DEALS MARKETPLACE — If a caller wants to find off-market deals, wholesale properties, or notes, OR if they want to list a property or note for sale, direct them to: https://utahreia.org/property-listing — This is the Utah REIA property and note listing marketplace where investors can browse available deals or post their own listings. Mention this proactively when the caller mentions deal flow, finding deals, listing a property, selling a note, or looking for wholesale opportunities.');
+
+  lines.push('\nUTAH REIA TOOLS & CALCULATORS — mention these proactively when a caller asks about analyzing deals, running numbers, or needs a calculation tool. These are free and available to all Utah REIA investors:');
     if (tools.length > 0) {
       tools.forEach(t => {
         const topics = Array.isArray(t.educational_topics) ? t.educational_topics.slice(0,2).join(', ') : '';
