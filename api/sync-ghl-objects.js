@@ -69,7 +69,7 @@ async function fetchAllGhlRecords(objectKey, apiKey) {
 async function upsertToSupabase(supabaseUrl, supabaseKey, table, rows) {
   if (!rows.length) return { upserted: 0 };
 
-  const res = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?on_conflict=ghl_record_id`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
