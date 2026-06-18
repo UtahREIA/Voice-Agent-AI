@@ -1,50 +1,52 @@
 /**
- * /api/sync-ghl-objects.js
+ * sync-ghl-objects.js — GHL Custom Objects to Supabase Sync
  *
- * Vercel serverless function triggered by Vercel Cron (see vercel.json).
- * Pulls all 4 GHL custom objects and upserts them into Supabase.
+ * Fetches records from four GHL custom objects and upserts them
+ * into matching Supabase tables so the voice agent can query them.
  *
- * Required environment variables (set in Vercel project settings):
- *   CRON_SECRET          - shared secret; Vercel sends this in Authorization header
- *   GHL_API_KEY          - GHL private integration API key
- *   GHL_LOCATION_ID      - DNirEjy0ejVwbHsaBYrn
- *   SUPABASE_URL         - https://kttzxjddtkgsitzehiid.supabase.co
- *   SUPABASE_SERVICE_KEY - Supabase service_role key (secret)
+ * GHL Custom Objects synced:
+ *   - custom_objects.vendor_resources     → ghl_vendor_resources
+ *   - custom_objects.educators_mentors    → ghl_educators_mentors
+ *   - custom_objects.educational_courses  → ghl_educational_courses
+ *   - custom_objects.tools_resources      → ghl_tools_resources
+ *
+ * Called by: GET /api/sync-ghl-objects
+ * Auth:      Authorization: Bearer <CRON_SECRET>
+ * Trigger:   Vercel cron (3:00 AM UTC) or GitHub Actions (3:15 AM UTC)
+ *
+ * No external npm packages required — uses native fetch only.
  */
 
-import { createClient } from '@supabase/supabase-js';
+export const config = { api: { bodyParser: false } };
 
-const GHL_BASE = 'https://services.leadconnectorhq.com';
-const PAGE_SIZE = 100;
+const GHL_LOCATION_ID = 'DNirEjy0ejVwbHsaBYrn';
+const GHL_BASE        = 'https://services.leadconnectorhq.com';
+const PAGE_SIZE       = 100;
 
 // ---------------------------------------------------------------------------
-// Helper: paginated GHL custom object fetch
+// GHL: paginated search using the POST /objects/{key}/records/search endpoint
 // ---------------------------------------------------------------------------
-async function fetchAllGhlRecords(objectKey, apiKey, locationId) {
+async function fetchAllGhlRecords(objectKey, apiKey) {
   const records = [];
   let searchAfter = null;
 
-  while (true) {
-    const body = {
-      locationId,
-      page: 1,
-      pageSize: PAGE_SIZE,
-    };
+  for (let page = 0; page < 20; page++) {
+    const body = { locationId: GHL_LOCATION_ID, pageSize: PAGE_SIZE };
     if (searchAfter) body.searchAfter = searchAfter;
 
     const res = await fetch(`${GHL_BASE}/objects/${objectKey}/records/search`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        Version: '2021-07-28',
+        'Version': '2021-07-28',
       },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GHL fetch failed for ${objectKey}: ${res.status} ${text}`);
+      throw new Error(`GHL ${objectKey} error ${res.status}: ${text.slice(0, 200)}`);
     }
 
     const data = await res.json();
@@ -52,157 +54,154 @@ async function fetchAllGhlRecords(objectKey, apiKey, locationId) {
     records.push(...batch);
 
     if (batch.length < PAGE_SIZE) break;
-    // Use the last record's searchAfter cursor for next page
     const last = batch[batch.length - 1];
     searchAfter = last.searchAfter || null;
     if (!searchAfter) break;
   }
 
+  console.log(`GHL ${objectKey}: fetched ${records.length} records`);
   return records;
 }
 
 // ---------------------------------------------------------------------------
-// Transform: vendor_resources -> ghl_vendor_resources row
+// Supabase: upsert using raw fetch (no SDK needed)
 // ---------------------------------------------------------------------------
-function transformVendor(record) {
-  const p = record.properties || {};
-  return {
-    ghl_record_id: record.id,
-    company_name: p.company_name || '',
-    company_phone: p.company_phone || null,
-    company_email: p.company_email || null,
-    business_description: p.business_description || null,
-    company_tagline: p.company_tagline || null,
-    company_website: p.company_website || null,
-    company_address: p.company_address || null,
-    company_city: p.company_city || null,
-    company_state: p.company_state || null,
-    company_postal_code: p.company_postal_code || null,
-    company_logo: p.company_logo || null,
-    contractor_speciality: p.contractor_speciality || null,
-    other_vendor_services: p.other_vendor_services || null,
-    deals_opportunities: p.deals_opportunities || null,
-    funding_financial: p.funding__financial || null,
-    team_vendors: p.team__vendors || null,
-    attorney_subclass: p.attorney_subclass || null,
-    operations: p.operations || null,
-    development_land: p.development__land || null,
-    education_tech_tools: p.education__technology__tools || null,
-    other_contractor: p.other_contractor || null,
-    social_facebook: p.social_facebook || null,
-    social_instagram: p.social_instagram || null,
-    social_youtube: p.social_youtube || null,
-    social_linkedin: p.social_linkedin || null,
-    promotion_graphics: p.promotion_graphics || null,
-    member_promotions: p.member_promotions || null,
-    enroll_vendor_match: p.enroll_vendor_match === 'true' || p.enroll_vendor_match === true,
-    investor_types: p.investor_types || null,
-    affiliate_partner: p.affiliate_partner === 'true' || p.affiliate_partner === true,
-    service_areas: p.service_areas || null,
-    service_zip_codes: p.service_zip_codes || null,
-    service_radius_miles: p.service_radius_miles ? parseInt(p.service_radius_miles) : null,
-    serves_statewide: p.serves_statewide === 'true' || p.serves_statewide === true,
-    serves_national: p.serves_national === 'true' || p.serves_national === true,
-    primary_zip_code: p.primary_zip_code || null,
-    service_counties: p.service_counties || null,
-    latitude: p.latitude ? parseFloat(p.latitude) : null,
-    longitude: p.longitude ? parseFloat(p.longitude) : null,
-    is_active: true,
-    ghl_created_at: record.createdAt || null,
-    ghl_updated_at: record.updatedAt || null,
-    synced_at: new Date().toISOString(),
-  };
+async function upsertToSupabase(supabaseUrl, supabaseKey, table, rows) {
+  if (!rows.length) return { upserted: 0 };
+
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Prefer': 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(rows),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Supabase ${table} error ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  return { upserted: rows.length };
 }
 
 // ---------------------------------------------------------------------------
-// Transform: educators_mentors -> ghl_educators_mentors row
+// Transform helpers
 // ---------------------------------------------------------------------------
-function transformEducator(record) {
-  const p = record.properties || {};
+function prop(record, key) {
+  return (record.properties || {})[key] ?? null;
+}
+
+function asBool(val) {
+  return val === true || val === 'true' || (Array.isArray(val) && val.includes('true'));
+}
+
+function asArr(val) {
+  if (Array.isArray(val)) return val;
+  if (val == null || val === '') return null;
+  return [val];
+}
+
+function transformVendor(r) {
   return {
-    ghl_record_id: record.id,
-    educators_name: p.educators_name || '',
-    educational_topics: p.educational_topics || null,
-    educational_level: p.educational_level || null,
-    educators_url: p.educators_url || null,
-    commercial_asset_types: p.commercial_asset_types || null,
-    is_active: true,
-    ghl_created_at: record.createdAt || null,
-    ghl_updated_at: record.updatedAt || null,
-    synced_at: new Date().toISOString(),
+    ghl_record_id:         r.id,
+    company_name:          prop(r, 'company_name')          || '',
+    company_phone:         prop(r, 'company_phone')         || null,
+    company_email:         prop(r, 'company_email')         || null,
+    business_description:  prop(r, 'business_description')  || null,
+    company_tagline:       prop(r, 'company_tagline')       || null,
+    company_website:       prop(r, 'company_website')       || null,
+    company_address:       prop(r, 'company_address')       || null,
+    company_city:          prop(r, 'company_city')          || null,
+    company_state:         prop(r, 'company_state')         || null,
+    company_postal_code:   prop(r, 'company_postal_code')   || null,
+    company_logo:          prop(r, 'company_logo')          || null,
+    contractor_speciality: prop(r, 'contractor_speciality') || null,
+    other_vendor_services: prop(r, 'other_vendor_services') || null,
+    deals_opportunities:   asArr(prop(r, 'deals_opportunities')),
+    funding_financial:     asArr(prop(r, 'funding__financial')),
+    team_vendors:          asArr(prop(r, 'team__vendors')),
+    attorney_subclass:     asArr(prop(r, 'attorney_subclass')),
+    operations:            asArr(prop(r, 'operations')),
+    development_land:      asArr(prop(r, 'development__land')),
+    education_tech_tools:  asArr(prop(r, 'education__technology__tools')),
+    other_contractor:      asArr(prop(r, 'other_contractor')),
+    social_facebook:       prop(r, 'social_facebook')       || null,
+    social_instagram:      prop(r, 'social_instagram')      || null,
+    social_youtube:        prop(r, 'social_youtube')        || null,
+    social_linkedin:       prop(r, 'social_linkedin')       || null,
+    promotion_graphics:    prop(r, 'promotion_graphics')    || null,
+    member_promotions:     prop(r, 'member_promotions')     || null,
+    enroll_vendor_match:   asBool(prop(r, 'enroll_vendor_match')),
+    investor_types:        asArr(prop(r, 'investor_types')),
+    affiliate_partner:     asBool(prop(r, 'affiliate_partner')),
+    service_areas:         asArr(prop(r, 'service_areas')),
+    service_zip_codes:     asArr(prop(r, 'service_zip_codes')),
+    service_radius_miles:  prop(r, 'service_radius_miles') ? parseInt(prop(r, 'service_radius_miles')) : null,
+    serves_statewide:      asBool(prop(r, 'serves_statewide')),
+    serves_national:       asBool(prop(r, 'serves_national')),
+    primary_zip_code:      prop(r, 'primary_zip_code')      || null,
+    service_counties:      asArr(prop(r, 'service_counties')),
+    latitude:              prop(r, 'latitude')  ? parseFloat(prop(r, 'latitude'))  : null,
+    longitude:             prop(r, 'longitude') ? parseFloat(prop(r, 'longitude')) : null,
+    is_active:             true,
+    ghl_created_at:        r.createdAt || null,
+    ghl_updated_at:        r.updatedAt || null,
+    synced_at:             new Date().toISOString(),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Transform: educational_courses -> ghl_educational_courses row
-// ---------------------------------------------------------------------------
-function transformCourse(record) {
-  const p = record.properties || {};
-  const membershipRaw = p.membership_required;
-  const membershipBool =
-    membershipRaw === true ||
-    membershipRaw === 'true' ||
-    (Array.isArray(membershipRaw) && membershipRaw.includes('true'));
-
+function transformEducator(r) {
   return {
-    ghl_record_id: record.id,
-    course_name: p.educational_courses || '',
-    educational_topics: p.what_type_of_investing_are_you_most_interested_in || null,
-    commercial_asset_types: p.commercial_asset_types || null,
-    educational_level: p.educational_level || null,
-    video_url: p.video_url || null,
-    education_url: p.education_url || null,
-    paid_education: p.paid_education === true || p.paid_education === 'true',
-    membership_required: membershipBool,
-    is_active: true,
-    ghl_created_at: record.createdAt || null,
-    ghl_updated_at: record.updatedAt || null,
-    synced_at: new Date().toISOString(),
+    ghl_record_id:          r.id,
+    educators_name:         prop(r, 'educators_name')        || '',
+    educational_topics:     asArr(prop(r, 'educational_topics')),
+    educational_level:      asArr(prop(r, 'educational_level')),
+    educators_url:          prop(r, 'educators_url')         || null,
+    commercial_asset_types: asArr(prop(r, 'commercial_asset_types')),
+    is_active:              true,
+    ghl_created_at:         r.createdAt || null,
+    ghl_updated_at:         r.updatedAt || null,
+    synced_at:              new Date().toISOString(),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Transform: tools_resources -> ghl_tools_resources row
-// ---------------------------------------------------------------------------
-function transformTool(record) {
-  const p = record.properties || {};
-  const membershipRaw = p.membership_required;
-  const membershipBool =
-    membershipRaw === true ||
-    membershipRaw === 'true' ||
-    (Array.isArray(membershipRaw) && membershipRaw.includes('true'));
-
-  const paidRaw = p.paid_resource;
-  const paidBool =
-    paidRaw === true ||
-    paidRaw === 'true' ||
-    (Array.isArray(paidRaw) && paidRaw.includes('true'));
-
+function transformCourse(r) {
+  const membershipRaw = prop(r, 'membership_required');
   return {
-    ghl_record_id: record.id,
-    resource_title: p.resource_title || '',
-    educational_topics: p.educational_topics || null,
-    educational_level: p.educational_level || null,
-    resource_url: p.resource_url || null,
-    resource_url_nonmember: p.resource_url_nonmember || null,
-    membership_required: membershipBool,
-    paid_resource: paidBool,
-    is_active: true,
-    ghl_created_at: record.createdAt || null,
-    synced_at: new Date().toISOString(),
+    ghl_record_id:          r.id,
+    course_name:            prop(r, 'educational_courses')   || '',
+    educational_topics:     asArr(prop(r, 'what_type_of_investing_are_you_most_interested_in')),
+    commercial_asset_types: asArr(prop(r, 'commercial_asset_types')),
+    educational_level:      asArr(prop(r, 'educational_level')),
+    video_url:              prop(r, 'video_url')             || null,
+    education_url:          prop(r, 'education_url')         || null,
+    paid_education:         asBool(prop(r, 'paid_education')),
+    membership_required:    asBool(membershipRaw),
+    is_active:              true,
+    ghl_created_at:         r.createdAt || null,
+    ghl_updated_at:         r.updatedAt || null,
+    synced_at:              new Date().toISOString(),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Upsert helper
-// ---------------------------------------------------------------------------
-async function upsertRecords(supabase, tableName, rows, conflictColumn = 'ghl_record_id') {
-  if (!rows.length) return { count: 0 };
-  const { error, count } = await supabase
-    .from(tableName)
-    .upsert(rows, { onConflict: conflictColumn, ignoreDuplicates: false });
-  if (error) throw new Error(`Upsert to ${tableName} failed: ${error.message}`);
-  return { count: rows.length };
+function transformTool(r) {
+  return {
+    ghl_record_id:        r.id,
+    resource_title:       prop(r, 'resource_title')          || '',
+    educational_topics:   asArr(prop(r, 'educational_topics')),
+    educational_level:    asArr(prop(r, 'educational_level')),
+    resource_url:         prop(r, 'resource_url')            || null,
+    resource_url_nonmember: prop(r, 'resource_url_nonmember') || null,
+    membership_required:  asBool(prop(r, 'membership_required')),
+    paid_resource:        asBool(prop(r, 'paid_resource')),
+    is_active:            true,
+    ghl_created_at:       r.createdAt || null,
+    synced_at:            new Date().toISOString(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -210,77 +209,47 @@ async function upsertRecords(supabase, tableName, rows, conflictColumn = 'ghl_re
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
   // Verify cron secret
-  const authHeader = req.headers['authorization'] || '';
-  const expectedSecret = `Bearer ${process.env.CRON_SECRET}`;
-  if (authHeader !== expectedSecret) {
+  const auth = req.headers['authorization'] || '';
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const apiKey = process.env.GHL_API_KEY;
-  const locationId = process.env.GHL_LOCATION_ID || 'DNirEjy0ejVwbHsaBYrn';
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+  const apiKey       = process.env.GHL_API_KEY;
+  const supabaseUrl  = process.env.SUPABASE_URL;
+  const supabaseKey  = process.env.SUPABASE_SERVICE_KEY;
 
   if (!apiKey || !supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Missing required environment variables' });
+    return res.status(500).json({ error: 'Missing env vars: GHL_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY' });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
   const results = {};
-  const errors = [];
+  const errors  = [];
   const started = Date.now();
 
-  // --- Vendor Resources ---
-  try {
-    const raw = await fetchAllGhlRecords('custom_objects.vendor_resources', apiKey, locationId);
-    const rows = raw.map(transformVendor);
-    const { count } = await upsertRecords(supabase, 'ghl_vendor_resources', rows);
-    results.ghl_vendor_resources = { fetched: raw.length, upserted: count };
-  } catch (err) {
-    errors.push(`ghl_vendor_resources: ${err.message}`);
-    results.ghl_vendor_resources = { error: err.message };
+  const jobs = [
+    { key: 'custom_objects.vendor_resources',    table: 'ghl_vendor_resources',    transform: transformVendor   },
+    { key: 'custom_objects.educators_mentors',   table: 'ghl_educators_mentors',   transform: transformEducator },
+    { key: 'custom_objects.educational_courses', table: 'ghl_educational_courses', transform: transformCourse   },
+    { key: 'custom_objects.tools_resources',     table: 'ghl_tools_resources',     transform: transformTool     },
+  ];
+
+  for (const job of jobs) {
+    try {
+      const raw  = await fetchAllGhlRecords(job.key, apiKey);
+      const rows = raw.map(job.transform).filter(r => r.ghl_record_id);
+      const out  = await upsertToSupabase(supabaseUrl, supabaseKey, job.table, rows);
+      results[job.table] = { fetched: raw.length, upserted: out.upserted };
+    } catch (err) {
+      errors.push(`${job.table}: ${err.message}`);
+      results[job.table] = { error: err.message };
+    }
   }
 
-  // --- Educators & Mentors ---
-  try {
-    const raw = await fetchAllGhlRecords('custom_objects.educators_mentors', apiKey, locationId);
-    const rows = raw.map(transformEducator);
-    const { count } = await upsertRecords(supabase, 'ghl_educators_mentors', rows);
-    results.ghl_educators_mentors = { fetched: raw.length, upserted: count };
-  } catch (err) {
-    errors.push(`ghl_educators_mentors: ${err.message}`);
-    results.ghl_educators_mentors = { error: err.message };
-  }
-
-  // --- Educational Courses ---
-  try {
-    const raw = await fetchAllGhlRecords('custom_objects.educational_courses', apiKey, locationId);
-    const rows = raw.map(transformCourse);
-    const { count } = await upsertRecords(supabase, 'ghl_educational_courses', rows);
-    results.ghl_educational_courses = { fetched: raw.length, upserted: count };
-  } catch (err) {
-    errors.push(`ghl_educational_courses: ${err.message}`);
-    results.ghl_educational_courses = { error: err.message };
-  }
-
-  // --- Tools & Resources ---
-  try {
-    const raw = await fetchAllGhlRecords('custom_objects.tools_resources', apiKey, locationId);
-    const rows = raw.map(transformTool);
-    const { count } = await upsertRecords(supabase, 'ghl_tools_resources', rows);
-    results.ghl_tools_resources = { fetched: raw.length, upserted: count };
-  } catch (err) {
-    errors.push(`ghl_tools_resources: ${err.message}`);
-    results.ghl_tools_resources = { error: err.message };
-  }
-
-  const duration = Date.now() - started;
-  const status = errors.length === 0 ? 200 : 207;
-
-  return res.status(status).json({
-    success: errors.length === 0,
-    duration_ms: duration,
+  return res.status(errors.length ? 207 : 200).json({
+    success:     errors.length === 0,
+    duration_ms: Date.now() - started,
+    synced_at:   new Date().toISOString(),
     results,
-    errors: errors.length ? errors : undefined,
+    errors:      errors.length ? errors : undefined,
   });
 }
