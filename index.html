@@ -538,11 +538,17 @@ function addMessage(role, text) {
 async function loadVapiSDK() {
   if (window.Vapi) return;
 
+  // If already loaded from GHL page head tracking code, skip
+  if (window.Vapi) { log('Vapi pre-loaded from head script', 'ok'); return; }
+
   const urls = [
+    // unpkg.com CDN — different provider, less likely to be blocked by GHL CSP
+    'https://unpkg.com/@vapi-ai/web@2.5.2/dist/vapi.umd.cjs',
+    'https://unpkg.com/@vapi-ai/web@2.2.3/dist/vapi.umd.cjs',
+    // balacodeio UMD wrapper — latest version
+    'https://cdn.jsdelivr.net/gh/balacodeio/Vapi-Web-UMD@latest/dist/latest/vapi-web-bundle.min.js',
+    // balacodeio UMD wrapper — pinned version
     'https://cdn.jsdelivr.net/gh/balacodeio/Vapi-Web-UMD@2.1.0/dist/2.1.0/vapi-web-bundle-2.1.0.min.js',
-    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.1.0/dist/vapi.umd.js',
-    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.0.0/dist/vapi.umd.js',
-    'https://cdn.jsdelivr.net/npm/@vapi-ai/web@1.0.0/dist/vapi.umd.js',
   ];
 
   for (const url of urls) {
