@@ -1,0 +1,43 @@
+name: Sync GHL Objects to Supabase
+
+on:
+  # Run automatically every day at 3:15 AM UTC
+  # (offset from Vercel cron by 15 min to avoid double-runs if both fire)
+  schedule:
+    - cron: '15 3 * * *'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual sync'
+        required: false
+        default: 'Manual sync triggered by team member'
+
+jobs:
+  sync:
+    name: Sync GHL Custom Objects
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger sync endpoint
+        run: |
+          echo "Triggering GHL object sync..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.VERCEL_SYNC_URL }}")
+
+          HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $HTTP_BODY"
+
+          if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 207 ]; then
+            echo "Sync failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "Sync completed successfully"
