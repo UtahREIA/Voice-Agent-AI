@@ -9,5 +9,11 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/sync-ghl-objects",
+      "schedule": "0 3 * * *"
+    }
   ]
 }
