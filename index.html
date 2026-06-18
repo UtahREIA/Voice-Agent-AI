@@ -715,7 +715,9 @@ async function startCall() {
     const phoneTag = window._memberPhone
       ? '\n\nCALLER_PHONE: ' + window._memberPhone
       : '';
-    overrides.variableValues.liveContext = (contextBlock || '') + (memberProfileBlock ? '\n\n' + memberProfileBlock : '') + phoneTag;
+    // Build liveContext and truncate to 8000 chars to avoid Vapi variable size limit
+    const rawContext = (contextBlock || '') + (memberProfileBlock ? '\n\n' + memberProfileBlock : '') + phoneTag;
+    overrides.variableValues.liveContext = rawContext.length > 8000 ? rawContext.slice(0, 8000) + '\n[Context truncated]' : rawContext;
 
     // If member was found pre-call, inject their phone into variableValues
     // This ensures ghl-sync.js has the phone even when the agent skips intake
@@ -725,18 +727,14 @@ async function startCall() {
     }
 
     // Set first message based on whether member was found
+    // NOTE: firstMessage override disabled temporarily for debugging
+    // The assistant's configured first message in Vapi dashboard will be used instead
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
       const firstName = window._memberFirstName || '';
-      overrides.firstMessage = firstName
-        ? "Aloha " + firstName + ", glad you reached out to Utah REIA. How can I help you today?"
-        : "Aloha, glad you reached out to Utah REIA. How can I help you today?";
-      // Inject Mahalo closing rule as a variable so system prompt can reference it
-      overrides.variableValues.closingWord = 'Mahalo';
-      // Append closing rule to liveContext so it is visible regardless of which path fires
+      // Inject returning member greeting into liveContext so agent uses it
       overrides.variableValues.liveContext = (overrides.variableValues.liveContext || '') +
-        '\n\nCLOSING RULE — NON-NEGOTIABLE: You MUST end every call by saying Mahalo. Never say Goodbye, Bye, Take care, or any other closing word. Only Mahalo.';
-    } else {
-      overrides.firstMessage = "Aloha, welcome to Utah REIA. Before we dive in, what is your first name?";
+        '\n\nRETURNING MEMBER GREETING: Start by saying Aloha ' + (firstName || 'there') + ', glad you reached out to Utah REIA. How can I help you today?';
+      overrides.variableValues.closingWord = 'Mahalo';
     }
 
     // Inject closing rule reminder into the assistant messages for every call
