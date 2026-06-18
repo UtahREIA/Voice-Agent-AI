@@ -31,7 +31,7 @@ async function fetchAllGhlRecords(objectKey, apiKey) {
   let searchAfter = null;
 
   for (let page = 0; page < 20; page++) {
-    const body = { locationId: GHL_LOCATION_ID, pageSize: PAGE_SIZE };
+    const body = { locationId: GHL_LOCATION_ID, page: 1, pageLimit: PAGE_SIZE };
     if (searchAfter) body.searchAfter = searchAfter;
 
     const res = await fetch(`${GHL_BASE}/objects/${objectKey}/records/search`, {
