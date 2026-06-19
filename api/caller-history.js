@@ -69,6 +69,10 @@ export default async function handler(req, res) {
   const passedContactId = args.contact_id || '';
   const last10 = rawPhone.replace(/\D/g, '').slice(-10);
 
+  console.log('CallerHistory args:', JSON.stringify(args));
+  console.log('CallerHistory — rawPhone:', rawPhone, '| last10:', last10, '| contactId:', passedContactId);
+  console.log('CallerHistory — full body keys:', JSON.stringify(Object.keys(req.body || {})));
+
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_KEY,
