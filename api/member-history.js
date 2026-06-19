@@ -35,13 +35,27 @@ export default async function handler(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json({ result: 'Member history unavailable — Supabase not configured.' });
+    return res.status(200).json(vapiResult('Member history unavailable — Supabase not configured.'));
   }
 
   // Extract arguments from all Vapi request formats
   function extractArgs(body) {
     if (body && (body.phone !== undefined || body.contact_id !== undefined)) return body;
     try {
+
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id
+    || req.body?.message?.toolCalls?.[0]?.id
+    || req.body?.toolCallList?.[0]?.id
+    || null;
+
+  function vapiResult(resultOrObj) {
+    const resultStr = typeof resultOrObj === 'object' && resultOrObj !== null
+      ? (resultOrObj.result || JSON.stringify(resultOrObj))
+      : String(resultOrObj);
+    if (toolCallId) return { results: [{ toolCallId, result: resultStr }] };
+    return { result: resultStr };
+  }
       const args = body?.message?.toolCallList?.[0]?.function?.arguments
         || body?.message?.toolCalls?.[0]?.function?.arguments
         || body?.toolCallList?.[0]?.function?.arguments;
@@ -56,7 +70,7 @@ export default async function handler(req, res) {
   const last10 = rawPhone.replace(/\D/g, '').slice(-10);
 
   if (!last10 && !passedContactId) {
-    return res.status(200).json({ result: 'No phone or contact ID provided — cannot retrieve history.' });
+    return res.status(200).json(vapiResult('No phone or contact ID provided — cannot retrieve history.'));
   }
 
   const headers = {
@@ -101,9 +115,7 @@ export default async function handler(req, res) {
     }
 
     if (!contact || !contactId) {
-      return res.status(200).json({
-        result: 'No member record found for this caller. Treat this as a new caller and run the full intake.'
-      });
+      return res.status(200).json(vapiResult('No member record found for this caller. Treat this as a new caller and run the full intake.'));
     }
 
     // --- STEP 2: Fetch all data sources in parallel ---
@@ -239,8 +251,6 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('member-history error:', e.message);
-    return res.status(200).json({
-      result: 'Could not retrieve member history. Proceed with the information already available.'
-    });
+    return res.status(200).json(vapiResult('Could not retrieve member history. Proceed with the information already available.'));
   }
 }

@@ -34,13 +34,27 @@ export default async function handler(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json({ result: 'History lookup unavailable.', has_history: false });
+    return res.status(200).json(vapiResult('History lookup unavailable.'));
   }
 
   // Extract args from all possible Vapi request formats
   function extractArgs(body) {
     if (body && (body.phone !== undefined || body.contact_id !== undefined)) return body;
     try {
+
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id
+    || req.body?.message?.toolCalls?.[0]?.id
+    || req.body?.toolCallList?.[0]?.id
+    || null;
+
+  function vapiResult(resultOrObj) {
+    const resultStr = typeof resultOrObj === 'object' && resultOrObj !== null
+      ? (resultOrObj.result || JSON.stringify(resultOrObj))
+      : String(resultOrObj);
+    if (toolCallId) return { results: [{ toolCallId, result: resultStr }] };
+    return { result: resultStr };
+  }
       const args = body?.message?.toolCallList?.[0]?.function?.arguments
         || body?.message?.toolCalls?.[0]?.function?.arguments
         || body?.toolCallList?.[0]?.function?.arguments;
@@ -100,10 +114,7 @@ export default async function handler(req, res) {
     }
 
     if (!contactId) {
-      return res.status(200).json({
-        result: 'No history found for this caller.',
-        has_history: false
-      });
+      return res.status(200).json(vapiResult('No history found for this caller.'));
     }
 
     const firstName = contactName.split(' ')[0] || 'this caller';
@@ -175,10 +186,7 @@ export default async function handler(req, res) {
     const hasHistory = pastCalls.length > 0 || tools.length > 0 || events.length > 0;
 
     if (!hasHistory && !profile) {
-      return res.status(200).json({
-        result: firstName + ' has no prior interaction history in our system.',
-        has_history: false
-      });
+      return res.status(200).json(vapiResult(firstName + ' has no prior interaction history in our system.'));
     }
 
     // --- STEP 4: Build voice-ready history summary ---
@@ -254,9 +262,6 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('Caller history error:', e.message);
-    return res.status(200).json({
-      result: 'History lookup failed. Proceed normally.',
-      has_history: false
-    });
+    return res.status(200).json(vapiResult('History lookup failed. Proceed normally.'));
   }
 }

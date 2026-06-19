@@ -37,11 +37,7 @@ export default async function handler(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json({
-      result: 'Intake routing unavailable. Continue with default flow.',
-      action: 'getEducationMatch',
-      tier: '1_info'
-    });
+    return res.status(200).json(vapiResult('Intake routing unavailable. Continue with default flow.'));
   }
 
   // Extract all dimensions from request body
@@ -61,6 +57,37 @@ export default async function handler(req, res) {
   }
 
   const vapiArgs = extractArgs(req.body);
+
+  // Extract toolCallId — required by Vapi to match response to tool call
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id
+    || req.body?.message?.toolCalls?.[0]?.id
+    || req.body?.toolCallList?.[0]?.id
+    || req.body?.toolCalls?.[0]?.id
+    || null;
+
+  // Helper to wrap result in Vapi-expected format
+  // Accepts either a string or an object {result, action, tier, tool_args, ...}
+  // Vapi only reads the "result" string — extra fields are serialized into it
+  function vapiResult(resultOrStr, extraFields) {
+    let resultStr, extras;
+    if (typeof resultOrStr === 'object' && resultOrStr !== null) {
+      const { result, ...rest } = resultOrStr;
+      resultStr = result;
+      extras = rest;
+    } else {
+      resultStr = String(resultOrStr);
+      extras = extraFields || {};
+    }
+    // Encode routing metadata into result string so Claude can read it
+    const fullResult = Object.keys(extras).length > 0
+      ? resultStr + ' [META:' + JSON.stringify(extras) + ']'
+      : resultStr;
+    if (toolCallId) {
+      return { results: [{ toolCallId, result: fullResult }] };
+    }
+    return { result: fullResult };
+  }
   const {
     stage = '',
     strategy = '',
@@ -122,7 +149,7 @@ export default async function handler(req, res) {
           ) || questions[0];
         }
 
-        return res.status(200).json({
+        return res.status(200).json(vapiResult({
           result: nextQuestion
             ? 'Ask this next: ' + nextQuestion.question_text
             : 'Ask what their main blocker is right now.',
@@ -134,7 +161,7 @@ export default async function handler(req, res) {
           next_question: nextQuestion,
           dimensions_collected: dimensionCount,
           dimensions_needed: 3
-        });
+        }));
       }
     }
 
@@ -227,7 +254,7 @@ export default async function handler(req, res) {
 
     console.log('Intake routing — stage:', stage, '| blocker:', blocker, '| action:', matchedRule.routing_action, '| tier:', matchedRule.tier);
 
-    return res.status(200).json({
+    return res.status(200).json(vapiResult({
       result: routingInstruction,
       action: matchedRule.routing_action,
       tier: matchedRule.tier,
@@ -237,11 +264,11 @@ export default async function handler(req, res) {
       next_question: null,
       dimensions_collected: dimensionCount,
       rule_matched: matchedRule.rule_name
-    });
+    }));
 
   } catch (e) {
     console.error('Intake routing error:', e.message);
-    return res.status(200).json({
+    return res.status(200).json(vapiResult({
       result: 'Call getEducationMatch with all available inputs and deliver your best recommendation.',
       action: 'getEducationMatch',
       tier: '1_info',
@@ -249,6 +276,6 @@ export default async function handler(req, res) {
       voice_bridge: 'Based on what you have shared, here is where I would start.',
       stage_context: null,
       next_question: null
-    });
+    }));
   }
 }

@@ -26,6 +26,22 @@ export default async function handler(req, res) {
   }
 
   const vapiArgs = extractArgs(req.body);
+
+  // Extract toolCallId — required by Vapi to match response to tool call
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id
+    || req.body?.message?.toolCalls?.[0]?.id
+    || req.body?.toolCallList?.[0]?.id
+    || req.body?.toolCalls?.[0]?.id
+    || null;
+
+  // Helper to wrap result in Vapi-expected format
+  function vapiResult(result) {
+    if (toolCallId) {
+      return { results: [{ toolCallId, result: String(result) }] };
+    }
+    return { result: String(result) };
+  }
   const {
     blocker,
     strategy,
@@ -453,9 +469,7 @@ export default async function handler(req, res) {
 
     // Build natural spoken response
     if (matched.length === 0) {
-      return res.status(200).json({
-        result: 'We have vendors in our community for that need. Our team will follow up with specific recommendations based on your situation.'
-      });
+      return res.status(200).json(vapiResult('We have vendors in our community for that need. Our team will follow up with specific recommendations based on your situation.'));
     }
 
     const names = matched.map(v => {
@@ -476,8 +490,6 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('Vendor match error:', e.message);
-    return res.status(200).json({
-      result: 'We have vendors in our community for that need. Our team will follow up with specific recommendations based on your situation.'
-    });
+    return res.status(200).json(vapiResult('We have vendors in our community for that need. Our team will follow up with specific recommendations based on your situation.'));
   }
 }

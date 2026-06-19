@@ -27,6 +27,20 @@ export default async function handler(req, res) {
   }
 
   const args = extractArgs(req.body);
+
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id
+    || req.body?.message?.toolCalls?.[0]?.id
+    || req.body?.toolCallList?.[0]?.id
+    || null;
+
+  function vapiResult(resultOrObj) {
+    const resultStr = typeof resultOrObj === 'object' && resultOrObj !== null
+      ? (resultOrObj.result || JSON.stringify(resultOrObj))
+      : String(resultOrObj);
+    if (toolCallId) return { results: [{ toolCallId, result: resultStr }] };
+    return { result: resultStr };
+  }
   const {
     stage,
     strategy,
@@ -270,9 +284,7 @@ export default async function handler(req, res) {
 
     // Fallback if nothing matched
     if (parts.length === 0) {
-      return res.status(200).json({
-        result: 'The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'
-      });
+      return res.status(200).json(vapiResult('The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'));
     }
 
     let result = '';
@@ -364,16 +376,10 @@ export default async function handler(req, res) {
     const finalResultWithTool = finalResult + toolResult;
 
     console.log(`Education match — track: ${results.length > 0 ? results[0].track_name : 'none'}, educator: ${educatorName || 'none'}, resources: ${scored.length} scored`);
-    return res.status(200).json({
-      result: finalResultWithTool,
-      educator_name: educatorName,
-      booking_url: bookingUrl
-    });
+    return res.status(200).json(vapiResult(finalResultWithTool));
 
   } catch(e) {
     console.error('Education match error:', e.message);
-    return res.status(200).json({
-      result: 'We have calculators, event replays, and educators covering every major strategy. Tell me what you are working on and I can point you to exactly the right resource.'
-    });
+    return res.status(200).json(vapiResult('We have calculators, event replays, and educators covering every major strategy. Tell me what you are working on and I can point you to exactly the right resource.'));
   }
 }
