@@ -41,7 +41,15 @@ export default async function handler(req, res) {
   function extractArgs(body) {
     if (body && (body.phone !== undefined || body.contact_id !== undefined)) return body;
     try {
+      const args = body?.message?.toolCallList?.[0]?.function?.arguments
+        || body?.message?.toolCalls?.[0]?.function?.arguments
+        || body?.toolCallList?.[0]?.function?.arguments;
+      if (args) return typeof args === 'string' ? JSON.parse(args) : args;
+    } catch(e) {}
+    return body || {};
+  }
 
+  // Extract toolCallId — required by Vapi to match response to tool call
   const toolCallId =
     req.body?.message?.toolCallList?.[0]?.id
     || req.body?.message?.toolCalls?.[0]?.id
@@ -54,13 +62,6 @@ export default async function handler(req, res) {
       : String(resultOrObj);
     if (toolCallId) return { results: [{ toolCallId, result: resultStr }] };
     return { result: resultStr };
-  }
-      const args = body?.message?.toolCallList?.[0]?.function?.arguments
-        || body?.message?.toolCalls?.[0]?.function?.arguments
-        || body?.toolCallList?.[0]?.function?.arguments;
-      if (args) return typeof args === 'string' ? JSON.parse(args) : args;
-    } catch(e) {}
-    return body || {};
   }
 
   const args = extractArgs(req.body);
