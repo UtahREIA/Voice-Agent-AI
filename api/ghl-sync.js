@@ -257,10 +257,17 @@ export default async function handler(req, res) {
     // --- STEP 1: Extract structured outputs from Vapi ---
     // Vapi structured outputs are keyed by output ID (a UUID), each with { name, result }
     // We convert this to a simple name -> result map for easy access
-    const structuredOutputs = payload.message?.artifact?.structuredOutputs ||
-                              payload.artifact?.structuredOutputs || {};
+    // Try all known Vapi payload paths for structured outputs
+    const structuredOutputs =
+      payload.message?.artifact?.structuredOutputs ||
+      payload.artifact?.structuredOutputs ||
+      payload.message?.analysis?.structuredOutputs ||
+      payload.analysis?.structuredOutputs ||
+      {};
 
     const structured = {};
+
+    // Format 1: { uuid: { name, result } } — original format
     for (const key of Object.keys(structuredOutputs)) {
       const item = structuredOutputs[key];
       if (item?.name && item?.result !== undefined) {
@@ -268,7 +275,32 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log('Structured data:', JSON.stringify(structured));
+    // Format 2: array of { name, result } — newer Vapi format
+    if (Object.keys(structured).length === 0 && Array.isArray(structuredOutputs)) {
+      for (const item of structuredOutputs) {
+        if (item?.name && item?.result !== undefined) {
+          structured[item.name] = item.result;
+        }
+      }
+    }
+
+    // Format 3: flat object { callerName: value, ... } — simplest format
+    if (Object.keys(structured).length === 0 && payload.message?.artifact) {
+      const art = payload.message.artifact;
+      const knownFields = ['callerName','callerEmail','callerPhone','profileType','investorStage',
+        'strategies','blocker','goals','summary','recommendedNextStep','tier','vendorMatches',
+        'toolMatches','educatorMatch','bookingRequired','alreadyTried','handoffChannel',
+        'stackSummary','commercialAssetTypes','wantsMentorConnection',
+        'wantsProfessionalConnections','wantsOffMarketDeals'];
+      for (const field of knownFields) {
+        if (art[field] !== undefined) structured[field] = art[field];
+      }
+    }
+
+    // Log full payload structure for debugging
+    console.log('Payload keys:', JSON.stringify(Object.keys(payload.message || payload)));
+    console.log('Artifact keys:', JSON.stringify(Object.keys(payload.message?.artifact || payload.artifact || {})));
+    console.log('Structured data extracted:', JSON.stringify(structured));
 
     // --- STEP 2: Extract all caller data from structured outputs ---
     // These field names must exactly match the structured output names in Vapi
