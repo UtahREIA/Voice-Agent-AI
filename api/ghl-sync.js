@@ -217,6 +217,21 @@ export default async function handler(req, res) {
 
     console.log('=== END OF CALL REPORT ===');
 
+    // Stage map — defined here so it is available throughout the handler
+    const ghlStageMap = {
+      'Exploring':              'Exploring / New',
+      'exploring':              'Exploring / New',
+      'Getting Started':        'Getting Started',
+      'getting_started':        'Getting Started',
+      'Active Investor':        'Active Investor',
+      'active':                 'Active Investor',
+      'Experienced Investor':   'Experienced Investor',
+      'experienced':            'Experienced Investor',
+      'Veteran':                'Veteran / Operator',
+      'veteran':                'Veteran / Operator',
+      'Veteran / Operator':     'Veteran / Operator',
+    };
+
     // =========================================================
     // DEDUPLICATION — Prevent processing the same call twice
     // Vapi sometimes sends end-of-call-report multiple times
@@ -764,19 +779,7 @@ export default async function handler(req, res) {
         if (contact?.id) {
           // Map stage names to GHL SINGLE_OPTIONS picklist values
           // Map voice agent stage values to exact GHL picklist option labels
-          const ghlStageMap = {
-            'Exploring':              'Exploring / New',
-            'exploring':              'Exploring / New',
-            'Getting Started':        'Getting Started',
-            'getting_started':        'Getting Started',
-            'Active Investor':        'Active Investor',
-            'active':                 'Active Investor',
-            'Experienced Investor':   'Experienced Investor',
-            'experienced':            'Experienced Investor',
-            'Veteran':                'Veteran / Operator',
-            'veteran':                'Veteran / Operator',
-            'Veteran / Operator':     'Veteran / Operator',
-          };
+          // ghlStageMap defined at handler level above
 
           // Map strategy keys to exact GHL "What type of investing" picklist values
           const strategyToGHL = {
