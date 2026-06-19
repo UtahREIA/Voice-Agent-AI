@@ -726,14 +726,18 @@ async function startCall() {
     }
 
     // Set first message based on whether member was found
-    // NOTE: firstMessage override disabled temporarily for debugging
-    // The assistant's configured first message in Vapi dashboard will be used instead
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
+      // Returning member — greet by name, skip asking for it
       const firstName = window._memberFirstName || '';
-      // Inject returning member greeting into liveContext so agent uses it
-      overrides.variableValues.liveContext = (overrides.variableValues.liveContext || '') +
-        '\n\nRETURNING MEMBER GREETING: Start by saying Aloha ' + (firstName || 'there') + ', glad you reached out to Utah REIA. How can I help you today?';
+      overrides.firstMessage = firstName
+        ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
+        : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
       overrides.variableValues.closingWord = 'Mahalo';
+      overrides.variableValues.liveContext = (overrides.variableValues.liveContext || '') +
+        '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
+    } else {
+      // New caller — ask for name
+      overrides.firstMessage = 'Aloha, welcome to Utah REIA. Before we dive in, what is your first name?';
     }
 
     // Inject closing rule reminder into the assistant messages for every call
