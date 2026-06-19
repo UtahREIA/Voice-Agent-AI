@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json(vapiResult('History lookup unavailable.'));
+    return res.status(200).json({ result: 'History lookup unavailable.' });
   }
 
   // Extract args from all possible Vapi request formats
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
       // Investor profile — stage, strategies, goals
       fetch(
         SUPABASE_URL + '/rest/v1/investor_profiles?contact_id=eq.' + contactId +
-        '&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months,what_best_describes_you_now,wants_mentor_connection&limit=1',
+        '&select=investing_journey_stage,investing_interests,accomplish_next_6_to_12_months,what_best_describes_you,wants_mentor_connection&limit=1',
         { headers }
       ).then(r => r.json()).catch(() => []),
 
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
       // This is the dedicated table for voice agent history
       fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + contactId +
-        '&select=summary,blocker,goals,strategies,educator_match,vendor_matches,tool_matches,booking_url,recommended_next,stack_summary,created_at&order=created_at.desc&limit=5',
+        '&select=summary,blocker,goals,strategies,educator_match,vendor_matches,tool_matches,booking_url,recommended_next_step,stack_summary,created_at&order=created_at.desc&limit=5',
         { headers }
       ).then(r => r.json()).catch(() => []),
 

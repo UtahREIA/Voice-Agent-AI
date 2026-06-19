@@ -627,6 +627,13 @@ function initVapi() {
   });
 
   vapi.on('error', (e) => {
+    // Suppress ejected/Meeting has ended — fires on normal call end, not a real error
+    const errType = e?.error?.type || e?.type || '';
+    const errMsg  = e?.error?.msg  || e?.errorMsg || e?.message?.msg || '';
+    if (errType === 'ejected' || errMsg === 'Meeting has ended') {
+      log('Call ended normally');
+      return;
+    }
     log('Vapi error: ' + (e.message || JSON.stringify(e)));
     showError('Call error - please try again.');
     endCallCleanup();
@@ -725,6 +732,10 @@ async function startCall() {
       overrides.variableValues.preCallPhone = window._memberPhone;
     }
 
+    // CLOSING RULE prepended so it never gets truncated
+    const mahaloRule = 'CLOSING RULE — NON-NEGOTIABLE: The ONLY word permitted to end this call is Mahalo. Never say Goodbye. Never say Bye. Never say Take care. If you are about to say any other closing word, stop and say Mahalo instead.\n\n';
+    overrides.variableValues.liveContext = mahaloRule + (overrides.variableValues.liveContext || '');
+
     // Set first message based on whether member was found
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
       // Returning member — greet by name, skip asking for it
@@ -732,9 +743,7 @@ async function startCall() {
       overrides.firstMessage = firstName
         ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
         : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
-      overrides.variableValues.closingWord = 'Mahalo';
-      overrides.variableValues.liveContext = (overrides.variableValues.liveContext || '') +
-        '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
+      overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
     } else {
       // New caller — ask for name
       overrides.firstMessage = 'Aloha, welcome to Utah REIA. Before we dive in, what is your first name?';
