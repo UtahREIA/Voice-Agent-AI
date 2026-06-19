@@ -224,15 +224,18 @@ export default async function handler(req, res) {
     // =========================================================
     const vapiCallId = payload.message?.call?.id || payload.call?.id || null;
 
-    if (vapiCallId && SUPABASE_URL && SUPABASE_KEY) {
+    const _SUPA_URL = process.env.SUPABASE_URL;
+    const _SUPA_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+
+    if (vapiCallId && _SUPA_URL && _SUPA_KEY) {
       try {
         const dedupResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/voice_agent_calls?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=id&limit=1`,
+          `${_SUPA_URL}/rest/v1/voice_agent_calls?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=id&limit=1`,
           {
             headers: {
               'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`
+              'apikey': _SUPA_KEY,
+              'Authorization': `Bearer ${_SUPA_KEY}`
             }
           }
         );
