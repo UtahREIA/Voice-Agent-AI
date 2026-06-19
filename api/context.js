@@ -64,9 +64,14 @@ export default async function handler(req, res) {
           const link     = customValues.find(v => v.name === `${slot} Mtg Monthly Link`)?.value;
 
           if (title && date2) {
-            const eventDate = new Date(date2);
+            // Clean malformed dates like "2026- 02- 12" by removing spaces
+            const cleanDate = date2.replace(/\s*-\s*/g, '-');
+            const eventDate = new Date(cleanDate);
             if (!isNaN(eventDate) && eventDate >= today) {
-              events.push({ title, date: date2, location, times, link });
+              const speaker  = customValues.find(v => v.name === `${slot} Mtg Speaker Bio 1`)?.value || '';
+              const subtitle = customValues.find(v => v.name === `${slot} Mtg Subtitle`)?.value || '';
+              const redirect = customValues.find(v => v.name === `${slot} Mtg Page Redirect (Free Event)`)?.value || link;
+              events.push({ title, subtitle, date: cleanDate, location, times, link: redirect || link, speaker });
             }
           }
         }
@@ -199,10 +204,13 @@ export default async function handler(req, res) {
     // Upcoming events from GHL
     lines.push('\nUPCOMING EVENTS:');
     if (events.length > 0) {
-      events.slice(0, 5).forEach(e => {
+      events.slice(0, 6).forEach(e => {
         const loc = e.location ? ` at ${e.location}` : '';
         const time = e.times ? `, ${e.times}` : '';
-        lines.push(`- ${e.title} (${e.date}${time}${loc})`);
+        const sub = e.subtitle ? ` — ${e.subtitle}` : '';
+        const reg = e.link ? ` | Register: ${e.link}` : '';
+        const spk = e.speaker ? ` | Speaker: ${e.speaker.split('.')[0]}` : '';
+        lines.push(`- ${e.title}${sub} | ${e.date}${time}${loc}${spk}${reg}`);
       });
     } else {
       lines.push('- Check our website for the full events calendar');
