@@ -229,26 +229,33 @@ export default async function handler(req, res) {
       // Read from voice_agent_calls — dedicated table for voice agent history
       const surveyResp = await fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + match.id +
-        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=3',
+        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=5',
         { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
       );
       const surveys = await surveyResp.json();
 
       if (Array.isArray(surveys) && surveys.length > 0) {
-        // Store last call data for firstMessage personalization in index.html
-        const lastCall = surveys[0];
-        lastCallData = {
-          stack_summary: lastCall.stack_summary || '',
-          recommended_next: lastCall.recommended_next || '',
-          educator_match: lastCall.educator_match || '',
-          vendor_matches: Array.isArray(lastCall.vendor_matches)
-            ? lastCall.vendor_matches.join(', ')
-            : (lastCall.vendor_matches || ''),
-          blocker: lastCall.blocker || '',
-          date: lastCall.created_at
-            ? new Date(lastCall.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            : ''
-        };
+        // Find the most recent call with a meaningful recommendation
+        const meaningfulCall = surveys.find(s =>
+          (s.stack_summary && s.stack_summary.length > 20 && !s.stack_summary.toLowerCase().includes('returning to utah')) ||
+          (s.recommended_next && s.recommended_next.length > 10) ||
+          (s.educator_match && s.educator_match.length > 2)
+        ) || null;
+
+        if (meaningfulCall) {
+          lastCallData = {
+            stack_summary: meaningfulCall.stack_summary || '',
+            recommended_next: meaningfulCall.recommended_next || '',
+            educator_match: meaningfulCall.educator_match || '',
+            vendor_matches: Array.isArray(meaningfulCall.vendor_matches)
+              ? meaningfulCall.vendor_matches.join(', ')
+              : (meaningfulCall.vendor_matches || ''),
+            blocker: meaningfulCall.blocker || '',
+            date: meaningfulCall.created_at
+              ? new Date(meaningfulCall.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              : ''
+          };
+        }
 
         const historyParts = surveys.map(s => {
           try {
