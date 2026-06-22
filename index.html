@@ -688,9 +688,10 @@ async function startCall() {
           const memberData = await memberResp.json();
           if (memberData.result && !memberData.result.startsWith('not_found') && !memberData.result.startsWith('No phone') && !memberData.result.startsWith('Exception')) {
             memberProfileBlock = 'RETURNING MEMBER PROFILE:\n' + memberData.result;
-            // Extract first name from result for greeting
+            // Extract first name and last call data for personalized greeting
             window._memberFirstName = memberData.member_name || '';
             window._memberPhone = preCallPhone; // Store phone for post-call sync
+            window._lastCall = memberData.last_call || null; // Store last call for firstMessage
             log('Member profile loaded for: ' + preCallPhone, 'ok');
           } else {
             memberProfileBlock = 'MEMBER LOOKUP: No profile found for this phone number. Proceed with normal intake.';
@@ -738,12 +739,23 @@ async function startCall() {
 
     // Set first message based on whether member was found
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
-      // Returning member — greet by name, skip asking for it
       const firstName = window._memberFirstName || '';
-      overrides.firstMessage = firstName
-        ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
-        : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
-      overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
+      const lastCall = window._lastCall;
+
+      if (lastCall && (lastCall.stack_summary || lastCall.recommended_next)) {
+        // Returning member WITH past call — open with personalized follow-up
+        const recommendation = (lastCall.stack_summary || lastCall.recommended_next || '').slice(0, 160);
+        overrides.firstMessage = firstName
+          ? 'Aloha ' + firstName + ', welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
+          : 'Aloha, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name again.';
+      } else {
+        // Returning member but NO past call history — standard returning greeting
+        overrides.firstMessage = firstName
+          ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
+          : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
+      }
     } else {
       // New caller — ask for name
       overrides.firstMessage = 'Aloha, welcome to Utah REIA. Before we dive in, what is your first name?';

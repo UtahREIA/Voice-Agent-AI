@@ -221,6 +221,7 @@ export default async function handler(req, res) {
     }
 
     // --- FETCH PAST VOICE AGENT CALL HISTORY ---
+    let lastCallData = null;
     // Pull last 3 voice agent surveys for this contact to surface
     // what was discussed, recommended, and what they have already tried
     let historyBlock = '';
@@ -234,6 +235,21 @@ export default async function handler(req, res) {
       const surveys = await surveyResp.json();
 
       if (Array.isArray(surveys) && surveys.length > 0) {
+        // Store last call data for firstMessage personalization in index.html
+        const lastCall = surveys[0];
+        lastCallData = {
+          stack_summary: lastCall.stack_summary || '',
+          recommended_next: lastCall.recommended_next || '',
+          educator_match: lastCall.educator_match || '',
+          vendor_matches: Array.isArray(lastCall.vendor_matches)
+            ? lastCall.vendor_matches.join(', ')
+            : (lastCall.vendor_matches || ''),
+          blocker: lastCall.blocker || '',
+          date: lastCall.created_at
+            ? new Date(lastCall.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : ''
+        };
+
         const historyParts = surveys.map(s => {
           try {
             const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
@@ -241,7 +257,7 @@ export default async function handler(req, res) {
               date ? 'Call on ' + date : 'Previous call',
               s.summary ? 'Summary: ' + s.summary.slice(0, 100) : '',
               s.blocker ? 'Blocker was: ' + s.blocker : '',
-              s.recommended_next ? 'Recommended: ' + s.recommended_next.slice(0, 80) : ''
+              s.stack_summary ? 'Recommended: ' + s.stack_summary.slice(0, 120) : ''
             ].filter(Boolean).join('. ');
           } catch(e) { return null; }
         }).filter(Boolean);
@@ -258,7 +274,11 @@ export default async function handler(req, res) {
     // Append history to greeting so Claude can reference it immediately
     const fullResult = greeting + (historyBlock ? ' ' + historyBlock : '');
 
-    return res.status(200).json({ result: fullResult, member_name: firstName });
+    return res.status(200).json({
+      result: fullResult,
+      member_name: firstName,
+      last_call: lastCallData   // exposed so index.html can build personalized firstMessage
+    });
 
   } catch (e) {
     return res.status(200).json({
