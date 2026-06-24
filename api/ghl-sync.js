@@ -396,6 +396,7 @@ export default async function handler(req, res) {
     // is not yet populated on most vendor records — contact.phone is the reliable fallback.
     // The vendor gets an SMS intro with the caller's profile so they can follow up directly.
     let vendorPhone = '';
+    let vendorEmail = '';
     let vendorName = '';
     let vendorCompany = '';
     const matchedVendorName = structured.vendorMatches ? structured.vendorMatches.split(',')[0].trim() : '';
@@ -424,6 +425,7 @@ export default async function handler(req, res) {
           vendorName = vendor.company_name || matchedVendorName;
           vendorCompany = vendor.company_name || matchedVendorName;
           vendorPhone = vendor.company_phone || '';
+          vendorEmail = vendor.company_email || '';
 
           // Format vendor phone as E.164 for GHL SMS delivery
           const vendorDigits = vendorPhone.replace(/\D/g, '').slice(-10);
@@ -556,6 +558,7 @@ export default async function handler(req, res) {
       // vendorPhone is the matched vendor's phone number from Supabase vendor_profiles
       // vendorName and vendorCompany identify the vendor in the workflow
       vendorPhone:    vendorPhone,
+      vendorEmail:    vendorEmail,
       vendorName:     vendorName,
       vendorCompany:  vendorCompany,
       strategies: strategiesArray.join(', '),
