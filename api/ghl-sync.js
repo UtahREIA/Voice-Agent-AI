@@ -397,6 +397,7 @@ export default async function handler(req, res) {
     // The vendor gets an SMS intro with the caller's profile so they can follow up directly.
     let vendorPhone = '';
     let vendorEmail = '';
+    let vendorWebsite = '';
     let vendorName = '';
     let vendorCompany = '';
     const matchedVendorName = structured.vendorMatches ? structured.vendorMatches.split(',')[0].trim() : '';
@@ -426,6 +427,7 @@ export default async function handler(req, res) {
           vendorCompany = vendor.company_name || matchedVendorName;
           vendorPhone = vendor.company_phone || '';
           vendorEmail = vendor.company_email || '';
+          vendorWebsite = vendor.company_website || '';
 
           // Format vendor phone as E.164 for GHL SMS delivery
           const vendorDigits = vendorPhone.replace(/\D/g, '').slice(-10);
@@ -559,6 +561,7 @@ export default async function handler(req, res) {
       // vendorName and vendorCompany identify the vendor in the workflow
       vendorPhone:    vendorPhone,
       vendorEmail:    vendorEmail,
+      vendorWebsite:  vendorWebsite,
       vendorName:     vendorName,
       vendorCompany:  vendorCompany,
       strategies: strategiesArray.join(', '),
