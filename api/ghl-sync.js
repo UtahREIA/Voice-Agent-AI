@@ -579,10 +579,8 @@ export default async function handler(req, res) {
         'voice-agent-call-complete',
         structured.tier         ? 'VA Tier: ' + structured.tier              : null,
         structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
-        structured.bookingRequired === 'true' ? 'va-booking-required'         : null,
-        // va-vendor-matched fires when a vendor phone was resolved from Supabase
-        // This tag is used by the GHL workflow If/Else branch to trigger vendor warm intro SMS
-        vendorPhone ? 'va-vendor-matched' : null,
+        structured.bookingRequired === 'true' ? 'va-booking-required' : null,
+        // va-vendor-matched tag removed — workflow now checks Voice Agent Vendor Matches field directly
         investorStage           ? 'Stage: ' + investorStage                  : null,
         blocker                 ? 'Blocker: ' + blocker                      : null,
         ...strategiesArray.map(s => 'Strategy: ' + s)
