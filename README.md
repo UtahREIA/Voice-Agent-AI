@@ -19,7 +19,7 @@
 ```
 Caller → index.html (GHL Funnel)
            ├── /api/context       — loads liveContext (vendors, educators, events, tools)
-           ├── /api/member-lookup — checks if returning member, injects profile
+           ├── /api/member-lookup — checks if returning member, injects profile + last call
            └── Vapi Web SDK (self-hosted at /public/vapi-bundle.js)
                     │
                     ▼
@@ -46,14 +46,15 @@ Caller → index.html (GHL Funnel)
 ```
 Voice-Agent-AI/
 ├── api/
-│   ├── context.js            # Pre-call liveContext loader (vendors, educators, events, tools)
-│   ├── member-lookup.js      # Returning member recognition by phone number
+│   ├── context.js            # Pre-call liveContext loader (vendors, educators, events, tools, property listing URL)
+│   ├── member-lookup.js      # Returning member recognition by phone — returns profile + last_call data
 │   ├── intake.js             # Map 1 routing — stage/strategy/blocker classification
 │   ├── vendors.js            # Map 2 vendor matching with haversine zip code filtering
 │   ├── education.js          # Map 3 education track matching
-│   ├── caller-history.js     # Past call history for returning callers
-│   ├── ghl-sync.js           # Post-call pipeline — Supabase + GHL sync
+│   ├── caller-history.js     # Past call history for returning callers (mid-call tool)
+│   ├── ghl-sync.js           # Post-call pipeline — Supabase + GHL sync + vendor notification payload
 │   ├── member-history.js     # Deep history lookup (tools, events, profile)
+│   ├── member-profile.js     # Mid-call member lookup tool (used when phone not entered pre-call)
 │   ├── sync-ghl-objects.js   # Scheduled sync: pulls GHL custom objects → upserts to Supabase
 │   ├── sync-educator.js      # Educator sync to ghl_educators_mentors
 │   ├── claude.js             # Claude API wrapper
@@ -83,6 +84,7 @@ Voice-Agent-AI/
 | Vapi Assistant ID | `92018c4f-f382-41b9-80e0-c46e8f2b505a` |
 | Vapi Voice | ElevenLabs `Xi53u0N6awPQcGCxrwD3` (Harmonie Borden clone) |
 | Vapi Server URL | `https://voice-agent-ai-nu.vercel.app/api/ghl-sync` |
+| Vapi End Call Message | `Mahalo.` |
 
 ---
 
@@ -98,10 +100,28 @@ Voice-Agent-AI/
 | `getVendorMatch` | `/api/vendors` | Map 2 — matches vendors by need + zip distance |
 | `getEducationMatch` | `/api/education` | Map 3 — matches education track + educator |
 | `getCallerHistory` | `/api/caller-history` | Returns past call history for returning callers |
-| `endCall` | Built-in | Ends the call |
+| `endCall` | Built-in | Ends the call. End Call Message set to "Mahalo." |
 
 **Structured Outputs (22 fields):**
 `callerName`, `callerEmail`, `callerPhone`, `profileType`, `investorStage`, `strategies`, `blocker`, `goals`, `summary`, `recommendedNextStep`, `tier`, `vendorMatches`, `toolMatches`, `educatorMatch`, `bookingRequired`, `alreadyTried`, `handoffChannel`, `stackSummary`, `commercialAssetTypes`, `wantsMentorConnection`, `wantsProfessionalConnections`, `wantsOffMarketDeals`
+
+---
+
+## Pre-Call Flow (index.html)
+
+1. Caller enters phone number and clicks Begin Journey
+2. `/api/context` loads liveContext (vendors, educators, courses, tools, events, property listing URL)
+3. `/api/member-lookup` checks if the number matches a contact in Supabase
+4. If returning member found — injects profile + last call data into liveContext
+5. `firstMessage` is set dynamically:
+   - **Returning member with past call history** → personalized follow-up on last recommendation: "Aloha [name], welcome back... I recommended [last stack_summary]. How did that go?"
+   - **Returning member, no meaningful call history** → "Aloha [name], glad you reached out. How can I help you today?"
+   - **New caller** → "Aloha, welcome to Utah REIA. How can I help you today?"
+6. Vapi SDK loads from self-hosted bundle (`/vapi-bundle.js`) first, falls back to CDN
+7. liveContext truncated to 8,000 characters — Mahalo closing rule prepended so it is never truncated
+
+**Meaningful call filter (`member-lookup.js`):**
+Skips calls with stack_summary containing: "no recommendations", "intake was in progress", "ended before", "call ended", "not delivered", "unable to", "no result", "did not complete", "incomplete". Only picks calls with a clean summary > 30 chars, matched educator, or matched vendors.
 
 ---
 
@@ -116,7 +136,7 @@ All routing uses live Supabase tables — no hardcoded logic in JS files.
 - Scored by specificity — most specific rule wins
 
 ### Map 2 — Vendor Matching (`vendor_routing_matrix`)
-- 554 active rules covering 31 investor needs × 32 strategies
+- 554 active rules covering 31 investor needs × 32 strategies (26 active strategies)
 - Geographic filtering via haversine distance from caller zip (zippopotam.us API)
 - Radius configurable via `app_settings.vendor_match_radius_miles` (default 100 miles)
 - Vendor scoring: zip match → city match → within radius → statewide → national
@@ -150,41 +170,15 @@ Two independent schedules run the sync automatically every night:
 | Vercel Cron | 9:00 PM MDT (3:00 AM UTC) | Primary trigger via `vercel.json` |
 | GitHub Actions | 9:15 PM MDT (3:15 AM UTC) | Backup trigger via `sync-ghl-objects.yml` |
 
-Both triggers call `GET /api/sync-ghl-objects` with the `CRON_SECRET` authorization header. No manual intervention required.
-
 ### Manual Trigger
 
-To run the sync immediately without waiting for the schedule, go to the GitHub repo > **Actions** tab > **Sync GHL Objects to Supabase** > **Run workflow**.
+Go to GitHub repo > **Actions** tab > **Sync GHL Objects to Supabase** > **Run workflow**.
 
-Or via terminal (PowerShell):
+Or via PowerShell:
 
 ```powershell
 Invoke-WebRequest -Uri "https://voice-agent-ai-nu.vercel.app/api/sync-ghl-objects" -Method GET -Headers @{ "Authorization" = "Bearer YOUR_CRON_SECRET" } | Select-Object -ExpandProperty Content
 ```
-
-### Expected Response
-
-```json
-{
-  "success": true,
-  "duration_ms": 1786,
-  "synced_at": "2026-06-18T11:32:47.688Z",
-  "results": {
-    "ghl_vendor_resources":    { "fetched": 13, "upserted": 13 },
-    "ghl_educators_mentors":   { "fetched": 1,  "upserted": 1  },
-    "ghl_educational_courses": { "fetched": 5,  "upserted": 5  },
-    "ghl_tools_resources":     { "fetched": 2,  "upserted": 2  }
-  }
-}
-```
-
-### GHL Field Name Notes
-
-- All vendor category fields append `_partner` to the key (e.g. `funding__financial_partner`, `deals__opportunities_partner`)
-- Social link fields use the `social_profile_links_` prefix (e.g. `social_profile_links_facebook`)
-- Boolean fields are returned as arrays containing the string `"true"` (e.g. `enroll_vendor_match: ["true"]`)
-- File/image fields (e.g. `company_logo`) are returned as arrays of objects with a `url` property — the sync extracts the URL automatically
-- The object displays as "Vendor Partners" in GHL UI but the immutable key remains `custom_objects.vendor_resources`
 
 ---
 
@@ -192,15 +186,34 @@ Invoke-WebRequest -Uri "https://voice-agent-ai-nu.vercel.app/api/sync-ghl-object
 
 Triggered by Vapi end-of-call-report to the server URL. Steps:
 
-1. Deduplicate via `vapi_call_id` — prevents double-processing
-2. Extract all 22 structured outputs from Vapi payload
-3. Phone number — 3-tier fallback (structured → liveContext → Vapi call object)
-4. Vendor lookup from `ghl_vendor_resources`
+1. Deduplicate via `vapi_call_id` — prevents double-processing from duplicate Vapi events
+2. Extract all 22 structured outputs (3-format fallback: UUID map → array → flat object)
+3. Phone number — 3-tier fallback (structured → liveContext CALLER_PHONE tag → Vapi call object)
+4. Vendor lookup from `ghl_vendor_resources` — resolves `vendorPhone`, `vendorEmail`, `vendorWebsite`, `vendorName`
 5. Educator booking URL from `ghl_educators_mentors`
-6. Append booking URL to `stackSummary` if omitted
-7. Fire GHL inbound webhook → triggers post-call SMS workflow
+6. Append booking URL to `stackSummary` if omitted by Claude
+7. Fire GHL inbound webhook → triggers Voice Agent Post-Call Workflow
 8. GHL v2 API update (4s delay) — sets all SINGLE/MULTIPLE_OPTIONS fields
 9. Write complete call record to `voice_agent_calls` table
+
+### Webhook Payload Fields (sent to GHL workflow)
+
+The following fields are available as `{{inboundWebhookRequest.*}}` in GHL:
+
+| Field | Description |
+|---|---|
+| `vendorName` | Matched vendor company name |
+| `vendorPhone` | Matched vendor phone number |
+| `vendorEmail` | Matched vendor company email |
+| `vendorWebsite` | Matched vendor company website |
+| `educatorMatch` | Matched educator name |
+| `bookingUrl` | Educator booking URL |
+| `stackSummary` | Full recommendation summary |
+| `strategies` | Investor strategies |
+| `blocker` | Main investor blocker |
+| `goals` | Investor goals |
+| `tier` | Routing tier (1_info / 2_vendor / 3_educator / 2_and_3) |
+| `investorStage` | Investor stage |
 
 ### GHL v2 API Note
 `MULTIPLE_OPTIONS` and `SINGLE_OPTIONS` custom fields **cannot** be set via webhook payload variables or workflow Update Contact Field steps. They must use the GHL v2 API with the Private Integration Token.
@@ -220,7 +233,7 @@ Triggered by Vapi end-of-call-report to the server URL. Steps:
 | `voice_agent_calls` | Growing | Voice agent call history |
 | `routing_results` | Growing | Non-voice routing events |
 | `intake_routing_rules` | 167 | Map 1 routing rules |
-| `vendor_routing_matrix` | 554 | Map 2 vendor matching |
+| `vendor_routing_matrix` | 554 | Map 2 vendor matching (26 active strategies) |
 | `education_routing_matrix` | 80 | Map 3 education tracks |
 | `tools_routing_matrix` | 11 | Calculator recommendations |
 | `blocker_service_mapping` | 40 | Blocker to service type |
@@ -243,7 +256,6 @@ Triggered by Vapi end-of-call-report to the server URL. Steps:
 Receives all GHL contact and survey data from the GHL to Claude via Supabase workflow.
 - Upserts into: `contacts`, `investor_profiles`, `vendor_profiles`, `tool_access`, `event_attendance`, `readiness_surveys`
 - Maps all 11 survey IDs to survey types
-- Fixed column names matching actual `investor_profiles` schema
 
 ### `routing-trigger` (v2)
 Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
@@ -257,7 +269,7 @@ Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
 ## GHL Workflows
 
 ### GHL to Claude via Supabase
-- Triggers: Contact Created + Contact Changed + 11 × Survey Submitted
+- Triggers: Contact Created + Contact Changed + 11 × Survey Submitted (separate trigger per survey)
 - Action: POST to `ghl-webhook` Supabase edge function
 - Each survey has its own webhook action with hardcoded `survey_id` in body JSON
 - `submitted_at` uses `{{right_now.date}}` (not `{{now}}` — invalid in GHL)
@@ -265,8 +277,16 @@ Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
 ### Voice Agent Post-Call Workflow
 - Trigger: Inbound webhook `d0a34baf-4e42-4a96-8f77-e6b99df93060`
 - Called exclusively by `ghl-sync.js` after every voice agent call
-- Steps: Find Contact by phone → Update Fields → SMS with stackSummary → Add Tag
+- Flow:
+  1. Find Contact by phone → Contact Found / Contact Not Found branches
+  2. Wait → Update Contact Fields → Wait → Add Tag (`Voice Agent Lead`) → Wait 5 min
+  3. Resource Stack SMS → **If Voice Agent Vendor Matches is not empty**
+     - Branch (vendor matched): Notify Vendor (Internal Notification email to `{{inboundWebhookRequest.vendorEmail}}`) → Wait → SMS to Caller (includes `{{inboundWebhookRequest.vendorWebsite}}`)
+     - None: **If Voice Agent Booking Required = true**
+       - Branch (booking required): Educator Booking SMS → Wait 2 days → 48-hour follow-up → Remove Tag
+       - None: END
 - Re-enrollment: OFF
+- **Note:** Tags (`va-vendor-matched`, `va-booking-required`) are no longer used. Workflow checks custom fields directly.
 
 ### Survey Routing Workflow *(pending Chris Borden approval to publish)*
 - Trigger: Inbound webhook `3734177a-a056-41cb-8580-fb447418d526`
@@ -293,36 +313,47 @@ Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
 
 ---
 
+## Enrolled Vendors (Vendor Notification Enabled)
+
+These vendors have `enroll_vendor_match = true` and will receive an email notification when matched to a caller:
+
+| Vendor | Email | Website |
+|---|---|---|
+| REIPrintMail | smullen@reiprintmail.com | https://app.reiprintmail.com/launch/UTAHREIA |
+| CamaPlan | mmoore@camaplan.com | https://www.camaplan.com |
+
+---
+
 ## Environment Variables
 
-Set these in Vercel project settings under **Environment Variables**:
+Set in Vercel project settings:
 
 | Variable | Description |
 |---|---|
-| `CRON_SECRET` | Shared secret used to authorize cron and manual sync calls |
+| `CRON_SECRET` | Shared secret for cron and manual sync calls |
 | `GHL_API_KEY` | GHL Private Integration API key |
 | `GHL_LOCATION_ID` | GHL location ID (`DNirEjy0ejVwbHsaBYrn`) |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key |
 
-Set these in GitHub repo settings under **Settings > Secrets and variables > Actions**:
+Set in GitHub repo secrets:
 
 | Secret | Description |
 |---|---|
 | `CRON_SECRET` | Same value as the Vercel one |
-| `VERCEL_SYNC_URL` | Full URL to the sync endpoint (`https://voice-agent-ai-nu.vercel.app/api/sync-ghl-objects`) |
+| `VERCEL_SYNC_URL` | `https://voice-agent-ai-nu.vercel.app/api/sync-ghl-objects` |
 
 ---
 
 ## GitHub Collaborator Notes
 
-The GitHub repo must remain **public** for Vercel to accept deployments from collaborator accounts on the Hobby plan. Vercel's free plan only allows collaboration on public repositories. Making the repo private will cause Vercel to block automatic redeployments from non-owner accounts.
+The GitHub repo must remain **public** for Vercel to accept deployments from collaborator accounts on the Hobby plan. Making the repo private will cause Vercel to block automatic redeployments from non-owner accounts.
 
 ---
 
 ## Vapi SDK Note
 
-The self-hosted bundle at `public/vapi-bundle.js` is built from `@vapi-ai/web@2.5.2` with `daily-js 0.85.0`. The balacodeio CDN bundle has deprecated `daily-js` versions that Vapi servers reject. Always load from the self-hosted bundle first.
+The self-hosted bundle at `public/vapi-bundle.js` is built from `@vapi-ai/web@2.5.2` with `daily-js 0.85.0`. Always load from the self-hosted bundle first.
 
 Add to GHL funnel head tracking code:
 ```html
@@ -347,7 +378,7 @@ SELECT setting_key, value, description FROM app_settings;
 
 ## Supabase Patterns
 
-- **Upsert pattern:** `POST /rest/v1/{table}?on_conflict=ghl_record_id` with `Prefer: resolution=merge-duplicates,return=minimal` — the `on_conflict` query param is required; the `Prefer` header alone does not prevent 409 errors
+- **Upsert pattern:** `POST /rest/v1/{table}?on_conflict=ghl_record_id` with `Prefer: resolution=merge-duplicates,return=minimal`
 - Records are never deleted — the sync only inserts new records and updates existing ones
 - Array columns require explicit `::text[]` cast in raw SQL
 - `strategy_crosswalk.id` is `GENERATED ALWAYS AS IDENTITY` — omit on insert
@@ -364,6 +395,8 @@ SELECT setting_key, value, description FROM app_settings;
 - [ ] Dashboard for Chris — call volume, top blockers, routing distribution
 - [ ] Multi-language support (Spanish path)
 - [ ] Inbound SMS routing
+- [ ] Test vendor email notification end to end (REIPrintMail / CamaPlan)
+- [ ] Upgrade vapi-bundle.js when daily-js 0.85.0 is fully deprecated
 
 ---
 
