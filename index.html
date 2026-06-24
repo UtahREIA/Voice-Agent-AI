@@ -405,10 +405,15 @@
     <div class="setup-sub">Tell us where you are. We'll point you to the right people, tools, and next step.</div>
     <div style="width:100%;max-width:320px;margin:12px auto 0;">
       <p style="font-size:14px;font-weight:700;color:rgba(30,10,2,.88);text-align:center;margin:0 0 8px;font-family:'DM Sans',sans-serif;letter-spacing:0.3px;">Enter your phone number to get started</p>
-      <input type="tel" id="preCallPhone" placeholder="(000) 000-0000" required
-        style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(120,60,10,.25);background:rgba(255,245,230,.6);font-size:14px;font-family:'DM Sans',sans-serif;color:rgba(30,10,2,.85);outline:none;box-sizing:border-box;text-align:center;"
-        inputmode="tel" autocomplete="tel"
-      />
+      <div style="position:relative;display:flex;align-items:center;gap:8px;">
+        <input type="tel" id="preCallPhone" placeholder="(000) 000-0000" required
+          style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid rgba(120,60,10,.25);background:rgba(255,245,230,.6);font-size:14px;font-family:'DM Sans',sans-serif;color:rgba(30,10,2,.85);outline:none;box-sizing:border-box;text-align:center;"
+          inputmode="tel" autocomplete="tel"
+        />
+        <button id="dictateBtn" type="button" title="Speak your phone number"
+          style="flex-shrink:0;width:42px;height:42px;border-radius:10px;border:1px solid rgba(120,60,10,.25);background:rgba(255,245,230,.8);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all 0.2s;"
+          onclick="startPhoneDictation()">🎤</button>
+      </div>
       <div id="memberGreeting" style="display:none;"></div>
     </div>
     <div class="quiet-banner" id="quietBanner">
@@ -436,6 +441,13 @@
     <div class="call-controls">
       <div class="status-indicator" id="statusInd"><div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div><span id="statusText">Connecting...</span></div>
       <div class="btn-row">
+        <div id="reconnect-msg" style="display:none;text-align:center;margin-top:12px;">
+          <p style="font-size:13px;color:rgba(30,10,2,.7);margin:0 0 8px;font-family:'DM Sans',sans-serif;">Connection lost. Want to reconnect?</p>
+          <button onclick="document.getElementById('reconnect-msg').style.display='none'; startCall();"
+            style="padding:8px 20px;border-radius:8px;border:none;background:rgba(197,90,17,0.85);color:white;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;">
+            Reconnect
+          </button>
+        </div>
         <button class="end-btn" id="endBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
@@ -586,8 +598,19 @@ function initVapi() {
 
   vapi.on('call-end', () => {
     log('Vapi call ended');
+    const wasActive = callActive;
     callActive = false;
     endCallCleanup();
+
+    // If call ended unexpectedly (not by user clicking end button),
+    // offer a reconnect option after a short delay
+    if (wasActive && !window._userEndedCall) {
+      setTimeout(() => {
+        const reconnectMsg = document.getElementById('reconnect-msg');
+        if (reconnectMsg) reconnectMsg.style.display = 'block';
+      }, 1500);
+    }
+    window._userEndedCall = false;
   });
 
   vapi.on('speech-start', () => {
@@ -737,7 +760,7 @@ async function startCall() {
     const mahaloRule = 'CLOSING RULE — NON-NEGOTIABLE: The ONLY word permitted to end this call is Mahalo. Never say Goodbye. Never say Bye. Never say Take care. If you are about to say any other closing word, stop and say Mahalo instead.\n\n';
     overrides.variableValues.liveContext = mahaloRule + (overrides.variableValues.liveContext || '');
 
-    // Set first message based on whether member was found
+    // Set firstMessage based on member-lookup result
     if (memberProfileBlock && memberProfileBlock.includes('RETURNING MEMBER PROFILE')) {
       const firstName = window._memberFirstName || '';
       const lastCall = window._lastCall;
@@ -748,17 +771,17 @@ async function startCall() {
         overrides.firstMessage = firstName
           ? 'Aloha ' + firstName + ', welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
           : 'Aloha, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
-        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name again.';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name or phone number.';
       } else {
-        // Returning member but NO past call history — standard returning greeting
+        // Returning member but no meaningful past call history
         overrides.firstMessage = firstName
           ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
           : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
-        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name. Go straight to helping them.';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name or phone number. Go straight to helping them.';
       }
     } else {
-      // New caller — ask for name
-      overrides.firstMessage = 'Aloha, welcome to Utah REIA. Before we dive in, what is your first name?';
+      // New caller or no phone provided — neutral opening
+      overrides.firstMessage = 'Aloha, welcome to Utah REIA. How can I help you today?';
     }
 
     // Inject closing rule reminder into the assistant messages for every call
@@ -832,7 +855,10 @@ startBtn.addEventListener('click', () => {
 });
 
 
-endBtn.addEventListener('click', endCall);
+endBtn.addEventListener('click', () => {
+  window._userEndedCall = true;
+  endCall();
+});
 
 toggleBtn.addEventListener('click', () => {
   transcriptVisible = !transcriptVisible;
@@ -857,6 +883,119 @@ if (quietDismiss) {
 
 log('App loaded. Ready.');
 log('Origin: ' + window.location.origin);
+
+  // ============================================================
+  // PHONE NUMBER DICTATION
+  // Uses Web Speech API — aggressively filters to digits only
+  // Handles spoken words like "eight", "two", "for" etc.
+  // ============================================================
+  const wordToDigit = {
+    'zero':'0','one':'1','two':'2','three':'3','four':'4','five':'5',
+    'six':'6','seven':'7','eight':'8','nine':'9','ten':'10',
+    'oh':'0','o':'0','to':'2','too':'2','for':'4','ate':'8',
+    'niner':'9','tree':'3','fife':'5'
+  };
+
+  function spokenToDigits(text) {
+    // First try extracting raw digits
+    const rawDigits = text.replace(/[^0-9]/g, '');
+    if (rawDigits.length >= 7) return rawDigits;
+
+    // Otherwise convert word by word
+    const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+    let digits = '';
+    for (const word of words) {
+      if (/^\d+$/.test(word)) {
+        digits += word;
+      } else if (wordToDigit[word] !== undefined) {
+        digits += wordToDigit[word];
+      }
+    }
+    return digits || rawDigits;
+  }
+
+  function formatPhoneNumber(digits) {
+    const d = digits.replace(/\D/g, '').slice(-10);
+    if (d.length === 10) return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+    return digits;
+  }
+
+  function startPhoneDictation() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please type your number.');
+      return;
+    }
+
+    const btn = document.getElementById('dictateBtn');
+    const input = document.getElementById('preCallPhone');
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 3;
+
+    // Visual feedback — button pulses red while listening
+    btn.style.background = 'rgba(255,60,60,0.2)';
+    btn.style.borderColor = '#e00';
+    btn.textContent = '🔴';
+    btn.disabled = true;
+
+    recognition.onresult = (event) => {
+      // Try all alternatives, pick the one with most digits
+      let bestDigits = '';
+      for (let i = 0; i < event.results[0].length; i++) {
+        const transcript = event.results[0][i].transcript;
+        const digits = spokenToDigits(transcript);
+        if (digits.length > bestDigits.length) bestDigits = digits;
+      }
+
+      if (bestDigits.length >= 7) {
+        input.value = formatPhoneNumber(bestDigits);
+        btn.textContent = '✅';
+        btn.style.background = 'rgba(0,180,0,0.15)';
+        btn.style.borderColor = 'rgba(0,180,0,0.5)';
+        setTimeout(() => {
+          btn.textContent = '🎤';
+          btn.style.background = 'rgba(255,245,230,.8)';
+          btn.style.borderColor = 'rgba(120,60,10,.25)';
+          btn.disabled = false;
+        }, 2000);
+      } else {
+        input.value = '';
+        input.placeholder = 'Could not hear — try again';
+        btn.textContent = '🎤';
+        btn.style.background = 'rgba(255,245,230,.8)';
+        btn.style.borderColor = 'rgba(120,60,10,.25)';
+        btn.disabled = false;
+        setTimeout(() => { input.placeholder = '(000) 000-0000'; }, 3000);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      btn.textContent = '🎤';
+      btn.style.background = 'rgba(255,245,230,.8)';
+      btn.style.borderColor = 'rgba(120,60,10,.25)';
+      btn.disabled = false;
+      if (event.error !== 'no-speech') {
+        input.placeholder = 'Error — please type your number';
+        setTimeout(() => { input.placeholder = '(000) 000-0000'; }, 3000);
+      }
+    };
+
+    recognition.onend = () => {
+      if (btn.disabled) {
+        btn.disabled = false;
+        btn.textContent = '🎤';
+        btn.style.background = 'rgba(255,245,230,.8)';
+        btn.style.borderColor = 'rgba(120,60,10,.25)';
+      }
+    };
+
+    recognition.start();
+    log('Phone dictation started');
+  }
+
 </script>
 </body>
 </html>
