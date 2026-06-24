@@ -236,11 +236,24 @@ export default async function handler(req, res) {
 
       if (Array.isArray(surveys) && surveys.length > 0) {
         // Find the most recent call with a meaningful recommendation
-        const meaningfulCall = surveys.find(s =>
-          (s.stack_summary && s.stack_summary.length > 20 && !s.stack_summary.toLowerCase().includes('returning to utah')) ||
-          (s.recommended_next && s.recommended_next.length > 10) ||
-          (s.educator_match && s.educator_match.length > 2)
-        ) || null;
+        // Skip calls with no real recommendations
+        const badPhrases = [
+          'no recommendations', 'intake was in progress', 'ended before',
+          'returning to utah', 'call ended', 'not delivered', 'unable to',
+          'no result', 'did not complete', 'incomplete'
+        ];
+
+        const meaningfulCall = surveys.find(s => {
+          const summary = (s.stack_summary || '').toLowerCase();
+          const hasBadPhrase = badPhrases.some(p => summary.includes(p));
+          if (hasBadPhrase) return false;
+
+          const hasGoodSummary = s.stack_summary && s.stack_summary.length > 30;
+          const hasEducator = s.educator_match && s.educator_match.length > 2;
+          const hasVendor = Array.isArray(s.vendor_matches) && s.vendor_matches.length > 0;
+
+          return hasGoodSummary || hasEducator || hasVendor;
+        }) || null;
 
         if (meaningfulCall) {
           lastCallData = {
