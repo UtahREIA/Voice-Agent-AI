@@ -573,13 +573,12 @@ export default async function handler(req, res) {
 
       // Tags applied to the contact in GHL
       // voice-agent-call-complete triggers the post-call workflow
-      // va-booking-required triggers the educator booking SMS branch
+      // va-booking-required and va-vendor-matched removed — workflow checks custom fields directly
       tags: [
         'Voice Agent Lead',
         'voice-agent-call-complete',
         structured.tier         ? 'VA Tier: ' + structured.tier              : null,
         structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
-        structured.bookingRequired === 'true' ? 'va-booking-required' : null,
         // va-vendor-matched tag removed — workflow now checks Voice Agent Vendor Matches field directly
         investorStage           ? 'Stage: ' + investorStage                  : null,
         blocker                 ? 'Blocker: ' + blocker                      : null,
