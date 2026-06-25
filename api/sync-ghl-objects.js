@@ -26,12 +26,51 @@
 export const config = { api: { bodyParser: true } };
 
 export default async function handler(req, res) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  const GHL_API_KEY  = process.env.GHL_API_KEY;
+  const GHL_LOC_ID   = process.env.GHL_LOCATION_ID || 'DNirEjy0ejVwbHsaBYrn';
+  const CRON_SECRET  = process.env.CRON_SECRET;
+
+  // GET — nightly event sync triggered by GitHub Actions or Vercel cron
+  if (req.method === 'GET') {
+    const authHeader = req.headers?.['authorization'] || '';
+    if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+    if (!SUPABASE_URL || !SUPABASE_KEY || !GHL_API_KEY) {
+      return res.status(200).json({ ok: false, error: 'Missing env vars' });
+    }
+    try {
+      const cvResp = await fetch(
+        `https://services.leadconnectorhq.com/locations/${GHL_LOC_ID}/customValues`,
+        {
+          headers: {
+            'Authorization': `Bearer ${GHL_API_KEY}`,
+            'Version': '2021-07-28',
+            'Accept': 'application/json'
+          }
+        }
+      );
+      if (!cvResp.ok) {
+        const err = await cvResp.text();
+        throw new Error(`GHL custom values fetch failed: ${err.slice(0, 200)}`);
+      }
+      const cvData = await cvResp.json();
+      const customValues = cvData.customValues || cvData.customFields || [];
+      console.log(`Fetched ${customValues.length} GHL custom values`);
+      const result = await syncEvents(customValues, SUPABASE_URL, SUPABASE_KEY);
+      return res.status(200).json({ ok: true, synced_at: new Date().toISOString(), events: result });
+    } catch (e) {
+      console.error('Event sync GET error:', e.message);
+      return res.status(200).json({ ok: false, error: e.message });
+    }
+  }
+
+  // POST — GHL webhook receiver for individual object records
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(200).json({ ok: false, error: 'Supabase env vars missing' });
@@ -362,61 +401,6 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
 // GET handler — called by Vercel cron and GitHub Actions nightly
 // Fetches GHL custom values and syncs event slots to Supabase
 // ============================================================
-
-export async function GET(req) {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-  const GHL_API_KEY  = process.env.GHL_API_KEY;
-  const GHL_LOC_ID   = process.env.GHL_LOCATION_ID || 'DNirEjy0ejVwbHsaBYrn';
-  const CRON_SECRET  = process.env.CRON_SECRET;
-
-  // Auth check
-  const authHeader = req.headers?.get?.('authorization') || req.headers?.['authorization'] || '';
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
-    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 401 });
-  }
-
-  if (!SUPABASE_URL || !SUPABASE_KEY || !GHL_API_KEY) {
-    return new Response(JSON.stringify({ ok: false, error: 'Missing env vars' }), { status: 200 });
-  }
-
-  try {
-    // Fetch all GHL custom values
-    const cvResp = await fetch(
-      `https://services.leadconnectorhq.com/locations/${GHL_LOC_ID}/customValues`,
-      {
-        headers: {
-          'Authorization': `Bearer ${GHL_API_KEY}`,
-          'Version': '2021-07-28',
-          'Accept': 'application/json'
-        }
-      }
-    );
-
-    if (!cvResp.ok) {
-      const err = await cvResp.text();
-      throw new Error(`GHL custom values fetch failed: ${err.slice(0, 200)}`);
-    }
-
-    const cvData = await cvResp.json();
-    const customValues = cvData.customValues || cvData.customFields || [];
-
-    console.log(`Fetched ${customValues.length} GHL custom values`);
-
-    // Sync events to Supabase
-    const result = await syncEvents(customValues, SUPABASE_URL, SUPABASE_KEY);
-
-    return new Response(JSON.stringify({
-      ok: true,
-      synced_at: new Date().toISOString(),
-      events: result
-    }), { status: 200 });
-
-  } catch (e) {
-    console.error('Event sync GET error:', e.message);
-    return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 200 });
-  }
-}
 
 // Export for use in the main sync handler
 if (typeof module !== 'undefined') {
