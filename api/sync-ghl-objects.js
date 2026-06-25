@@ -1,255 +1,424 @@
 /**
- * sync-ghl-objects.js — GHL Custom Objects to Supabase Sync
+ * sync-ghl-objects.js — GHL Custom Object Webhook Receiver
  *
- * Fetches records from four GHL custom objects and upserts them
- * into matching Supabase tables so the voice agent can query them.
+ * Receives webhook payloads from GHL when Vendor & Resources,
+ * Educators & Mentors, or Educational Courses records are
+ * created or updated. Upserts the data into matching Supabase tables.
  *
- * GHL Custom Objects synced:
- *   - custom_objects.vendor_resources     → ghl_vendor_resources
- *   - custom_objects.educators_mentors    → ghl_educators_mentors
- *   - custom_objects.educational_courses  → ghl_educational_courses
- *   - custom_objects.tools_resources      → ghl_tools_resources
+ * GHL sends the full record payload via inbound webhook when triggered
+ * by a workflow. We parse the payload and write to the correct table
+ * based on the object_type field included in the webhook body.
  *
- * Called by: GET /api/sync-ghl-objects
- * Auth:      Authorization: Bearer <CRON_SECRET>
- * Trigger:   Vercel cron (3:00 AM UTC) or GitHub Actions (3:15 AM UTC)
+ * Endpoint: POST /api/sync-ghl-objects
  *
- * No external npm packages required — uses native fetch only.
+ * Expected payload from GHL workflow:
+ * {
+ *   object_type: "vendor_resources" | "educators_mentors" | "educational_courses",
+ *   ghl_record_id: string,
+ *   ... all field values as top-level keys
+ * }
+ *
+ * Environment variables required:
+ *   SUPABASE_URL           — Supabase project URL
+ *   SUPABASE_SERVICE_KEY   — Supabase service role key
  */
 
-export const config = { api: { bodyParser: false } };
+export const config = { api: { bodyParser: true } };
 
-const GHL_LOCATION_ID = 'DNirEjy0ejVwbHsaBYrn';
-const GHL_BASE        = 'https://services.leadconnectorhq.com';
-const PAGE_SIZE       = 100;
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-// ---------------------------------------------------------------------------
-// GHL: paginated search using the POST /objects/{key}/records/search endpoint
-// ---------------------------------------------------------------------------
-async function fetchAllGhlRecords(objectKey, apiKey) {
-  const records = [];
-  let searchAfter = null;
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-  for (let page = 0; page < 20; page++) {
-    const body = { locationId: GHL_LOCATION_ID, page: 1, pageLimit: PAGE_SIZE };
-    if (searchAfter) body.searchAfter = searchAfter;
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return res.status(200).json({ ok: false, error: 'Supabase env vars missing' });
+  }
 
-    const res = await fetch(`${GHL_BASE}/objects/${objectKey}/records/search`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Version': '2021-07-28',
-      },
-      body: JSON.stringify(body),
+  const body = req.body || {};
+
+  // GHL workflow sends object_type to tell us which table to write to
+  // This is a custom field we add to every GHL webhook action
+  const objectType = body.object_type || '';
+  const recordId = body.ghl_record_id || body.id || '';
+
+  console.log('sync-ghl-objects received:', objectType, '| record:', recordId);
+
+  if (!objectType || !recordId) {
+    return res.status(200).json({
+      ok: false,
+      error: 'Missing object_type or ghl_record_id in payload',
+      received_keys: Object.keys(body).join(', ')
+    });
+  }
+
+  const supabaseHeaders = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Prefer': 'resolution=merge-duplicates,return=minimal'
+  };
+
+  const now = new Date().toISOString();
+
+  try {
+
+    // ============================================================
+    // EDUCATORS & MENTORS
+    // ============================================================
+    if (objectType === 'educators_mentors') {
+      const row = {
+        ghl_record_id:          recordId,
+        educators_name:         body.educators_name || body.name || '',
+        educational_topics:     parseArray(body.educational_topics),
+        educational_level:      parseArray(body.educational_level),
+        educators_url:          body.educators_url || body.educatorsUrl || '',
+        commercial_asset_types: parseArray(body.commercial_asset_types),
+        is_active:              true,
+        ghl_created_at:         body.created_at || null,
+        ghl_updated_at:         body.updated_at || null,
+        synced_at:              now
+      };
+
+      if (!row.educators_name) {
+        return res.status(200).json({ ok: false, error: 'educators_name is required' });
+      }
+
+      const resp = await fetch(`${SUPABASE_URL}/rest/v1/ghl_educators_mentors`, {
+        method: 'POST',
+        headers: supabaseHeaders,
+        body: JSON.stringify(row)
+      });
+
+      const status = resp.status;
+      console.log('Educator upsert status:', status, '| name:', row.educators_name);
+      return res.status(200).json({ ok: true, table: 'ghl_educators_mentors', name: row.educators_name, status });
+    }
+
+    // ============================================================
+    // EDUCATIONAL COURSES
+    // ============================================================
+    if (objectType === 'educational_courses') {
+      const row = {
+        ghl_record_id:          recordId,
+        course_name:            body.educational_courses || body.course_name || body.name || '',
+        educational_topics:     parseArray(body.educational_topics),
+        commercial_asset_types: parseArray(body.commercial_asset_types),
+        educational_level:      parseArray(body.educational_level),
+        video_url:              body.video_url || body.videoUrl || '',
+        education_url:          body.education_url || body.educationUrl || '',
+        paid_education:         parseBool(body.paid_education),
+        membership_required:    parseBool(body.membership_required),
+        is_active:              true,
+        ghl_created_at:         body.created_at || null,
+        ghl_updated_at:         body.updated_at || null,
+        synced_at:              now
+      };
+
+      if (!row.course_name) {
+        return res.status(200).json({ ok: false, error: 'course_name is required' });
+      }
+
+      const resp = await fetch(`${SUPABASE_URL}/rest/v1/ghl_educational_courses`, {
+        method: 'POST',
+        headers: supabaseHeaders,
+        body: JSON.stringify(row)
+      });
+
+      const status = resp.status;
+      console.log('Course upsert status:', status, '| name:', row.course_name);
+      return res.status(200).json({ ok: true, table: 'ghl_educational_courses', name: row.course_name, status });
+    }
+
+    // ============================================================
+    // VENDOR RESOURCES
+    // ============================================================
+    if (objectType === 'vendor_resources') {
+      const row = {
+        ghl_record_id:          recordId,
+        company_name:           body.company_name || body.name || '',
+        company_phone:          body.company_phone || '',
+        company_email:          body.company_email || '',
+        business_description:   body.business_description || '',
+        company_tagline:        body.company_tagline || '',
+        company_website:        body.company_website || '',
+        company_address:        body.company_address || '',
+        company_city:           body.company_city || '',
+        company_state:          body.company_state || '',
+        company_postal_code:    body.company_postal_code || '',
+        company_logo:           body.company_logo || '',
+        contractor_speciality:  body.contractor_speciality || '',
+        other_vendor_services:  body.other_vendor_services || '',
+        deals_opportunities:    parseArray(body.deals_opportunities),
+        funding_financial:      parseArray(body.funding_financial),
+        team_vendors:           parseArray(body.team_vendors),
+        attorney_subclass:      parseArray(body.attorney_subclass),
+        operations:             parseArray(body.operations),
+        development_land:       parseArray(body.development_land),
+        education_tech_tools:   parseArray(body.education_tech_tools),
+        other_contractor:       parseArray(body.other_contractor),
+        social_facebook:        body.social_facebook || body.social_profile_links_facebook || '',
+        social_instagram:       body.social_instagram || body.social_profile_links_instagram || '',
+        social_youtube:         body.social_youtube || body.social_profile_links_youtube || '',
+        social_linkedin:        body.social_linkedin || body.social_profile_links_linkedin || '',
+        promotion_graphics:     body.promotion_graphics || '',
+        member_promotions:      body.member_promotions || '',
+        enroll_vendor_match:    parseBool(body.enroll_vendor_match),
+        investor_types:         parseArray(body.investor_types || body.which_types_of_investors),
+        affiliate_partner:      parseBool(body.affiliate_partner),
+        is_active:              true,
+        ghl_created_at:         body.created_at || null,
+        ghl_updated_at:         body.updated_at || null,
+        synced_at:              now
+      };
+
+      if (!row.company_name) {
+        return res.status(200).json({ ok: false, error: 'company_name is required' });
+      }
+
+      const resp = await fetch(`${SUPABASE_URL}/rest/v1/ghl_vendor_resources`, {
+        method: 'POST',
+        headers: supabaseHeaders,
+        body: JSON.stringify(row)
+      });
+
+      const status = resp.status;
+      console.log('Vendor upsert status:', status, '| name:', row.company_name);
+      return res.status(200).json({ ok: true, table: 'ghl_vendor_resources', name: row.company_name, status });
+    }
+
+    // Unknown object type
+    return res.status(200).json({
+      ok: false,
+      error: `Unknown object_type: ${objectType}. Expected: vendor_resources, educators_mentors, or educational_courses`
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GHL ${objectKey} error ${res.status}: ${text.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const batch = data.records || [];
-    records.push(...batch);
-
-    if (batch.length < PAGE_SIZE) break;
-    const last = batch[batch.length - 1];
-    searchAfter = last.searchAfter || null;
-    if (!searchAfter) break;
+  } catch(e) {
+    console.error('sync-ghl-objects error:', e.message);
+    return res.status(200).json({ ok: false, error: e.message });
   }
-
-  console.log(`GHL ${objectKey}: fetched ${records.length} records`);
-  return records;
 }
 
-// ---------------------------------------------------------------------------
-// Supabase: upsert using raw fetch (no SDK needed)
-// ---------------------------------------------------------------------------
-async function upsertToSupabase(supabaseUrl, supabaseKey, table, rows) {
-  if (!rows.length) return { upserted: 0 };
-
-  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?on_conflict=ghl_record_id`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Prefer': 'resolution=merge-duplicates,return=minimal',
-    },
-    body: JSON.stringify(rows),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Supabase ${table} error ${res.status}: ${text.slice(0, 200)}`);
+// Helper: parse array values from GHL webhook
+// GHL may send arrays as comma-separated strings or actual arrays
+function parseArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    return value.split(',').map(s => s.trim()).filter(Boolean);
   }
-
-  return { upserted: rows.length };
+  return [];
 }
 
-// ---------------------------------------------------------------------------
-// Transform helpers
-// ---------------------------------------------------------------------------
-function prop(record, key) {
-  return (record.properties || {})[key] ?? null;
-}
-
-function asBool(val) {
-  return val === true || val === 'true' || (Array.isArray(val) && val.includes('true'));
-}
-
-function asArr(val) {
-  if (Array.isArray(val)) return val;
-  if (val == null || val === '') return null;
-  return [val];
-}
-
-function transformVendor(r) {
-  return {
-    ghl_record_id:         r.id,
-    company_name:          prop(r, 'company_name')          || '',
-    company_phone:         prop(r, 'company_phone')         || null,
-    company_email:         prop(r, 'company_email')         || null,
-    business_description:  prop(r, 'business_description')  || null,
-    company_tagline:       prop(r, 'company_tagline')       || null,
-    company_website:       prop(r, 'company_website')       || null,
-    company_address:       prop(r, 'company_address')       || null,
-    company_city:          prop(r, 'company_city')          || null,
-    company_state:         prop(r, 'company_state')         || null,
-    company_postal_code:   prop(r, 'company_postal_code')   || null,
-    company_logo:          prop(r, 'company_logo')          || null,
-    contractor_speciality: prop(r, 'contractor_speciality') || null,
-    other_vendor_services: prop(r, 'other_vendor_services') || null,
-    deals_opportunities:   asArr(prop(r, 'deals__opportunities_partner')),
-    funding_financial:     asArr(prop(r, 'funding__financial_partner')),
-    team_vendors:          asArr(prop(r, 'team__vendors_partner')),
-    attorney_subclass:     asArr(prop(r, 'attorney__legal_partner')),
-    operations:            asArr(prop(r, 'operations_partner')),
-    development_land:      asArr(prop(r, 'development__land_partner')),
-    education_tech_tools:  asArr(prop(r, 'education_technology__tools_partner')),
-    other_contractor:      asArr(prop(r, 'other_contractor_partner')),
-    social_facebook:       prop(r, 'social_profile_links_facebook')       || null,
-    social_instagram:      prop(r, 'social_profile_links_instagram')      || null,
-    social_youtube:        prop(r, 'social_profile_links_youtube')        || null,
-    social_linkedin:       prop(r, 'social_profile_links_linkedin')       || null,
-    promotion_graphics:    prop(r, 'promotion_graphics')    || null,
-    member_promotions:     prop(r, 'member_promotions_optional')     || null,
-    enroll_vendor_match:   asBool(prop(r, 'enroll_vendor_match')),
-    investor_types:        asArr(prop(r, 'investor_types')),
-    affiliate_partner:     asBool(prop(r, 'affiliate_partner')),
-    service_areas:         asArr(prop(r, 'service_areas')),
-    service_zip_codes:     asArr(prop(r, 'service_zip_codes')),
-    service_radius_miles:  prop(r, 'service_radius_miles') ? parseInt(prop(r, 'service_radius_miles')) : null,
-    serves_statewide:      asBool(prop(r, 'serves_statewide')),
-    serves_national:       asBool(prop(r, 'serves_national')),
-    primary_zip_code:      prop(r, 'primary_zip_code')      || null,
-    service_counties:      asArr(prop(r, 'service_counties')),
-    latitude:              prop(r, 'latitude')  ? parseFloat(prop(r, 'latitude'))  : null,
-    longitude:             prop(r, 'longitude') ? parseFloat(prop(r, 'longitude')) : null,
-    is_active:             true,
-    ghl_created_at:        r.createdAt || null,
-    ghl_updated_at:        r.updatedAt || null,
-    synced_at:             new Date().toISOString(),
-  };
-}
-
-function transformEducator(r) {
-  return {
-    ghl_record_id:          r.id,
-    educators_name:         prop(r, 'educators_name')        || '',
-    educational_topics:     asArr(prop(r, 'educational_topics')),
-    educational_level:      asArr(prop(r, 'educational_level')),
-    educators_url:          prop(r, 'educators_url')         || null,
-    commercial_asset_types: asArr(prop(r, 'commercial_asset_types')),
-    is_active:              true,
-    ghl_created_at:         r.createdAt || null,
-    ghl_updated_at:         r.updatedAt || null,
-    synced_at:              new Date().toISOString(),
-  };
-}
-
-function transformCourse(r) {
-  const membershipRaw = prop(r, 'membership_required');
-  return {
-    ghl_record_id:          r.id,
-    course_name:            prop(r, 'educational_courses')   || '',
-    educational_topics:     asArr(prop(r, 'what_type_of_investing_are_you_most_interested_in')),
-    commercial_asset_types: asArr(prop(r, 'commercial_asset_types')),
-    educational_level:      asArr(prop(r, 'educational_level')),
-    video_url:              prop(r, 'video_url')             || null,
-    education_url:          prop(r, 'education_url')         || null,
-    paid_education:         asBool(prop(r, 'paid_education')),
-    membership_required:    asBool(membershipRaw),
-    is_active:              true,
-    ghl_created_at:         r.createdAt || null,
-    ghl_updated_at:         r.updatedAt || null,
-    synced_at:              new Date().toISOString(),
-  };
-}
-
-function transformTool(r) {
-  return {
-    ghl_record_id:        r.id,
-    resource_title:       prop(r, 'resource_title')          || '',
-    educational_topics:   asArr(prop(r, 'educational_topics')),
-    educational_level:    asArr(prop(r, 'educational_level')),
-    resource_url:         prop(r, 'resource_url')            || null,
-    resource_url_nonmember: prop(r, 'resource_url_nonmember') || null,
-    membership_required:  asBool(prop(r, 'membership_required')),
-    paid_resource:        asBool(prop(r, 'paid_resource')),
-    is_active:            true,
-    ghl_created_at:       r.createdAt || null,
-    synced_at:            new Date().toISOString(),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Main handler
-// ---------------------------------------------------------------------------
-export default async function handler(req, res) {
-  // Verify cron secret
-  const auth = req.headers['authorization'] || '';
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+// Helper: parse boolean values from GHL webhook
+// GHL may send booleans as true/false, "true"/"false", or "True"/"False"
+function parseBool(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
   }
+  return false;
+}
 
-  const apiKey       = process.env.GHL_API_KEY;
-  const supabaseUrl  = process.env.SUPABASE_URL;
-  const supabaseKey  = process.env.SUPABASE_SERVICE_KEY;
+// ============================================================
+// EVENT SYNC — pulls GHL custom value event slots (1-9)
+// Auto-detects strategies from event title + subtitle
+// ============================================================
 
-  if (!apiKey || !supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Missing env vars: GHL_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY' });
-  }
+const STRATEGY_KEYWORDS = {
+  fix_and_flip:       ['fix and flip', 'fix & flip', 'flip', 'rehab', 'renovation', 'arv', 'after repair'],
+  wholesale:          ['wholesale', 'wholesal', 'motivated seller', 'direct mail', 'deal finding', 'off-market', 'assignment'],
+  buy_and_hold:       ['buy and hold', 'rental', 'landlord', 'tenant', 'cash flow', 'passive income', 'buy & hold'],
+  brrrr:              ['brrrr', 'refinance', 'refi', 'cash out'],
+  short_term_rental:  ['short term', 'str', 'airbnb', 'vrbo', 'vacation rental', 'short-term'],
+  creative_financing: ['creative financing', 'seller finance', 'subject to', 'sub-to', 'wrap', 'owner finance', 'private money', 'note', 'creative'],
+  development:        ['development', 'ground up', 'new construction', 'entitlement', 'townhome', 'subdivision', 'build'],
+  multi_family:       ['multi', 'multifamily', 'multi-family', 'apartment', 'duplex', 'triplex', 'fourplex', 'syndication'],
+  commercial:         ['commercial', 'industrial', 'office', 'retail', 'self storage', 'storage', 'hotel', 'hospitality'],
+  raising_capital:    ['private money', 'raising capital', 'raise capital', 'investor', 'fund', 'equity', 'capital'],
+  notes_lending:      ['note', 'lending', 'hard money', 'lender', 'loan'],
+  house_hacking:      ['house hack', 'house hacking'],
+  land:               ['land', 'lot', 'raw land', 'farm'],
+  out_of_state:       ['out of state', 'remote', 'nationwide', 'national'],
+  tax_deeds_liens:    ['tax deed', 'tax lien', 'tax sale'],
+};
 
-  const results = {};
-  const errors  = [];
-  const started = Date.now();
+const EVENT_TYPE_KEYWORDS = {
+  main:       ['main meeting', 'main monthly', 'monthly meeting'],
+  mid_day:    ['mid-day', 'midday', 'mid day', 'lunch'],
+  wreia:      ['wreia', "women's real estate", 'women'],
+  virtual:    ['virtual', 'online', 'zoom', 'webinar'],
+  latino:     ['latino', 'latina', 'hispanic', 'español', 'spanish'],
+  true_wealth:['true wealth', 't.r.u.e', 'true'],
+  meetup:     ['meetup', 'networking', 'social', 'hike', 'brunch'],
+  commercial: ['commercial club', 'commercial'],
+  workshop:   ['workshop', 'lab', 'walkthrough', 'onsite', 'on-site'],
+};
 
-  const jobs = [
-    { key: 'custom_objects.vendor_resources',    table: 'ghl_vendor_resources',    transform: transformVendor   },
-    { key: 'custom_objects.educators_mentors',   table: 'ghl_educators_mentors',   transform: transformEducator },
-    { key: 'custom_objects.educational_courses', table: 'ghl_educational_courses', transform: transformCourse   },
-    { key: 'custom_objects.tools_resources',     table: 'ghl_tools_resources',     transform: transformTool     },
-  ];
-
-  for (const job of jobs) {
-    try {
-      const raw  = await fetchAllGhlRecords(job.key, apiKey);
-      const rows = raw.map(job.transform).filter(r => r.ghl_record_id);
-      const out  = await upsertToSupabase(supabaseUrl, supabaseKey, job.table, rows);
-      results[job.table] = { fetched: raw.length, upserted: out.upserted };
-    } catch (err) {
-      errors.push(`${job.table}: ${err.message}`);
-      results[job.table] = { error: err.message };
+function detectStrategies(title, subtitle) {
+  const text = ((title || '') + ' ' + (subtitle || '')).toLowerCase();
+  const matched = [];
+  for (const [strategy, keywords] of Object.entries(STRATEGY_KEYWORDS)) {
+    if (keywords.some(kw => text.includes(kw))) {
+      matched.push(strategy);
     }
   }
+  // Default to general if nothing matched
+  if (matched.length === 0) matched.push('general');
+  return matched;
+}
 
-  return res.status(errors.length ? 207 : 200).json({
-    success:     errors.length === 0,
-    duration_ms: Date.now() - started,
-    synced_at:   new Date().toISOString(),
-    results,
-    errors:      errors.length ? errors : undefined,
-  });
+function detectEventType(title, subtitle) {
+  const text = ((title || '') + ' ' + (subtitle || '')).toLowerCase();
+  for (const [type, keywords] of Object.entries(EVENT_TYPE_KEYWORDS)) {
+    if (keywords.some(kw => text.includes(kw))) return type;
+  }
+  return 'main';
+}
+
+async function syncEvents(customValues, supabaseUrl, supabaseKey) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': supabaseKey,
+    'Authorization': `Bearer ${supabaseKey}`,
+    'Prefer': 'resolution=merge-duplicates,return=minimal'
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const events = [];
+
+  for (let slot = 1; slot <= 9; slot++) {
+    const slotKey = `${slot} Mtg`;
+    const cv = (name) => customValues.find(v => v.name === `${slotKey} ${name}`)?.value || '';
+
+    const title    = cv('Title');
+    const date2    = cv('Date 2').replace(/\s*-\s*/g, '-').replace(/\s+/g, '');
+    const location = cv('Location');
+    const times    = cv('Times') || cv('Time');
+    const subtitle = cv('Subtitle');
+    const speaker  = cv('Speaker Bio 1');
+    const link     = cv('Page Redirect (Free Event)') || cv('Registration Link') || cv('Link');
+
+    if (!title || !date2) continue;
+
+    const eventDate = new Date(date2);
+    if (isNaN(eventDate.getTime())) continue;
+
+    const strategies = detectStrategies(title, subtitle);
+    const eventType  = detectEventType(title, subtitle);
+
+    // Extract speaker name from bio (first sentence or up to first period)
+    const speakerName = speaker
+      ? speaker.split(/[.!?]/)[0].replace(/^(featuring|with|speaker:|presented by)/i, '').trim()
+      : '';
+
+    events.push({
+      slot,
+      event_title:      title,
+      event_subtitle:   subtitle,
+      event_date:       date2.slice(0, 10),
+      event_time:       times,
+      event_location:   location,
+      speaker_name:     speakerName,
+      speaker_bio:      speaker,
+      registration_url: link,
+      strategies,
+      event_type:       eventType,
+      is_active:        eventDate >= today,
+      ghl_slot_key:     `slot_${slot}`,
+      synced_at:        new Date().toISOString()
+    });
+  }
+
+  if (events.length === 0) {
+    console.log('No events to sync');
+    return { synced: 0, active: 0 };
+  }
+
+  const resp = await fetch(
+    `${supabaseUrl}/rest/v1/ghl_upcoming_events?on_conflict=ghl_slot_key`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(events)
+    }
+  );
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Event sync failed: ${err}`);
+  }
+
+  const active = events.filter(e => e.is_active).length;
+  console.log(`Events synced: ${events.length} total, ${active} upcoming`);
+  return { synced: events.length, active };
+}
+
+// ============================================================
+// GET handler — called by Vercel cron and GitHub Actions nightly
+// Fetches GHL custom values and syncs event slots to Supabase
+// ============================================================
+
+export async function GET(req) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  const GHL_API_KEY  = process.env.GHL_API_KEY;
+  const GHL_LOC_ID   = process.env.GHL_LOCATION_ID || 'DNirEjy0ejVwbHsaBYrn';
+  const CRON_SECRET  = process.env.CRON_SECRET;
+
+  // Auth check
+  const authHeader = req.headers?.get?.('authorization') || req.headers?.['authorization'] || '';
+  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 401 });
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_KEY || !GHL_API_KEY) {
+    return new Response(JSON.stringify({ ok: false, error: 'Missing env vars' }), { status: 200 });
+  }
+
+  try {
+    // Fetch all GHL custom values
+    const cvResp = await fetch(
+      `https://services.leadconnectorhq.com/locations/${GHL_LOC_ID}/customValues`,
+      {
+        headers: {
+          'Authorization': `Bearer ${GHL_API_KEY}`,
+          'Version': '2021-07-28',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    if (!cvResp.ok) {
+      const err = await cvResp.text();
+      throw new Error(`GHL custom values fetch failed: ${err.slice(0, 200)}`);
+    }
+
+    const cvData = await cvResp.json();
+    const customValues = cvData.customValues || cvData.customFields || [];
+
+    console.log(`Fetched ${customValues.length} GHL custom values`);
+
+    // Sync events to Supabase
+    const result = await syncEvents(customValues, SUPABASE_URL, SUPABASE_KEY);
+
+    return new Response(JSON.stringify({
+      ok: true,
+      synced_at: new Date().toISOString(),
+      events: result
+    }), { status: 200 });
+
+  } catch (e) {
+    console.error('Event sync GET error:', e.message);
+    return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 200 });
+  }
+}
+
+// Export for use in the main sync handler
+if (typeof module !== 'undefined') {
+  module.exports = { syncEvents };
 }
