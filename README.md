@@ -46,7 +46,7 @@ Caller → index.html (GHL Funnel)
 ```
 Voice-Agent-AI/
 ├── api/
-│   ├── context.js            # Pre-call liveContext loader (vendors, educators, events, tools, property listing URL)
+│   ├── context.js            # Pre-call liveContext loader — queries ghl_upcoming_events for strategy-matched events
 │   ├── member-lookup.js      # Returning member recognition by phone — returns profile + last_call data
 │   ├── intake.js             # Map 1 routing — stage/strategy/blocker classification
 │   ├── vendors.js            # Map 2 vendor matching with haversine zip code filtering
@@ -54,8 +54,8 @@ Voice-Agent-AI/
 │   ├── caller-history.js     # Past call history for returning callers (mid-call tool)
 │   ├── ghl-sync.js           # Post-call pipeline — Supabase + GHL sync + vendor notification payload
 │   ├── member-history.js     # Deep history lookup (tools, events, profile)
-│   ├── member-profile.js     # Mid-call member lookup tool (used when phone not entered pre-call)
-│   ├── sync-ghl-objects.js   # Scheduled sync: pulls GHL custom objects → upserts to Supabase
+│   ├── member-profile.js     # Mid-call member lookup tool (fallback if phone not entered pre-call)
+│   ├── sync-ghl-objects.js   # Dual handler: POST = GHL webhook receiver, GET = nightly event sync
 │   ├── sync-educator.js      # Educator sync to ghl_educators_mentors
 │   ├── claude.js             # Claude API wrapper
 │   ├── knowledge.js          # Knowledge base query endpoint
@@ -68,8 +68,9 @@ Voice-Agent-AI/
 ├── public/
 │   └── vapi-bundle.js        # Self-hosted Vapi SDK (@vapi-ai/web@2.5.2, daily-js 0.85.0)
 ├── index.html                # Voice agent widget page
-├── vercel.json               # Vercel deployment config + cron schedule
-└── package.json
+├── vercel.json               # Vercel deployment config
+├── package.json              # Must include "type": "module" for ESM support on Vercel
+└── README.md
 ```
 
 ---
@@ -110,15 +111,16 @@ Voice-Agent-AI/
 ## Pre-Call Flow (index.html)
 
 1. Caller enters phone number and clicks Begin Journey
-2. `/api/context` loads liveContext (vendors, educators, courses, tools, events, property listing URL)
+2. `/api/context` loads liveContext (vendors, educators, courses, tools, events with strategy tags, property listing URL)
 3. `/api/member-lookup` checks if the number matches a contact in Supabase
 4. If returning member found — injects profile + last call data into liveContext
 5. `firstMessage` is set dynamically:
-   - **Returning member with past call history** → personalized follow-up on last recommendation: "Aloha [name], welcome back... I recommended [last stack_summary]. How did that go?"
+   - **Returning member with past call history** → personalized follow-up: "Aloha [name], welcome back... I recommended [last stack_summary]. How did that go?"
    - **Returning member, no meaningful call history** → "Aloha [name], glad you reached out. How can I help you today?"
    - **New caller** → "Aloha, welcome to Utah REIA. How can I help you today?"
 6. Vapi SDK loads from self-hosted bundle (`/vapi-bundle.js`) first, falls back to CDN
 7. liveContext truncated to 8,000 characters — Mahalo closing rule prepended so it is never truncated
+8. Reconnect button shown automatically if call drops due to network issues
 
 **Meaningful call filter (`member-lookup.js`):**
 Skips calls with stack_summary containing: "no recommendations", "intake was in progress", "ended before", "call ended", "not delivered", "unable to", "no result", "did not complete", "incomplete". Only picks calls with a clean summary > 30 chars, matched educator, or matched vendors.
@@ -152,14 +154,15 @@ All routing uses live Supabase tables — no hardcoded logic in JS files.
 
 ### What It Does
 
-Automatically pulls all records from four GHL custom objects and upserts them into matching Supabase tables so the voice agent always has fresh data to query.
+Automatically pulls records from GHL custom objects and event slots, upserts them into Supabase tables so the voice agent always has fresh data.
 
-| GHL Custom Object | Supabase Table |
+| Source | Supabase Table |
 |---|---|
 | `custom_objects.vendor_resources` | `ghl_vendor_resources` |
 | `custom_objects.educators_mentors` | `ghl_educators_mentors` |
 | `custom_objects.educational_courses` | `ghl_educational_courses` |
 | `custom_objects.tools_resources` | `ghl_tools_resources` |
+| GHL Custom Values (event slots 1-9) | `ghl_upcoming_events` |
 
 ### How It's Triggered
 
@@ -170,6 +173,8 @@ Two independent schedules run the sync automatically every night:
 | Vercel Cron | 9:00 PM MDT (3:00 AM UTC) | Primary trigger via `vercel.json` |
 | GitHub Actions | 9:15 PM MDT (3:15 AM UTC) | Backup trigger via `sync-ghl-objects.yml` |
 
+Both call `GET /api/sync-ghl-objects` with the `CRON_SECRET` authorization header.
+
 ### Manual Trigger
 
 Go to GitHub repo > **Actions** tab > **Sync GHL Objects to Supabase** > **Run workflow**.
@@ -179,6 +184,19 @@ Or via PowerShell:
 ```powershell
 Invoke-WebRequest -Uri "https://voice-agent-ai-nu.vercel.app/api/sync-ghl-objects" -Method GET -Headers @{ "Authorization" = "Bearer YOUR_CRON_SECRET" } | Select-Object -ExpandProperty Content
 ```
+
+### Event Strategy Auto-Detection
+
+`sync-ghl-objects.js` reads the event title and subtitle from each GHL custom value slot and auto-detects relevant strategies using keyword matching. Results are stored in `ghl_upcoming_events.strategies[]`. `context.js` queries this table and includes `Relevant for: wholesale, fix_and_flip` per event in liveContext so Claude can match events to callers accurately.
+
+**Supported strategy keywords (15 strategies):**
+`fix_and_flip`, `wholesale`, `buy_and_hold`, `brrrr`, `short_term_rental`, `creative_financing`, `development`, `multi_family`, `commercial`, `raising_capital`, `notes_lending`, `house_hacking`, `land`, `out_of_state`, `tax_deeds_liens`
+
+**Event type detection:** `main`, `mid_day`, `wreia`, `virtual`, `latino`, `true_wealth`, `meetup`, `commercial`, `workshop`
+
+### Important: `package.json` Must Include `"type": "module"`
+
+All API files use ESM (`export default`). Without `"type": "module"` in `package.json`, Vercel tries to convert ESM to CommonJS at runtime and fails with "Invalid export found in module". The fix is permanent in the repo but must not be removed.
 
 ---
 
@@ -196,9 +214,7 @@ Triggered by Vapi end-of-call-report to the server URL. Steps:
 8. GHL v2 API update (4s delay) — sets all SINGLE/MULTIPLE_OPTIONS fields
 9. Write complete call record to `voice_agent_calls` table
 
-### Webhook Payload Fields (sent to GHL workflow)
-
-The following fields are available as `{{inboundWebhookRequest.*}}` in GHL:
+### Webhook Payload Fields (available as `{{inboundWebhookRequest.*}}` in GHL)
 
 | Field | Description |
 |---|---|
@@ -220,7 +236,7 @@ The following fields are available as `{{inboundWebhookRequest.*}}` in GHL:
 
 ---
 
-## Supabase Tables (23 active)
+## Supabase Tables (24 active)
 
 | Table | Rows | Purpose |
 |---|---|---|
@@ -244,6 +260,7 @@ The following fields are available as `{{inboundWebhookRequest.*}}` in GHL:
 | `ghl_educators_mentors` | 1 | Synced educator records (auto-updated nightly) |
 | `ghl_educational_courses` | 5 | Synced course records (auto-updated nightly) |
 | `ghl_tools_resources` | 2 | Synced tool records (auto-updated nightly) |
+| `ghl_upcoming_events` | 9 | Event slots synced from GHL custom values (auto-updated nightly) |
 | `survey_definitions` | 11 | Survey ID to type mapping |
 | `app_settings` | 5 | Configurable system parameters |
 | `event_routing_members` | 4,675 | In use by GHL workflows — do not drop |
@@ -286,7 +303,7 @@ Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
        - Branch (booking required): Educator Booking SMS → Wait 2 days → 48-hour follow-up → Remove Tag
        - None: END
 - Re-enrollment: OFF
-- **Note:** Tags (`va-vendor-matched`, `va-booking-required`) are no longer used. Workflow checks custom fields directly.
+- **Note:** Tags (`va-vendor-matched`, `va-booking-required`) removed. Workflow checks custom fields directly.
 
 ### Survey Routing Workflow *(pending Chris Borden approval to publish)*
 - Trigger: Inbound webhook `3734177a-a056-41cb-8580-fb447418d526`
@@ -315,7 +332,7 @@ Runs Map 1 → Map 2/3 routing for non-voice contacts (surveys, field changes).
 
 ## Enrolled Vendors (Vendor Notification Enabled)
 
-These vendors have `enroll_vendor_match = true` and will receive an email notification when matched to a caller:
+These vendors have `enroll_vendor_match = true` and receive an email when matched to a caller:
 
 | Vendor | Email | Website |
 |---|---|---|
