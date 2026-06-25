@@ -37,49 +37,31 @@ export default async function handler(req, res) {
       v.service_types?.length > 0
     ).slice(0, 20);
 
-    // 3. UPCOMING EVENTS from GHL custom values
+    // 3. UPCOMING EVENTS from ghl_upcoming_events Supabase table
+    // Table is synced nightly from GHL custom values with auto-detected strategies
     let events = [];
-    if (GHL_API_KEY) {
-      try {
-        const ghlResp = await fetch(
-          `https://services.leadconnectorhq.com/locations/${GHL_LOCATION}/customValues`,
-          {
-            headers: {
-              'Authorization': `Bearer ${GHL_API_KEY}`,
-              'Content-Type': 'application/json',
-              'Version': '2021-07-28'
-            }
-          }
-        );
-        const ghlData = await ghlResp.json();
-        const customValues = ghlData.customValues || [];
-
-        // Extract event slots 1-9 from GHL custom values
-        const today = new Date();
-        for (let slot = 1; slot <= 9; slot++) {
-          const title    = customValues.find(v => v.name === `${slot} Mtg Title`)?.value;
-          const date2    = customValues.find(v => v.name === `${slot} Mtg Date 2`)?.value;
-          const location = customValues.find(v => v.name === `${slot} Mtg Location Name`)?.value;
-          const times    = customValues.find(v => v.name === `${slot} Mtg Times`)?.value;
-          const link     = customValues.find(v => v.name === `${slot} Mtg Monthly Link`)?.value;
-
-          if (title && date2) {
-            // Clean malformed dates like "2026- 02- 12" by removing spaces
-            const cleanDate = date2.replace(/\s*-\s*/g, '-');
-            const eventDate = new Date(cleanDate);
-            if (!isNaN(eventDate) && eventDate >= today) {
-              const speaker  = customValues.find(v => v.name === `${slot} Mtg Speaker Bio 1`)?.value || '';
-              const subtitle = customValues.find(v => v.name === `${slot} Mtg Subtitle`)?.value || '';
-              const redirect = customValues.find(v => v.name === `${slot} Mtg Page Redirect (Free Event)`)?.value || link;
-              events.push({ title, subtitle, date: cleanDate, location, times, link: redirect || link, speaker });
-            }
-          }
-        }
-        // Sort by date ascending
-        events.sort((a, b) => new Date(a.date) - new Date(b.date));
-      } catch(e) {
-        console.error('GHL events fetch error:', e.message);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const evResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=6&select=event_title,event_subtitle,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_type`,
+        { headers: supabaseHeaders }
+      );
+      const evData = await evResp.json();
+      if (Array.isArray(evData)) {
+        events = evData.map(e => ({
+          title:    e.event_title,
+          subtitle: e.event_subtitle,
+          date:     e.event_date,
+          times:    e.event_time,
+          location: e.event_location,
+          speaker:  e.speaker_name,
+          link:     e.registration_url,
+          strategies: e.strategies || [],
+          event_type: e.event_type
+        }));
       }
+    } catch(e) {
+      console.error('Events fetch error:', e.message);
     }
 
     // 3. EDUCATORS & MENTORS from ghl_educators_mentors (synced from GHL)
@@ -210,7 +192,9 @@ export default async function handler(req, res) {
         const sub = e.subtitle ? ` — ${e.subtitle}` : '';
         const reg = e.link ? ` | Register: ${e.link}` : '';
         const spk = e.speaker ? ` | Speaker: ${e.speaker.split('.')[0]}` : '';
-        lines.push(`- ${e.title}${sub} | ${e.date}${time}${loc}${spk}${reg}`);
+        const strats = e.strategies && e.strategies.length > 0 && !e.strategies.includes('general')
+          ? ` | Relevant for: ${e.strategies.join(', ')}` : '';
+        lines.push(`- ${e.title}${sub} | ${e.date}${time}${loc}${spk}${strats}${reg}`);
       });
     } else {
       lines.push('- Check our website for the full events calendar');
