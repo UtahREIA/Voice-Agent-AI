@@ -23,8 +23,6 @@
  *   SUPABASE_SERVICE_KEY   — Supabase service role key
  */
 
-export const config = { api: { bodyParser: true } };
-
 export default async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
