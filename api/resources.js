@@ -94,11 +94,14 @@ export default async function handler(req, res) {
                 vendorServices.some(s => s.includes(c.toLowerCase()) || c.toLowerCase().includes(s))
               );
               if (categoryMatch || categories.length === 0) {
+                const connectionMethods = Array.isArray(row.connection_methods) ? row.connection_methods : [];
+                const primaryMethod = connectionMethods[0] || 'ai_recommendation';
                 results.push({
                   type: 'vendor',
                   name: vendorName,
                   description: vendor.business_description || categories.slice(0,2).join(', '),
                   contact: vendor.company_website || vendor.company_phone || '',
+                  connection_method: primaryMethod,
                   priority: row.priority || 5,
                   need: row.investor_need || ''
                 });
@@ -161,6 +164,7 @@ export default async function handler(req, res) {
             description: row.description || titles || '',
             contact: bookingUrl || '',
             educator: educatorName,
+            connection_method: 'resource_page',
             priority: row.priority || 5,
             resource_titles: row.resource_titles || []
           });
@@ -173,6 +177,7 @@ export default async function handler(req, res) {
             name: educatorName,
             description: 'Personalized mentorship and strategy sessions',
             contact: bookingUrl || '',
+            connection_method: 'warm_intro',
             priority: 4
           });
         }
@@ -219,6 +224,7 @@ export default async function handler(req, res) {
               name: row.tool_title || 'Calculator Tool',
               description: row.recommendation_reason || 'Analyze your deals before committing',
               contact: toolResource?.resource_url || toolResource?.resource_url_nonmember || '',
+              connection_method: 'resource_page',
               priority: row.priority || 6
             });
           }
@@ -259,6 +265,7 @@ export default async function handler(req, res) {
               description: desc ? `${desc}${dateStr ? ' on ' + dateStr : ''}${timeStr}${locStr}` : `${dateStr}${timeStr}${locStr}`,
               contact: topEvent.registration_url || '',
               speaker: topEvent.speaker_name || '',
+              connection_method: 'event_referral',
               priority: 3
             });
           }
@@ -283,23 +290,37 @@ export default async function handler(req, res) {
       const contact = r.contact ? ` — ${r.contact}` : '';
       const educator = r.educator ? ` with ${r.educator}` : '';
 
+      const method = r.connection_method || 'ai_recommendation';
+
       if (r.type === 'vendor') {
-        parts.push(`${num}. ${r.name} for ${r.description}${contact}`);
+        if (method === 'warm_intro') {
+          parts.push(`${num}. ${r.name} — ${r.description}. I will send them your contact info so they reach out to you directly within 24 hours.`);
+        } else if (method === 'vendor_directory') {
+          parts.push(`${num}. ${r.name} — ${r.description}. I will include their link in your follow-up message.`);
+        } else {
+          parts.push(`${num}. ${r.name} — ${r.description}${contact}`);
+        }
       } else if (r.type === 'education') {
         parts.push(`${num}. ${r.name}${educator} — ${r.description}${contact}`);
       } else if (r.type === 'mentor') {
-        parts.push(`${num}. ${r.name} for personalized mentorship${contact}`);
+        const bookLink = r.contact ? ` — book at ${r.contact}` : '';
+        parts.push(`${num}. ${r.name} for a personalized mentorship session${bookLink}`);
       } else if (r.type === 'tool') {
-        parts.push(`${num}. ${r.name} — ${r.description}${contact}`);
+        const toolLink = r.contact ? ` — I will include the link in your follow-up message` : '';
+        parts.push(`${num}. ${r.name} — ${r.description}${toolLink}`);
       } else if (r.type === 'event') {
-        const speaker = r.speaker ? ` with ${r.speaker}` : '';
-        const reg = r.contact ? ` — register at ${r.contact}` : '';
+        const speaker = r.speaker ? ` featuring ${r.speaker}` : '';
+        const reg = r.contact ? ` — I will include the registration link in your follow-up message` : '';
         parts.push(`${num}. Upcoming event: ${r.name}${speaker} — ${r.description}${reg}`);
       }
     });
 
     const summary = top.map(r => r.name).join('. ');
-    const response = `Here are the resources that match your needs. ${parts.join('. ')}. Which of these would be most useful to start with, or would you like all of them?`;
+    // Check if any resource uses warm_intro — mention it proactively
+    const hasWarmIntro = top.some(r => r.connection_method === 'warm_intro');
+    const warmIntroNote = hasWarmIntro ? ' For any warm intro resources, I will send your contact info to the vendor automatically after this call.' : '';
+
+    const response = `Here are the resources that match your needs. ${parts.join('. ')}.${warmIntroNote} Which of these would be most useful to start with, or would you like all of them?`;
 
     console.log('getResourceStack returning', top.length, 'resources:', summary);
     return vapiResult(response);
