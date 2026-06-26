@@ -57,11 +57,7 @@ Voice-Agent-AI/
 │   ├── member-profile.js     # Mid-call member lookup tool (fallback if phone not entered pre-call)
 │   ├── sync-ghl-objects.js   # Dual handler: POST = GHL webhook receiver, GET = nightly event sync
 │   ├── sync-educator.js      # Educator sync to ghl_educators_mentors
-│   ├── claude.js             # Claude API wrapper
-│   ├── knowledge.js          # Knowledge base query endpoint
-│   ├── elevenlabs.js         # ElevenLabs voice API wrapper
 │   ├── supabase.js           # Supabase client helper
-│   └── transcribe.js         # Audio transcription endpoint
 ├── .github/
 │   └── workflows/
 │       └── sync-ghl-objects.yml  # GitHub Actions backup sync (runs nightly at 9:15 PM MDT)
