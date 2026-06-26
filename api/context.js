@@ -43,21 +43,23 @@ export default async function handler(req, res) {
     try {
       const today = new Date().toISOString().split('T')[0];
       const evResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=6&select=event_title,event_subtitle,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_type`,
+        `${SUPABASE_URL}/rest/v1/ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=6&select=event_title,event_subtitle,event_description,event_description_2,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_type`,
         { headers: supabaseHeaders }
       );
       const evData = await evResp.json();
       if (Array.isArray(evData)) {
         events = evData.map(e => ({
-          title:    e.event_title,
-          subtitle: e.event_subtitle,
-          date:     e.event_date,
-          times:    e.event_time,
-          location: e.event_location,
-          speaker:  e.speaker_name,
-          link:     e.registration_url,
-          strategies: e.strategies || [],
-          event_type: e.event_type
+          title:       e.event_title,
+          subtitle:    e.event_subtitle,
+          description: e.event_description || '',
+          description_2: e.event_description_2 || '',
+          date:        e.event_date,
+          times:       e.event_time,
+          location:    e.event_location,
+          speaker:     e.speaker_name,
+          link:        e.registration_url,
+          strategies:  e.strategies || [],
+          event_type:  e.event_type
         }));
       }
     } catch(e) {
@@ -187,14 +189,19 @@ export default async function handler(req, res) {
     lines.push('\nUPCOMING EVENTS:');
     if (events.length > 0) {
       events.slice(0, 6).forEach(e => {
-        const loc = e.location ? ` at ${e.location}` : '';
-        const time = e.times ? `, ${e.times}` : '';
-        const sub = e.subtitle ? ` — ${e.subtitle}` : '';
-        const reg = e.link ? ` | Register: ${e.link}` : '';
-        const spk = e.speaker ? ` | Speaker: ${e.speaker.split('.')[0]}` : '';
+        const loc   = e.location ? ` at ${e.location}` : '';
+        const time  = e.times ? `, ${e.times}` : '';
+        const sub   = e.subtitle ? ` — ${e.subtitle}` : '';
+        const reg   = e.link ? ` | Register: ${e.link}` : '';
+        const spk   = e.speaker ? ` | Speaker: ${e.speaker.split('.')[0]}` : '';
         const strats = e.strategies && e.strategies.length > 0 && !e.strategies.includes('general')
           ? ` | Relevant for: ${e.strategies.join(', ')}` : '';
-        lines.push(`- ${e.title}${sub} | ${e.date}${time}${loc}${spk}${strats}${reg}`);
+
+        // Include event descriptions so the agent can explain what the event covers
+        const descParts = [e.description, e.description_2].filter(Boolean);
+        const desc = descParts.length > 0 ? ` | About: ${descParts.join(' ').slice(0, 200)}` : '';
+
+        lines.push(`- ${e.title}${sub} | ${e.date}${time}${loc}${spk}${strats}${desc}${reg}`);
       });
     } else {
       lines.push('- Check our website for the full events calendar');

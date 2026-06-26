@@ -333,6 +333,8 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
     const cv = (name) => customValues.find(v => v.name === `${slotKey} ${name}`)?.value || '';
 
     const title    = cv('Title');
+    const desc1    = cvn('Desc');
+    const desc2    = cvn('Desc 2');
     const date2    = cv('Date 2').replace(/\s*-\s*/g, '-').replace(/\s+/g, '');
     const location = cv('Location');
     const times    = cv('Times') || cv('Time');
@@ -355,19 +357,21 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
 
     events.push({
       slot,
-      event_title:      title,
-      event_subtitle:   subtitle,
-      event_date:       date2.slice(0, 10),
-      event_time:       times,
-      event_location:   location,
-      speaker_name:     speakerName,
-      speaker_bio:      speaker,
-      registration_url: link,
+      event_title:        title,
+      event_subtitle:     subtitle,
+      event_description:  desc1,
+      event_description_2: desc2,
+      event_date:         date2.slice(0, 10),
+      event_time:         times,
+      event_location:     location,
+      speaker_name:       speakerName,
+      speaker_bio:        speaker,
+      registration_url:   link,
       strategies,
-      event_type:       eventType,
-      is_active:        eventDate >= today,
-      ghl_slot_key:     `slot_${slot}`,
-      synced_at:        new Date().toISOString()
+      event_type:         eventType,
+      is_active:          eventDate >= today,
+      ghl_slot_key:       `slot_${slot}`,
+      synced_at:          new Date().toISOString()
     });
   }
 
