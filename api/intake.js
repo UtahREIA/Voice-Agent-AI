@@ -246,19 +246,29 @@ export default async function handler(req, res) {
       readiness: readiness || ''
     };
 
-    // Build a clear instruction for Claude
-    const routingInstruction = matchedRule.routing_action === 'escalate'
-      ? 'Say: Totally fair, I will get someone from our team to reach out within an hour. Then end the call.'
-      : 'Now call ' + matchedRule.routing_action + ' with these args: ' +
-        JSON.stringify(mergedArgs) + '. Say this first: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
+    // Map vendor/education to getResourceStack unless caller specified a mode
+    const specificMode = args.specific_mode || args.mode || '';
+    let finalAction = matchedRule.routing_action;
+    if (!specificMode && (finalAction === 'getVendorMatch' || finalAction === 'getEducationMatch')) {
+      finalAction = 'getResourceStack';
+    }
 
-    console.log('Intake routing — stage:', stage, '| blocker:', blocker, '| action:', matchedRule.routing_action, '| tier:', matchedRule.tier);
+    // Add mode to tool_args so getResourceStack knows what to query
+    const finalArgs = { ...mergedArgs, mode: specificMode || 'all' };
+
+    // Build a clear instruction for Claude
+    const routingInstruction = finalAction === 'escalate'
+      ? 'Say: Totally fair, I will get someone from our team to reach out within an hour. Then end the call.'
+      : 'Now call ' + finalAction + ' with these args: ' +
+        JSON.stringify(finalArgs) + '. Say this first: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
+
+    console.log('Intake routing — stage:', stage, '| blocker:', blocker, '| action:', finalAction, '| tier:', matchedRule.tier);
 
     return res.status(200).json(vapiResult({
       result: routingInstruction,
-      action: matchedRule.routing_action,
+      action: finalAction,
       tier: matchedRule.tier,
-      tool_args: mergedArgs,
+      tool_args: finalArgs,
       voice_bridge: matchedRule.voice_bridge,
       stage_context: stageContext,
       next_question: null,
