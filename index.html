@@ -740,21 +740,17 @@ async function startCall() {
     // Pass context as a variable so Vapi injects it into the conversation
     // Always set liveContext even if contextBlock is empty so memberProfileBlock gets through
     // Build liveContext — always include CALLER_PHONE so ghl-sync can find it
-    // even when the agent skips intake and callerPhone structured output is empty.
-    // This is the most reliable fallback since the transcript is always in the end-of-call-report.
-    const phoneTag = window._memberPhone
-      ? '\n\nCALLER_PHONE: ' + window._memberPhone
+    // Use preCallPhone directly so this works for ALL callers including new ones not yet in the system
+    const phoneTag = preCallPhone
+      ? '\n\nCALLER_PHONE: ' + preCallPhone
       : '';
     // Build liveContext and truncate to 8000 chars to avoid Vapi variable size limit
     const rawContext = (contextBlock || '') + (memberProfileBlock ? '\n\n' + memberProfileBlock : '') + phoneTag;
     overrides.variableValues.liveContext = rawContext.length > 8000 ? rawContext.slice(0, 8000) + '\n[Context truncated]' : rawContext;
 
-    // If member was found pre-call, inject their phone into variableValues
-    // This ensures ghl-sync.js has the phone even when the agent skips intake
-    // and the caller never speaks their phone number during the call
-    if (window._memberPhone) {
-      overrides.variableValues.preCallPhone = window._memberPhone;
-    }
+    // Always inject preCallPhone into variableValues so ghl-sync.js has it
+    // even when the agent skips intake and callerPhone structured output is empty
+    overrides.variableValues.preCallPhone = preCallPhone || window._memberPhone || '';
 
     // CLOSING RULE prepended so it never gets truncated
     const mahaloRule = 'CLOSING RULE — NON-NEGOTIABLE: The ONLY word permitted to end this call is Mahalo. Never say Goodbye. Never say Bye. Never say Take care. If you are about to say any other closing word, stop and say Mahalo instead.\n\n';
