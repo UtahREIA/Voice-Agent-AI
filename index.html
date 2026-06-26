@@ -600,17 +600,23 @@ function initVapi() {
     log('Vapi call ended');
     const wasActive = callActive;
     callActive = false;
+
+    // Mark as normal end so the error handler does not show a banner
+    // This fires for both assistant-initiated and caller-initiated call ends
+    window._userEndedCall = true;
+
     endCallCleanup();
 
-    // If call ended unexpectedly (not by user clicking end button),
+    // If call ended unexpectedly mid-conversation (no normal closing sequence),
     // offer a reconnect option after a short delay
-    if (wasActive && !window._userEndedCall) {
+    if (wasActive && !window._normalCallEnd) {
       setTimeout(() => {
         const reconnectMsg = document.getElementById('reconnect-msg');
         if (reconnectMsg) reconnectMsg.style.display = 'block';
       }, 1500);
     }
     window._userEndedCall = false;
+    window._normalCallEnd = false;
   });
 
   vapi.on('speech-start', () => {
@@ -650,15 +656,33 @@ function initVapi() {
   });
 
   vapi.on('error', (e) => {
-    // Suppress ejected/Meeting has ended — fires on normal call end, not a real error
     const errType = e?.error?.type || e?.type || '';
-    const errMsg  = e?.error?.msg  || e?.errorMsg || e?.message?.msg || '';
-    if (errType === 'ejected' || errMsg === 'Meeting has ended') {
-      log('Call ended normally');
+    const errMsg  = (e?.error?.msg || e?.errorMsg || e?.message?.msg || e?.message || '').toLowerCase();
+
+    // These all fire on normal assistant-initiated call end — not real errors
+    const normalEndTypes = ['ejected', 'call-ended', 'meeting-ended', 'ended'];
+    const normalEndMsgs  = [
+      'meeting has ended', 'call ended', 'call has ended',
+      'ended by assistant', 'assistant ended', 'normal end',
+      'no error', 'user hung up', 'assistant hung up'
+    ];
+
+    const isNormalEnd =
+      normalEndTypes.some(t => errType.toLowerCase().includes(t)) ||
+      normalEndMsgs.some(m => errMsg.includes(m)) ||
+      window._userEndedCall ||
+      !callActive; // call already cleaned up — not a real error
+
+    if (isNormalEnd) {
+      log('Call ended normally (suppressed error event: ' + errType + ')');
       return;
     }
-    log('Vapi error: ' + (e.message || JSON.stringify(e)));
-    showError('Call error - please try again.');
+
+    // Only show error banner for genuine errors during an active call
+    const errStr = JSON.stringify(e).slice(0, 200);
+    log('Vapi error: ' + errStr);
+    console.error('Vapi error:', e);
+    showError('Call error — please try again.');
     endCallCleanup();
   });
 }
@@ -853,6 +877,7 @@ startBtn.addEventListener('click', () => {
 
 endBtn.addEventListener('click', () => {
   window._userEndedCall = true;
+  window._normalCallEnd = true;
   endCall();
 });
 
