@@ -122,8 +122,10 @@ export default async function handler(req, res) {
     const allRules = Array.isArray(allRulesData) ? allRulesData : [];
 
     // --- STEP 3: Find the next question to ask if not enough dimensions ---
-    if (dimensionCount < 3) {
+    // Stage is the first dimension — if missing, ask for it first from intake_questions table
+    if (dimensionCount < 3 || !stage) {
       const missingDimensions = [];
+      if (!stage) missingDimensions.push('stage');
       if (!strategy) missingDimensions.push('strategy');
       if (!blocker) missingDimensions.push('blocker');
       if (!goal) missingDimensions.push('goal');
@@ -131,9 +133,14 @@ export default async function handler(req, res) {
 
       const nextDimension = missingDimensions[0];
       if (nextDimension) {
+        // Filter by path (A=new investor, B=active investor, V=vendor, both=all)
+        const pathFilter = path && path !== 'both'
+          ? '&or=(path.eq.' + encodeURIComponent(path) + ',path.eq.both)'
+          : '';
+
         const qResp = await fetch(
           SUPABASE_URL + '/rest/v1/intake_questions?dimension=eq.' + encodeURIComponent(nextDimension) +
-          '&is_active=eq.true&order=priority.asc&limit=3',
+          '&is_active=eq.true&order=priority.asc&limit=5' + pathFilter,
           { headers }
         );
         const questions = await qResp.json();
