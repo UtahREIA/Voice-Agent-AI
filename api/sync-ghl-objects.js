@@ -336,7 +336,9 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
     const title    = cv('Title');
     const desc1    = cvn('Desc');
     const desc2    = cvn('Desc 2');
-    const date2    = cv('Date 2').replace(/\s*-\s*/g, '-').replace(/\s+/g, '');
+    // Clean malformed dates like "2026- 06- 17 06:30 PM" and normalize for parsing
+    const rawDate2  = cv('Date 2');
+    const date2     = rawDate2.replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ').trim();
     const location = cv('Location');
     const times    = cv('Times') || cv('Time');
     const subtitle = cv('Subtitle');
@@ -345,8 +347,14 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
 
     if (!title || !date2) continue;
 
-    const eventDate = new Date(date2);
-    if (isNaN(eventDate.getTime())) continue;
+    // Parse date — GHL format is "2026-07-14 11:30 AM"
+    // Convert to ISO-compatible format: replace space before time with T
+    const dateForParsing = date2.slice(0, 10); // just YYYY-MM-DD is enough
+    const eventDate = new Date(dateForParsing + 'T00:00:00');
+    if (isNaN(eventDate.getTime())) {
+      console.log(`Slot ${slot} — skipped, invalid date: "${date2}"`);
+      continue;
+    }
 
     const strategies = detectStrategies(title, subtitle);
     const eventType  = detectEventType(title, subtitle);
@@ -362,7 +370,7 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
       event_subtitle:     subtitle,
       event_description:  desc1,
       event_description_2: desc2,
-      event_date:         date2.slice(0, 10),
+      event_date:         dateForParsing,
       event_time:         times,
       event_location:     location,
       speaker_name:       speakerName,
