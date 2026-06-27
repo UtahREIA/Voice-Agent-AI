@@ -330,7 +330,8 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
 
   for (let slot = 1; slot <= 9; slot++) {
     const slotKey = `${slot} Mtg`;
-    const cv = (name) => customValues.find(v => v.name === `${slotKey} ${name}`)?.value || '';
+    const cv  = (name) => customValues.find(v => v.name === `${slotKey} ${name}`)?.value || '';
+    const cvn = (name) => customValues.find(v => v.name === `${slotKey} ${name}`)?.value || null;
 
     const title    = cv('Title');
     const desc1    = cvn('Desc');
