@@ -147,6 +147,12 @@ export default async function handler(req, res) {
     // This handles callers who have called before but are not yet in the contacts table
     if (!Array.isArray(matches) || matches.length === 0) {
       try {
+        const vacHeaders = {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY
+        };
+
         // Try multiple phone formats stored in caller_phone column
         // Format 1: +1XXXXXXXXXX (E.164)
         // Format 2: plain last 10 digits
@@ -156,12 +162,12 @@ export default async function handler(req, res) {
           '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3';
 
         let vacRows = [];
-        const vacResp1 = await fetch(vacUrl1, { headers });
+        const vacResp1 = await fetch(vacUrl1, { headers: vacHeaders });
         const vacData1 = await vacResp1.json();
         if (Array.isArray(vacData1) && vacData1.length > 0) {
           vacRows = vacData1;
         } else {
-          const vacResp2 = await fetch(vacUrl2, { headers });
+          const vacResp2 = await fetch(vacUrl2, { headers: vacHeaders });
           const vacData2 = await vacResp2.json();
           if (Array.isArray(vacData2)) vacRows = vacData2;
         }
