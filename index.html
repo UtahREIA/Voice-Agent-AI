@@ -656,11 +656,19 @@ function initVapi() {
   });
 
   vapi.on('error', (e) => {
-    const errType = e?.error?.type || e?.type || '';
-    const errMsg  = (e?.error?.msg || e?.errorMsg || e?.message?.msg || e?.message || '').toLowerCase();
+    // Vapi wraps daily-js errors — need to check multiple nested paths
+    const errType = e?.error?.error?.type || e?.error?.type || e?.type || '';
+    const errMsg  = (
+      e?.error?.errorMsg ||
+      e?.error?.message?.msg ||
+      e?.error?.error?.msg ||
+      e?.error?.msg ||
+      e?.errorMsg ||
+      ''
+    ).toLowerCase();
 
     // These all fire on normal assistant-initiated call end — not real errors
-    const normalEndTypes = ['ejected', 'call-ended', 'meeting-ended', 'ended'];
+    const normalEndTypes = ['ejected', 'call-ended', 'meeting-ended', 'ended', 'daily-error'];
     const normalEndMsgs  = [
       'meeting has ended', 'call ended', 'call has ended',
       'ended by assistant', 'assistant ended', 'normal end',
@@ -674,7 +682,7 @@ function initVapi() {
       !callActive; // call already cleaned up — not a real error
 
     if (isNormalEnd) {
-      log('Call ended normally (suppressed error event: ' + errType + ')');
+      log('Call ended normally (suppressed error event: ' + errType + ' | ' + errMsg + ')');
       return;
     }
 

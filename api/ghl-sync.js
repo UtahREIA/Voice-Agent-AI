@@ -505,10 +505,13 @@ export default async function handler(req, res) {
     // All fields are accessible in GHL workflow steps as {{inboundWebhookRequest.fieldName}}
     // SINGLE_OPTIONS and MULTIPLE_OPTIONS custom fields cannot be set via webhook variables
     // — those require the GHL v2 API update below (STEP 5)
-    const isNoMatch = (
+    // noMatch comes directly from Vapi structured output
+    // Falls back to inferring from absence of matches if structured output not set
+    const isNoMatch = structured.noMatch === 'true' || structured.noMatch === true || (
       (!structured.vendorMatches || structured.vendorMatches.length === 0) &&
       !structured.educatorMatch &&
-      (!structured.toolMatches || structured.toolMatches.length === 0)
+      (!structured.toolMatches || structured.toolMatches.length === 0) &&
+      structured.noMatch !== 'false'
     );
     const ghlPayload = {
       firstName,
@@ -954,7 +957,7 @@ export default async function handler(req, res) {
           contact_id:       contactId || null,
           caller_name:      callerName || '',
           caller_phone:     effectivePhone || '',
-          caller_email:     callerEmail || '',
+          // caller_email removed — emails not collected during voice calls
           investor_stage:   investorStage || '',
           profile_type:     profileType || '',
           path:             (investorStage === 'Exploring' || investorStage === 'Getting Started') ? 'A' : 'B',
