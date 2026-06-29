@@ -126,7 +126,55 @@ export default async function handler(req, res) {
       matches = await resp3.json();
     }
 
+    // --- FALLBACK: search voice_agent_calls directly by caller_phone ---
+    // This handles callers who have called before but are not yet in the contacts table
     if (!Array.isArray(matches) || matches.length === 0) {
+      try {
+        const vacResp = await fetch(
+          SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3',
+          { headers }
+        );
+        const vacRows = await vacResp.json();
+
+        if (Array.isArray(vacRows) && vacRows.length > 0) {
+          const lastCall = vacRows[0];
+          const callerName = lastCall.caller_name || '';
+          const firstName = callerName.split(' ')[0] || '';
+
+          // Build history block from past calls
+          const meaningfulCall = vacRows.find(s => {
+            const summary = (s.stack_summary || '').toLowerCase();
+            const badPhrases = ['no recommendations','intake was in progress','ended before','call ended','not delivered'];
+            return !badPhrases.some(p => summary.includes(p)) && s.stack_summary && s.stack_summary.length > 30;
+          });
+
+          const lastCallData = meaningfulCall ? {
+            stack_summary: meaningfulCall.stack_summary || '',
+            recommended_next: meaningfulCall.recommended_next || '',
+            educator_match: meaningfulCall.educator_match || '',
+            vendor_matches: Array.isArray(meaningfulCall.vendor_matches) ? meaningfulCall.vendor_matches.join(', ') : (meaningfulCall.vendor_matches || ''),
+            blocker: meaningfulCall.blocker || ''
+          } : null;
+
+          const greeting = callerName
+            ? 'RETURNING CALLER (not yet in contacts): ' + callerName + ' | phone: ' + last10 + ' | past calls: ' + vacRows.length
+            : 'RETURNING CALLER (unnamed): phone: ' + last10 + ' | past calls: ' + vacRows.length;
+
+          const historyBlock = meaningfulCall
+            ? ' LAST CALL RECOMMENDATION: ' + (meaningfulCall.stack_summary || '').slice(0, 150)
+            : '';
+
+          return res.status(200).json({
+            result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock,
+            member_name: firstName,
+            last_call: lastCallData
+          });
+        }
+      } catch(e) {
+        console.error('voice_agent_calls fallback error:', e.message);
+      }
+
       return res.status(200).json({
         result: 'not_found. searched=' + formatted + ' and ' + last10
       });
