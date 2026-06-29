@@ -505,6 +505,11 @@ export default async function handler(req, res) {
     // All fields are accessible in GHL workflow steps as {{inboundWebhookRequest.fieldName}}
     // SINGLE_OPTIONS and MULTIPLE_OPTIONS custom fields cannot be set via webhook variables
     // — those require the GHL v2 API update below (STEP 5)
+    const isNoMatch = (
+      (!structured.vendorMatches || structured.vendorMatches.length === 0) &&
+      !structured.educatorMatch &&
+      (!structured.toolMatches || structured.toolMatches.length === 0)
+    );
     const ghlPayload = {
       firstName,
       lastName,
@@ -574,9 +579,11 @@ export default async function handler(req, res) {
       // Tags applied to the contact in GHL
       // voice-agent-call-complete triggers the post-call workflow
       // va-booking-required and va-vendor-matched removed — workflow checks custom fields directly
+      // va-no-match fires when the agent could not find matching resources for the caller
       tags: [
         'Voice Agent Lead',
         'voice-agent-call-complete',
+        isNoMatch ? 'va-no-match' : null,
         structured.tier         ? 'VA Tier: ' + structured.tier              : null,
         structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
         // va-vendor-matched tag removed — workflow now checks Voice Agent Vendor Matches field directly
@@ -607,6 +614,7 @@ export default async function handler(req, res) {
         { id: 'stkOiKKMZh2H1EEBb47z', field_value: educatorBookingUrl || structured.bookingUrl || '' }, // Booking URL — resolved from Supabase
         { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel  || 'sms' }, // Handoff Channel
         { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },                        // Vendor Contacted (default)
+        { id: 'MFiqJY5mnPI5kK586iMG', field_value: isNoMatch ? 'true' : 'false' },     // Voice Agent No Match
 
         // Blocker-specific pipeline stage fields — only set the matching one
         blocker === 'capital'     ? { id: 'A6d3LiW4tm4sRYgKkexW', field_value: ['Needs funding / capital'] } : null,

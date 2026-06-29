@@ -280,7 +280,12 @@ export default async function handler(req, res) {
     const top = results.slice(0, maxResults);
 
     if (top.length === 0) {
-      return vapiResult('No specific resources found for this profile. Recommend Mohammed Alhareb for personalized guidance — book at utahreia.org/meet-mohammed.');
+      return vapiResult(
+        'NO_MATCH — Say exactly this to the caller: ' +
+        '"I was not able to find a specific match for what you are looking for right now. ' +
+        'I will make sure someone from our Utah REE-AH team reaches out to you directly to help find the right resources." ' +
+        'Then ask "Is there anything else I can help you with today?" and close the call normally with Mahalo.'
+      );
     }
 
     // ─── BUILD VOICE RESPONSE ─────────────────────────────────────────────────
