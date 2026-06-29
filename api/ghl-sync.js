@@ -674,6 +674,7 @@ export default async function handler(req, res) {
 
       // Try formatted phone (XXX) XXX-XXXX — most common Supabase format
       if (!existing.length && callerPhoneDigits) {
+        // Try formatted phone variants to match how GHL stores numbers
         const formattedPhone = '(' + callerPhoneDigits.slice(0,3) + ') ' + callerPhoneDigits.slice(3,6) + '-' + callerPhoneDigits.slice(6);
         existing = await fetch(
           `${SUPABASE_URL}/rest/v1/contacts?phone=eq.${encodeURIComponent(formattedPhone)}&select=id&limit=1`,
@@ -692,9 +693,14 @@ export default async function handler(req, res) {
       // Try raw digits
       if (!existing.length && callerPhoneDigits) {
         existing = await fetch(
-          `${SUPABASE_URL}/rest/v1/contacts?phone=eq.${encodeURIComponent(callerPhoneDigits)}&select=id&limit=1`,
+          // Fetch contacts and match by last 10 digits to handle format differences
+          // e.g. "+1 912-168-1159" vs "9121681159" vs "(912) 168-1159"
+          `${SUPABASE_URL}/rest/v1/contacts?select=id,phone&limit=5000`,
           { headers: baseHeaders }
-        ).then(r => r.json()).catch(() => []);
+        ).then(r => r.json()).then(all => {
+          if (!Array.isArray(all)) return [];
+          return all.filter(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === callerPhoneDigits);
+        }).catch(() => []);
       }
 
       if (existing.length > 0) {

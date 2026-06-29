@@ -111,31 +111,62 @@ export default async function handler(req, res) {
       matches = await resp2.json();
     }
 
-    // Fallback: try with +1 prefix
+    // Fallback: try with +1 prefix (E.164)
     if (!Array.isArray(matches) || matches.length === 0) {
       const resp3 = await fetch(
         SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=eq.' + encodeURIComponent('+1' + last10) + '&limit=1',
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY
-          }
-        }
+        { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
       );
       matches = await resp3.json();
+    }
+
+    // Fallback: try "+1 (XXX) XXX-XXXX" format — how GHL often stores numbers
+    if (!Array.isArray(matches) || matches.length === 0) {
+      const ghlFormatted = '+1 ' + formatted;
+      const resp4 = await fetch(
+        SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&phone=eq.' + encodeURIComponent(ghlFormatted) + '&limit=1',
+        { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+      );
+      matches = await resp4.json();
+    }
+
+    // Final fallback: fetch all and match by last 10 digits
+    if (!Array.isArray(matches) || matches.length === 0) {
+      const respAll = await fetch(
+        SUPABASE_URL + '/rest/v1/contacts?select=id,full_name,phone,membership_status,membership_type,is_board_member,last_reia_event&limit=5000',
+        { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+      );
+      const allContacts = await respAll.json();
+      if (Array.isArray(allContacts)) {
+        const found = allContacts.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === last10);
+        if (found) matches = [found];
+      }
     }
 
     // --- FALLBACK: search voice_agent_calls directly by caller_phone ---
     // This handles callers who have called before but are not yet in the contacts table
     if (!Array.isArray(matches) || matches.length === 0) {
       try {
-        const vacResp = await fetch(
-          SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3',
-          { headers }
-        );
-        const vacRows = await vacResp.json();
+        // Try multiple phone formats stored in caller_phone column
+        // Format 1: +1XXXXXXXXXX (E.164)
+        // Format 2: plain last 10 digits
+        const vacUrl1 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3';
+        const vacUrl2 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=like.*' + last10 +
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3';
+
+        let vacRows = [];
+        const vacResp1 = await fetch(vacUrl1, { headers });
+        const vacData1 = await vacResp1.json();
+        if (Array.isArray(vacData1) && vacData1.length > 0) {
+          vacRows = vacData1;
+        } else {
+          const vacResp2 = await fetch(vacUrl2, { headers });
+          const vacData2 = await vacResp2.json();
+          if (Array.isArray(vacData2)) vacRows = vacData2;
+        }
+        const vacResp = { json: () => vacRows };
+        // vacRows already populated above
 
         if (Array.isArray(vacRows) && vacRows.length > 0) {
           const lastCall = vacRows[0];
@@ -274,13 +305,33 @@ export default async function handler(req, res) {
     // what was discussed, recommended, and what they have already tried
     let historyBlock = '';
     try {
-      // Read from voice_agent_calls — dedicated table for voice agent history
+      // Read from voice_agent_calls — try contact_id first, fall back to caller_phone
+      // Many records have null contact_id due to earlier bug — phone fallback catches those
+      const histHeaders = { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+      let surveys = [];
+
       const surveyResp = await fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + match.id +
         '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=5',
-        { headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+        { headers: histHeaders }
       );
-      const surveys = await surveyResp.json();
+      const surveyData = await surveyResp.json();
+      if (Array.isArray(surveyData) && surveyData.length > 0) {
+        surveys = surveyData;
+      } else {
+        // Fallback — search by caller_phone for records with null contact_id
+        const phoneE164 = encodeURIComponent('+1' + last10);
+        const surveyResp2 = await fetch(
+          SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.' + phoneE164 +
+          '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=5',
+          { headers: histHeaders }
+        );
+        const surveyData2 = await surveyResp2.json();
+        if (Array.isArray(surveyData2)) {
+          surveys = surveyData2;
+          console.log('member-lookup: history found by caller_phone fallback:', last10, '— rows:', surveys.length);
+        }
+      }
 
       if (Array.isArray(surveys) && surveys.length > 0) {
         // Find the most recent call with a meaningful recommendation
