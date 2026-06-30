@@ -339,11 +339,16 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
     // Clean malformed dates like "2026- 06- 17 06:30 PM" and normalize for parsing
     const rawDate2  = cv('Date 2');
     const date2     = rawDate2.replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ').trim();
-    const location = cv('Location');
+    const location           = cv('Location Name');
+    const locationAddressRaw = cv('Location Address');
+    // Some slots have a URL mistakenly entered in Location Address (e.g. survey or Zoom links)
+    // Filter those out so a URL never ends up in spoken event_location text
+    const locationAddress = /^https?:\/\//i.test(locationAddressRaw.trim()) ? '' : locationAddressRaw;
     const times    = cv('Times') || cv('Time');
     const subtitle = cv('Subtitle');
     const speaker  = cv('Speaker Bio 1');
-    const link     = cv('Page Redirect (Free Event)') || cv('Registration Link') || cv('Link');
+    // Slot 6 uses "Free- Event" (extra dash) instead of "Free Event" — handle both
+    const link     = cv('Page Redirect (Free Event)') || cv('Page Redirect (Free- Event)') || cv('Registration Link') || cv('Link');
 
     if (!title || !date2) continue;
 
@@ -372,7 +377,7 @@ async function syncEvents(customValues, supabaseUrl, supabaseKey) {
       event_description_2: desc2,
       event_date:         dateForParsing,
       event_time:         times,
-      event_location:     location,
+      event_location:     locationAddress ? `${location}, ${locationAddress}` : location,
       speaker_name:       speakerName,
       speaker_bio:        speaker,
       registration_url:   link,
