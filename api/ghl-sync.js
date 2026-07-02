@@ -507,12 +507,21 @@ export default async function handler(req, res) {
     // — those require the GHL v2 API update below (STEP 5)
     // noMatch comes directly from Vapi structured output
     // Falls back to inferring from absence of matches if structured output not set
-    const isNoMatch = structured.noMatch === 'true' || structured.noMatch === true || (
-      (!structured.vendorMatches || structured.vendorMatches.length === 0) &&
-      !structured.educatorMatch &&
-      (!structured.toolMatches || structured.toolMatches.length === 0) &&
-      structured.noMatch !== 'false'
-    );
+    // isNoMatch — only true when genuinely no resources were found
+    // Check structured outputs AND stackSummary as a safety net
+    const hasVendors   = structured.vendorMatches && structured.vendorMatches.length > 0;
+    const hasEducator  = structured.educatorMatch && structured.educatorMatch.trim().length > 2;
+    const hasTools     = structured.toolMatches && structured.toolMatches.length > 0;
+    const hasStack     = structured.stackSummary && structured.stackSummary.trim().length > 20 &&
+                         !structured.stackSummary.toLowerCase().includes('no recommendation') &&
+                         !structured.stackSummary.toLowerCase().includes('ended before');
+    const hasAnyMatch  = hasVendors || hasEducator || hasTools || hasStack;
+
+    const isNoMatch = structured.noMatch === 'true' || structured.noMatch === true
+      ? true
+      : structured.noMatch === 'false'
+        ? false
+        : !hasAnyMatch; // only infer no-match when absolutely nothing was found
     const ghlPayload = {
       firstName,
       lastName,
@@ -795,7 +804,29 @@ export default async function handler(req, res) {
         const searchData = await searchResp.json();
         console.log('GHL v2 search status:', searchResp.status, '| contacts found:', searchData.contacts?.length || 0);
 
-        const contact = searchData.contacts?.[0];
+        let contact = searchData.contacts?.[0];
+
+        // Fallback — search by name if phone search returned nothing
+        if (!contact?.id && callerName) {
+          const nameSearchResp = await fetch(
+            `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(callerName)}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${GHL_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28'
+              }
+            }
+          );
+          const nameSearchData = await nameSearchResp.json();
+          const nameMatches = nameSearchData.contacts || [];
+          // Match by last 10 digits of phone to avoid false positives
+          contact = nameMatches.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === effectivePhone.replace(/\D/g,'').slice(-10));
+          if (contact) {
+            console.log('GHL v2 contact found by name fallback:', callerName, '| id:', contact.id);
+          }
+        }
+
         if (contact?.id) {
           // Map stage names to GHL SINGLE_OPTIONS picklist values
           // Map voice agent stage values to exact GHL picklist option labels
@@ -850,6 +881,7 @@ export default async function handler(req, res) {
                   { id: 'RVqXpTjVxGxqggfhFghA', field_value: structured.bookingRequired || 'false' },
                   { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel || 'sms' },
                   { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },
+                  { id: 'MFiqJY5mnPI5kK586iMG', field_value: isNoMatch ? 'true' : 'false' },
 
                   // ── INVESTOR QUESTIONNAIRE FIELDS ────────────────────────
                   // These fields mirror the GHL intake form — populated from
@@ -953,6 +985,14 @@ export default async function handler(req, res) {
           'Prefer': 'return=minimal'
         };
 
+        // Calculate call duration from Vapi timestamps
+        const callStartedAt = payload.message?.call?.startedAt || payload.call?.startedAt || null;
+        const callEndedAt   = payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+        let callDurationSecs = null;
+        if (callStartedAt && callEndedAt) {
+          callDurationSecs = Math.round((new Date(callEndedAt) - new Date(callStartedAt)) / 1000);
+        }
+
         const callRecord = {
           contact_id:       contactId || null,
           caller_name:      callerName || '',
@@ -977,6 +1017,7 @@ export default async function handler(req, res) {
           handoff_channel:  structured.handoffChannel || 'sms',
           vendor_contacted: 'unknown',
           vapi_call_id:     payload.message?.call?.id || payload.call?.id || null,
+          call_duration_secs: callDurationSecs,
           created_at:       new Date().toISOString(),
           updated_at:       new Date().toISOString()
         };
