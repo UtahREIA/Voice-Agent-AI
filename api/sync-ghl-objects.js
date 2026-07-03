@@ -185,13 +185,16 @@ export default async function handler(req, res) {
                 upsertTable = 'ghl_educational_courses';
                 upsertRow = {
                   ghl_record_id: recId,
-                  course_name: props.course_name || props.name || '',
-                  educational_topics: parseArray(props.educational_topics),
+                  // GHL stores course name in the 'educational_courses' field key
+                  course_name: props.educational_courses || props.course_name || props.name || '',
+                  // GHL stores topics in 'what_type_of_investing_are_you_most_interested_in'
+                  educational_topics: parseArray(props.what_type_of_investing_are_you_most_interested_in || props.educational_topics),
                   educational_level: parseArray(props.educational_level),
                   video_url: props.video_url || '',
                   education_url: props.education_url || '',
-                  paid_education: parseBool(props.paid_education),
-                  membership_required: parseBool(props.membership_required),
+                  // GHL stores these as arrays e.g. ["true"] -- parseBool handles both
+                  paid_education: parseBool(Array.isArray(props.paid_education) ? props.paid_education[0] : props.paid_education),
+                  membership_required: parseBool(Array.isArray(props.membership_required) ? props.membership_required[0] : props.membership_required),
                   is_active: true,
                   synced_at: now2
                 };
@@ -319,13 +322,13 @@ export default async function handler(req, res) {
       const row = {
         ghl_record_id:          recordId,
         course_name:            body.educational_courses || body.course_name || body.name || '',
-        educational_topics:     parseArray(body.educational_topics),
+        educational_topics:     parseArray(body.what_type_of_investing_are_you_most_interested_in || body.educational_topics),
         commercial_asset_types: parseArray(body.commercial_asset_types),
         educational_level:      parseArray(body.educational_level),
         video_url:              body.video_url || body.videoUrl || '',
         education_url:          body.education_url || body.educationUrl || '',
-        paid_education:         parseBool(body.paid_education),
-        membership_required:    parseBool(body.membership_required),
+        paid_education:         parseBool(Array.isArray(body.paid_education) ? body.paid_education[0] : body.paid_education),
+        membership_required:    parseBool(Array.isArray(body.membership_required) ? body.membership_required[0] : body.membership_required),
         is_active:              true,
         ghl_created_at:         body.created_at || null,
         ghl_updated_at:         body.updated_at || null,
