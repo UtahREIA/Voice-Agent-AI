@@ -145,15 +145,29 @@ export default async function handler(req, res) {
         );
         const questions = await qResp.json();
 
-        // Pick the question that best matches the current stage
+        // Pick the question that best matches the current stage and path
         let nextQuestion = null;
         if (Array.isArray(questions) && questions.length > 0) {
-          // Prefer a stage-specific question over a generic one
-          nextQuestion = questions.find(q =>
-            q.applies_to_stages && q.applies_to_stages.includes(stage)
-          ) || questions.find(q =>
-            !q.applies_to_stages || q.applies_to_stages.length === 0
-          ) || questions[0];
+          if (stage) {
+            // Stage is known -- prefer stage-specific question, then generic
+            nextQuestion = questions.find(q =>
+              Array.isArray(q.applies_to_stages) && q.applies_to_stages.includes(stage)
+            ) || questions.find(q =>
+              !q.applies_to_stages || q.applies_to_stages.length === 0
+            ) || questions[0];
+          } else {
+            // Stage unknown -- only ask generic questions (applies_to_stages is null/empty)
+            nextQuestion = questions.find(q =>
+              !q.applies_to_stages || q.applies_to_stages.length === 0
+            ) || questions[0];
+          }
+
+          // Safety check -- never ask a blocker question to an exploring/new caller
+          const newCallerStages = ['exploring__new', 'getting_started'];
+          if (nextQuestion?.dimension === 'blocker' && stage && newCallerStages.includes(stage)) {
+            // Skip blocker -- new callers don't know their blockers yet
+            nextQuestion = null;
+          }
         }
 
         return res.status(200).json(vapiResult({
