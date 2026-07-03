@@ -57,8 +57,186 @@ export default async function handler(req, res) {
       const cvData = await cvResp.json();
       const customValues = cvData.customValues || cvData.customFields || [];
       console.log(`Fetched ${customValues.length} GHL custom values`);
-      const result = await syncEvents(customValues, SUPABASE_URL, SUPABASE_KEY);
-      return res.status(200).json({ ok: true, synced_at: new Date().toISOString(), events: result });
+
+      // Sync events from custom values
+      const eventsResult = await syncEvents(customValues, SUPABASE_URL, SUPABASE_KEY);
+
+      // Also bulk sync all four custom object types using correct GHL objects API
+      const objectResults = {};
+      const objectTypes = [
+        { objectKey: 'custom_objects.vendor_resources',    type: 'vendor_resources' },
+        { objectKey: 'custom_objects.educators_mentors',   type: 'educators_mentors' },
+        { objectKey: 'custom_objects.educational_courses', type: 'educational_courses' },
+        { objectKey: 'custom_objects.tools_resources',     type: 'tools_resources' }
+      ];
+
+      for (const obj of objectTypes) {
+        try {
+          let allRecords = [];
+          let skip = 0;
+          const limit = 100;
+
+          // Paginate through all records using correct GHL objects search endpoint
+          while (skip < 1000) {
+            const searchResp = await fetch(
+              `https://services.leadconnectorhq.com/objects/${obj.objectKey}/records/search`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${GHL_API_KEY}`,
+                  'Version': '2021-07-28',
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                  locationId: GHL_LOC_ID,
+                  page: Math.floor(skip / limit) + 1,
+                  pageLimit: limit
+                })
+              }
+            );
+
+            if (!searchResp.ok) {
+              const errText = await searchResp.text();
+              console.log(`${obj.type} fetch failed: ${searchResp.status} — ${errText.slice(0,100)}`);
+              break;
+            }
+
+            const searchData = await searchResp.json();
+            const records = searchData.data || searchData.records || [];
+            allRecords = allRecords.concat(records);
+
+            if (records.length < limit) break;
+            skip += limit;
+          }
+
+          console.log(`${obj.type}: fetched ${allRecords.length} records`);
+
+          // Process each record through the same upsert logic used by the POST handler
+          let upserted = 0;
+          for (const record of allRecords) {
+            try {
+              // Build a synthetic body matching what the POST handler expects
+              const syntheticBody = {
+                object_type: obj.type,
+                ghl_record_id: record.id || '',
+                ...record.properties
+              };
+
+              // Upsert directly to Supabase using same logic as POST handler
+              const props = record.properties || {};
+              const recId = record.id || '';
+              const now2 = new Date().toISOString();
+              const sbHeaders = {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Prefer': 'resolution=merge-duplicates,return=minimal'
+              };
+
+              let upsertRow = null;
+              let upsertTable = '';
+
+              if (obj.type === 'vendor_resources') {
+                upsertTable = 'ghl_vendor_resources';
+                upsertRow = {
+                  ghl_record_id: recId,
+                  company_name: props.company_name || '',
+                  company_phone: props.company_phone || '',
+                  company_email: props.company_email || '',
+                  company_website: props.company_website || '',
+                  company_address: props.company_address || '',
+                  company_city: props.company_city || '',
+                  company_state: props.company_state || '',
+                  company_postal_code: props.company_postal_code || '',
+                  business_description: props.business_description || '',
+                  company_tagline: props.company_tagline || '',
+                  company_logo: props.company_logo || '',
+                  contractor_speciality: props.contractor_speciality || '',
+                  deals_opportunities: parseArray(props.deals_opportunities),
+                  funding_financial: parseArray(props.funding_financial),
+                  team_vendors: parseArray(props.team_vendors),
+                  attorney_subclass: parseArray(props.attorney_subclass),
+                  operations: parseArray(props.operations),
+                  development_land: parseArray(props.development_land),
+                  education_tech_tools: parseArray(props.education_tech_tools),
+                  social_facebook: props.social_profile_links_facebook || props.social_facebook || '',
+                  social_instagram: props.social_profile_links_instagram || props.social_instagram || '',
+                  social_youtube: props.social_profile_links_youtube || props.social_youtube || '',
+                  social_linkedin: props.social_profile_links_linkedin || props.social_linkedin || '',
+                  enroll_vendor_match: parseBool(props.enroll_vendor_match),
+                  affiliate_partner: parseBool(props.affiliate_partner),
+                  investor_types: parseArray(props.investor_types || props.which_types_of_investors),
+                  is_active: true,
+                  synced_at: now2
+                };
+              } else if (obj.type === 'educators_mentors') {
+                upsertTable = 'ghl_educators_mentors';
+                upsertRow = {
+                  ghl_record_id: recId,
+                  educators_name: props.educators_name || props.name || '',
+                  educational_topics: parseArray(props.educational_topics),
+                  educational_level: parseArray(props.educational_level),
+                  educators_url: props.educators_url || '',
+                  is_active: true,
+                  synced_at: now2
+                };
+              } else if (obj.type === 'educational_courses') {
+                upsertTable = 'ghl_educational_courses';
+                upsertRow = {
+                  ghl_record_id: recId,
+                  course_name: props.course_name || props.name || '',
+                  educational_topics: parseArray(props.educational_topics),
+                  educational_level: parseArray(props.educational_level),
+                  video_url: props.video_url || '',
+                  education_url: props.education_url || '',
+                  paid_education: parseBool(props.paid_education),
+                  membership_required: parseBool(props.membership_required),
+                  is_active: true,
+                  synced_at: now2
+                };
+              } else if (obj.type === 'tools_resources') {
+                upsertTable = 'ghl_tools_resources';
+                upsertRow = {
+                  ghl_record_id: recId,
+                  resource_title: props.resource_title || props.name || '',
+                  educational_topics: parseArray(props.educational_topics),
+                  educational_level: parseArray(props.educational_level),
+                  resource_url: props.resource_url || '',
+                  resource_url_nonmember: props.resource_url_nonmember || '',
+                  membership_required: parseBool(props.membership_required),
+                  paid_resource: parseBool(props.paid_resource),
+                  is_active: true,
+                  synced_at: now2
+                };
+              }
+
+              if (upsertRow && upsertTable) {
+                const upsertResp = await fetch(
+                  `${SUPABASE_URL}/rest/v1/${upsertTable}?on_conflict=ghl_record_id`,
+                  { method: 'POST', headers: sbHeaders, body: JSON.stringify(upsertRow) }
+                );
+                if (upsertResp.ok || upsertResp.status === 201) upserted++;
+                else console.log(`${obj.type} upsert status: ${upsertResp.status}`);
+              }
+            } catch(e) {
+              console.error(`${obj.type} record upsert error:`, e.message);
+            }
+          }
+
+          objectResults[obj.type] = { fetched: allRecords.length, upserted };
+        } catch(e) {
+          console.error(`${obj.type} sync error:`, e.message);
+          objectResults[obj.type] = { error: e.message };
+        }
+      }
+
+      return res.status(200).json({
+        ok: true,
+        synced_at: new Date().toISOString(),
+        events: eventsResult,
+        objects: objectResults
+      });
     } catch (e) {
       console.error('Event sync GET error:', e.message);
       return res.status(200).json({ ok: false, error: e.message });
