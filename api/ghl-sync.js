@@ -788,40 +788,53 @@ export default async function handler(req, res) {
     if (GHL_API_KEY && effectivePhone) {
       try {
         // Wait for GHL workflow to finish creating/finding the contact
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 8000)); // 8s — allows GHL workflow time to create new contacts
 
-        // Search GHL contacts by formatted phone number
-        const searchResp = await fetch(
-          `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(callerPhone)}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${GHL_API_KEY}`,
-              'Content-Type': 'application/json',
-              'Version': '2021-07-28'   // Required header for GHL v2 API
-            }
+        // Try multiple phone formats to find the GHL contact
+        // GHL stores numbers as "+1 XXX-XXX-XXXX" but we have "+1XXXXXXXXXX"
+        const last10 = effectivePhone.replace(/\D/g,'').slice(-10);
+        const phoneFormats = [
+          callerPhone,                                                     // +19121681159
+          `+1 ${last10.slice(0,3)}-${last10.slice(3,6)}-${last10.slice(6)}`, // +1 912-168-1159
+          `(${last10.slice(0,3)}) ${last10.slice(3,6)}-${last10.slice(6)}`,  // (912) 168-1159
+          last10                                                           // 9121681159
+        ];
+
+        let contact = null;
+        const v2Headers = {
+          'Authorization': `Bearer ${GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        };
+
+        // Try each phone format until a contact is found
+        for (const phoneFormat of phoneFormats) {
+          const searchResp = await fetch(
+            `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(phoneFormat)}`,
+            { headers: v2Headers }
+          );
+          const searchData = await searchResp.json();
+          const matches = searchData.contacts || [];
+          console.log('GHL v2 search format:', phoneFormat, '| contacts found:', matches.length);
+
+          // Verify match by last 10 digits
+          const matched = matches.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === last10);
+          if (matched) {
+            contact = matched;
+            console.log('GHL v2 contact found:', contact.id, '| format matched:', phoneFormat);
+            break;
           }
-        );
-        const searchData = await searchResp.json();
-        console.log('GHL v2 search status:', searchResp.status, '| contacts found:', searchData.contacts?.length || 0);
+        }
 
-        let contact = searchData.contacts?.[0];
-
-        // Fallback — search by name if phone search returned nothing
+        // Final fallback — search by name if all phone formats failed
         if (!contact?.id && callerName) {
           const nameSearchResp = await fetch(
             `https://services.leadconnectorhq.com/contacts/?locationId=DNirEjy0ejVwbHsaBYrn&query=${encodeURIComponent(callerName)}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${GHL_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Version': '2021-07-28'
-              }
-            }
+            { headers: v2Headers }
           );
           const nameSearchData = await nameSearchResp.json();
           const nameMatches = nameSearchData.contacts || [];
-          // Match by last 10 digits of phone to avoid false positives
-          contact = nameMatches.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === effectivePhone.replace(/\D/g,'').slice(-10));
+          contact = nameMatches.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === last10);
           if (contact) {
             console.log('GHL v2 contact found by name fallback:', callerName, '| id:', contact.id);
           }
