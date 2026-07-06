@@ -808,8 +808,8 @@ async function startCall() {
         overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name or phone number. Go straight to helping them.';
       }
     } else {
-      // New caller or no phone provided — neutral opening
-      overrides.firstMessage = 'Aloha, welcome to Utah REIA. How can I help you today?';
+      // New caller — ask for first name directly so their answer isn't wasted
+      overrides.firstMessage = 'Aloha, welcome to Utah REE-AH. What is your first name?';
     }
 
     // Inject closing rule reminder into the assistant messages for every call
