@@ -587,6 +587,7 @@ export default async function handler(req, res) {
       summary,
       recommendedNextStep,
       profileType,
+      noMatch: isNoMatch ? 'true' : 'false',
 
       // Tags applied to the contact in GHL
       // voice-agent-call-complete triggers the post-call workflow
@@ -626,7 +627,7 @@ export default async function handler(req, res) {
         { id: 'stkOiKKMZh2H1EEBb47z', field_value: educatorBookingUrl || structured.bookingUrl || '' }, // Booking URL — resolved from Supabase
         { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel  || 'sms' }, // Handoff Channel
         { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },                        // Vendor Contacted (default)
-        { id: 'MFiqJY5mnPI5kK586iMG', field_value: isNoMatch ? 'true' : 'false' },     // Voice Agent No Match
+        { id: 'XLTxDRmto8uDjYhkeEsq', field_value: isNoMatch ? 'true' : 'false' },     // Voice Agent No Match
 
         // Blocker-specific pipeline stage fields — only set the matching one
         blocker === 'capital'     ? { id: 'A6d3LiW4tm4sRYgKkexW', field_value: ['Needs funding / capital'] } : null,
@@ -894,7 +895,7 @@ export default async function handler(req, res) {
                   { id: 'RVqXpTjVxGxqggfhFghA', field_value: structured.bookingRequired || 'false' },
                   { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel || 'sms' },
                   { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },
-                  { id: 'MFiqJY5mnPI5kK586iMG', field_value: isNoMatch ? 'true' : 'false' },
+                  { id: 'XLTxDRmto8uDjYhkeEsq', field_value: isNoMatch ? 'true' : 'false' },
 
                   // ── INVESTOR QUESTIONNAIRE FIELDS ────────────────────────
                   // These fields mirror the GHL intake form — populated from
