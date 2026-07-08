@@ -547,6 +547,7 @@ export default async function handler(req, res) {
       vendorMatches:  structured.vendorMatches || '',
       toolMatches:    structured.toolMatches   || '',
       educatorMatch:  structured.educatorMatch  || '',
+      eventMatch:     structured.eventMatch     || '',
       bookingUrl:     educatorBookingUrl || structured.bookingUrl || '', // resolved from Supabase or structured output
 
       // ---- INVESTOR QUESTIONNAIRE TEXT FIELDS ----
