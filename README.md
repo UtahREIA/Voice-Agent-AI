@@ -384,7 +384,7 @@ Change via SQL in Supabase — no code deploy needed:
 UPDATE app_settings SET value = '150' WHERE setting_key = 'vendor_match_radius_miles';
 
 -- Check current settings
-SELECT setting_key, value, description FROM app_settings;
+SELECT setting_key, value, description FROM app_settings;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 ```
 
 ---

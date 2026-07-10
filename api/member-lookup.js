@@ -171,6 +171,7 @@ export default async function handler(req, res) {
           const vacData2 = await vacResp2.json();
           if (Array.isArray(vacData2)) vacRows = vacData2;
         }
+        
         const vacResp = { json: () => vacRows };
         // vacRows already populated above
 
