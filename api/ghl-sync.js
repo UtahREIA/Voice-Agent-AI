@@ -317,6 +317,204 @@ export default async function handler(req, res) {
     console.log('Artifact keys:', JSON.stringify(Object.keys(payload.message?.artifact || payload.artifact || {})));
     console.log('Structured data extracted:', JSON.stringify(structured));
 
+    // =========================================================
+    // VENDOR ENROLLMENT FORK (Path V)
+    // =========================================================
+    // A vendor who called in to enroll themselves is a different persona than
+    // an investor. They are NOT matched to resources and they must NOT be written
+    // to the vendor_resources object automatically. Instead we hold them on the
+    // contact record with vendor answers plus a "Vendor Pending Review" tag, and
+    // the post-call workflow notifies the team to vet them before promotion.
+    //
+    // Detection: profileType indicates vendor (and not primarily investor), or the
+    // intake tier came back as the vendor enroll tier. profileType is the existing
+    // Vapi structured output ("Whether the caller is an investor, vendor, or both"),
+    // so we reuse it rather than adding a redundant caller_type output.
+    // If this is a vendor, we run the vendor sync and return early so the investor
+    // pipeline never touches them.
+    const profileTypeRaw = (structured.profileType || structured.profile_type || '').toLowerCase();
+    const isVendorCaller =
+      structured.tier === 'vendor_enroll' ||
+      (/vendor|service provider|provider/.test(profileTypeRaw) && !/investor/.test(profileTypeRaw));
+
+    if (isVendorCaller) {
+      console.log('Vendor caller detected — running vendor enrollment fork, skipping investor pipeline');
+
+      const SUPABASE_URL_V = process.env.SUPABASE_URL;
+      const SUPABASE_KEY_V = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+      const GHL_WEBHOOK_URL_V = process.env.GHL_WEBHOOK_URL;
+      const GHL_API_KEY_V = process.env.GHL_API_KEY;
+      const GHL_LOCATION_V = 'DNirEjy0ejVwbHsaBYrn';
+
+      // Pull the vendor structured outputs. Accept both camelCase and snake_case
+      // so this is resilient to however the Vapi outputs get named.
+      const vName    = structured.callerName || structured.caller_name || '';
+      const vService = structured.vendorServiceType     || structured.vendor_service_type     || '';
+      const vTypes   = structured.vendorInvestorTypes   || structured.vendor_investor_types   || '';
+      const vMarket  = structured.vendorMarket          || structured.vendor_market          || '';
+      const vReia    = structured.vendorReiaConnection  || structured.vendor_reia_connection  || '';
+      const vEnroll  = structured.vendorEnrollmentInterest || structured.vendor_enrollment_interest || '';
+      const vFollow  = structured.vendorFollowUpPreference  || structured.vendor_follow_up_preference  || '';
+      const vSummary = structured.stackSummary || structured.summary || '';
+
+      // Resolve phone the same way the investor path does: structured output,
+      // then the preCallPhone variable injected by index.html.
+      const variableValuesV = payload.message?.call?.metadata?.variableValues
+        || payload.message?.assistant?.variableValues
+        || payload.call?.metadata?.variableValues
+        || {};
+      const rawVendorPhone = structured.callerPhone || structured.caller_phone || variableValuesV.preCallPhone || '';
+      const vDigits = rawVendorPhone.replace(/\D/g, '').slice(-10);
+      const vPhone = vDigits.length === 10 ? '+1' + vDigits : rawVendorPhone;
+
+      const vNameParts = vName.trim().split(' ');
+      const vFirst = vNameParts[0] || '';
+      const vLast  = vNameParts.slice(1).join(' ') || '';
+
+      // Skip if we cannot identify the vendor at all.
+      if (!vName && !vPhone) {
+        console.log('Vendor fork — no name or phone, skipping');
+        return res.status(200).json({ ok: true, skipped: true, reason: 'vendor: no contact info' });
+      }
+
+      // Send to the GHL inbound webhook so the post-call workflow fires.
+      // The "Vendor Pending Review" tag is what the workflow branches on to send
+      // the internal team notification. va-vendor-enroll is a stable machine tag.
+      let ghlRespV;
+      try {
+        if (GHL_WEBHOOK_URL_V) {
+          ghlRespV = await fetch(GHL_WEBHOOK_URL_V, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firstName: vFirst,
+              lastName: vLast,
+              phone: vPhone,
+              // Flat fields for {{inboundWebhookRequest.*}} use in the workflow
+              profileType: 'Vendor',
+              vendorServiceType: vService,
+              vendorInvestorTypes: vTypes,
+              vendorMarket: vMarket,
+              vendorReiaConnection: vReia,
+              vendorEnrollmentInterest: vEnroll,
+              vendorFollowUpPreference: vFollow,
+              vendorSummary: vSummary.slice(0, 500),
+              tags: [
+                'Voice Agent Lead',
+                'voice-agent-call-complete',
+                'Vendor Pending Review',
+                'va-vendor-enroll'
+              ].filter(Boolean)
+            })
+          });
+          console.log('Vendor GHL webhook sent:', ghlRespV.status);
+        } else {
+          console.log('Vendor fork — GHL_WEBHOOK_URL not set, skipping webhook');
+        }
+      } catch (e) {
+        console.error('Vendor GHL webhook error:', e.message);
+      }
+
+      // Write the vendor answers to the new Voice Agent Vendor custom fields via v2 API.
+      // Find the contact by phone first.
+      try {
+        if (GHL_API_KEY_V && vPhone) {
+          const findResp = await fetch(
+            'https://services.leadconnectorhq.com/contacts/search',
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + GHL_API_KEY_V,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28'
+              },
+              body: JSON.stringify({
+                locationId: GHL_LOCATION_V,
+                pageLimit: 1,
+                filters: [{ field: 'phone', operator: 'eq', value: vPhone }]
+              })
+            }
+          );
+          const findData = await findResp.json();
+          const vendorContactId = findData?.contacts?.[0]?.id || null;
+
+          if (vendorContactId) {
+            const updateRespV = await fetch(
+              'https://services.leadconnectorhq.com/contacts/' + vendorContactId,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': 'Bearer ' + GHL_API_KEY_V,
+                  'Content-Type': 'application/json',
+                  'Version': '2021-07-28'
+                },
+                body: JSON.stringify({
+                  customFields: [
+                    { id: 'ESvM4hhpSnQWiuluGard', field_value: vService },   // Voice Agent Vendor Service Type
+                    { id: '1nvU9eGll7NYZ73YIR7e', field_value: vTypes },     // Voice Agent Vendor Investor Types
+                    { id: 'vdrZr28gqAsDntrN6CPG', field_value: vMarket },    // Voice Agent Vendor Market
+                    { id: 'kzolZI3cyPGf4THu00T0', field_value: vReia },      // Voice Agent Vendor REIA Connection
+                    { id: 'tvoRTYDCkAbIjslA7PGC', field_value: vEnroll },    // Voice Agent Vendor Enrollment Interest
+                    { id: 'ttt3eBFkIUjIqV6JBrpF', field_value: vFollow },    // Voice Agent Vendor Follow Up Preference
+                    { id: 'IzhYTD89SrsXDUZFGxLK', field_value: vSummary.slice(0, 500) } // Voice Agent Vendor Summary
+                  ].filter(f => f.field_value)
+                })
+              }
+            );
+            console.log('Vendor v2 custom fields updated:', updateRespV.status);
+          } else {
+            console.log('Vendor fork — contact not found for phone:', vPhone);
+          }
+        }
+      } catch (e) {
+        console.error('Vendor v2 API update error:', e.message);
+      }
+
+      // Record the vendor call in voice_agent_calls, tagged as a vendor call.
+      try {
+        if (SUPABASE_URL_V && SUPABASE_KEY_V) {
+          const startedAtV = payload.message?.call?.startedAt || payload.call?.startedAt || null;
+          const endedAtV   = payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+          let durationV = null;
+          if (startedAtV && endedAtV) {
+            durationV = Math.round((new Date(endedAtV) - new Date(startedAtV)) / 1000);
+          }
+          await fetch(SUPABASE_URL_V + '/rest/v1/voice_agent_calls', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY_V,
+              'Authorization': 'Bearer ' + SUPABASE_KEY_V,
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              caller_name: vName,
+              caller_phone: vPhone,
+              profile_type: 'Vendor',
+              path: 'V',
+              tier: 'vendor_enroll',
+              summary: vSummary,
+              stack_summary: vSummary,
+              vapi_call_id: vapiCallId,
+              call_duration_secs: durationV,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+          });
+          console.log('Vendor call history written for:', vName);
+        }
+      } catch (e) {
+        console.error('Vendor call history write error:', e.message);
+      }
+
+      // Return early. The investor pipeline below must not run for a vendor.
+      return res.status(200).json({
+        ok: true,
+        vendor: true,
+        ghlStatus: typeof ghlRespV !== 'undefined' ? ghlRespV.status : 'no_webhook'
+      });
+    }
+
     // --- STEP 2: Extract all caller data from structured outputs ---
     // These field names must exactly match the structured output names in Vapi
 

@@ -299,7 +299,7 @@ export default async function handler(req, res) {
       return res.status(200).json(vapiResult({
         result: 'Say: Perfect, I have everything I need to get you listed in our vendor directory. Someone from our team will reach out by ' + pref + ' to finish setting up your profile. Then move to the closing sequence.',
         action: 'vendor_enroll',
-        tier: '3_vendor_enroll',
+        tier: 'vendor_enroll',
         tool_args: {
           caller_type, vendor_service_type, vendor_investor_types, vendor_market,
           vendor_reia_connection, vendor_enrollment_interest, vendor_follow_up_preference
