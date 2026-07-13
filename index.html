@@ -797,19 +797,19 @@ async function startCall() {
         // Returning member WITH past call — open with personalized follow-up
         const recommendation = (lastCall.stack_summary || lastCall.recommended_next || '').slice(0, 160);
         overrides.firstMessage = firstName
-          ? 'Aloha ' + firstName + ', welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
-          : 'Aloha, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
+          ? 'Aloha ' + firstName + ', it is Lani, welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
+          : 'Aloha, it is Lani, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
         overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name or phone number.';
       } else {
         // Returning member but no meaningful past call history
         overrides.firstMessage = firstName
-          ? 'Aloha ' + firstName + ', glad you reached out to Utah REIA. How can I help you today?'
-          : 'Aloha, glad you reached out to Utah REIA. How can I help you today?';
+          ? 'Aloha ' + firstName + ', it is Lani, glad you reached out to Utah REIA. How can I help you today?'
+          : 'Aloha, it is Lani, glad you reached out to Utah REIA. How can I help you today?';
         overrides.variableValues.liveContext += '\n\nIMPORTANT: You already know this caller by name. Do NOT ask for their name or phone number. Go straight to helping them.';
       }
     } else {
       // New caller — ask for first name directly so their answer isn't wasted
-      overrides.firstMessage = 'Aloha, welcome to Utah REE-AH. What is your first name?';
+      overrides.firstMessage = 'Aloha, I am Lani, welcome to Utah REIA. What is your first name?';
     }
 
     // Inject closing rule reminder into the assistant messages for every call
