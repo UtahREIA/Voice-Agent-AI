@@ -1181,6 +1181,42 @@ export default async function handler(req, res) {
             }
           );
           console.log('GHL v2 contact fields updated:', updateResp.status);
+
+          // --- Clear stale vendor fields on non-vendor calls ---
+          // The main PUT above filters out empty values, so it can never blank a
+          // field. That means a vendor Service Type written on a PRIOR vendor call
+          // would survive into a later investor call and wrongly trip the workflow's
+          // "Vendor Service Type is not empty" branch. This second PUT explicitly
+          // writes empty strings to the seven Voice Agent Vendor fields (no empty
+          // filter) so every non-vendor call resets them. isVendorCaller was already
+          // false to reach this block, so this only runs for investors.
+          try {
+            const clearResp = await fetch(
+              `https://services.leadconnectorhq.com/contacts/${contact.id}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${GHL_API_KEY}`,
+                  'Content-Type': 'application/json',
+                  'Version': '2021-07-28'
+                },
+                body: JSON.stringify({
+                  customFields: [
+                    { id: 'ESvM4hhpSnQWiuluGard', field_value: '' }, // Voice Agent Vendor Service Type
+                    { id: '1nvU9eGll7NYZ73YIR7e', field_value: '' }, // Voice Agent Vendor Investor Types
+                    { id: 'vdrZr28gqAsDntrN6CPG', field_value: '' }, // Voice Agent Vendor Market
+                    { id: 'kzolZI3cyPGf4THu00T0', field_value: '' }, // Voice Agent Vendor REIA Connection
+                    { id: 'tvoRTYDCkAbIjslA7PGC', field_value: '' }, // Voice Agent Vendor Enrollment Interest
+                    { id: 'ttt3eBFkIUjIqV6JBrpF', field_value: '' }, // Voice Agent Vendor Follow Up Preference
+                    { id: 'IzhYTD89SrsXDUZFGxLK', field_value: '' }  // Voice Agent Vendor Summary
+                  ]
+                })
+              }
+            );
+            console.log('GHL v2 stale vendor fields cleared:', clearResp.status);
+          } catch(e) {
+            console.error('GHL v2 vendor field clear error:', e.message);
+          }
         } else {
           console.log('GHL v2 contact not found for phone:', effectivePhone);
         }
