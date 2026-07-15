@@ -343,8 +343,6 @@ export default async function handler(req, res) {
       const SUPABASE_URL_V = process.env.SUPABASE_URL;
       const SUPABASE_KEY_V = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
       const GHL_WEBHOOK_URL_V = process.env.GHL_WEBHOOK_URL;
-      const GHL_API_KEY_V = process.env.GHL_API_KEY;
-      const GHL_LOCATION_V = 'DNirEjy0ejVwbHsaBYrn';
 
       // Pull the vendor structured outputs. Accept both camelCase and snake_case
       // so this is resilient to however the Vapi outputs get named.
@@ -415,60 +413,20 @@ export default async function handler(req, res) {
         console.error('Vendor GHL webhook error:', e.message);
       }
 
-      // Write the vendor answers to the new Voice Agent Vendor custom fields via v2 API.
-      // Find the contact by phone first.
-      try {
-        if (GHL_API_KEY_V && vPhone) {
-          const findResp = await fetch(
-            'https://services.leadconnectorhq.com/contacts/search',
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': 'Bearer ' + GHL_API_KEY_V,
-                'Content-Type': 'application/json',
-                'Version': '2021-07-28'
-              },
-              body: JSON.stringify({
-                locationId: GHL_LOCATION_V,
-                pageLimit: 1,
-                filters: [{ field: 'phone', operator: 'eq', value: vPhone }]
-              })
-            }
-          );
-          const findData = await findResp.json();
-          const vendorContactId = findData?.contacts?.[0]?.id || null;
+      // Vendor custom fields are written by the GHL workflow, not here.
+      // The workflow's Update Contact Field step maps every vendorServiceType,
+      // vendorInvestorTypes, vendorMarket, vendorReiaConnection,
+      // vendorEnrollmentInterest, vendorFollowUpPreference and vendorSummary
+      // value from {{inboundWebhookRequest.*}} in the webhook payload above.
+      //
+      // We deliberately do NOT write them via the v2 API here. Most vendors are
+      // brand new, so they do not exist in Supabase or GHL yet — the workflow's
+      // Contact Not Found branch creates them ~30s after this webhook fires. Any
+      // timed lookup from this function races that creation and fails ("contact
+      // not found"). The workflow creates the contact and writes the fields in
+      // the correct order with no race. These fields are all TEXT, so workflow
+      // variables can set them (unlike SINGLE_OPTIONS/MULTIPLE_OPTIONS fields).
 
-          if (vendorContactId) {
-            const updateRespV = await fetch(
-              'https://services.leadconnectorhq.com/contacts/' + vendorContactId,
-              {
-                method: 'PUT',
-                headers: {
-                  'Authorization': 'Bearer ' + GHL_API_KEY_V,
-                  'Content-Type': 'application/json',
-                  'Version': '2021-07-28'
-                },
-                body: JSON.stringify({
-                  customFields: [
-                    { id: 'ESvM4hhpSnQWiuluGard', field_value: vService },   // Voice Agent Vendor Service Type
-                    { id: '1nvU9eGll7NYZ73YIR7e', field_value: vTypes },     // Voice Agent Vendor Investor Types
-                    { id: 'vdrZr28gqAsDntrN6CPG', field_value: vMarket },    // Voice Agent Vendor Market
-                    { id: 'kzolZI3cyPGf4THu00T0', field_value: vReia },      // Voice Agent Vendor REIA Connection
-                    { id: 'tvoRTYDCkAbIjslA7PGC', field_value: vEnroll },    // Voice Agent Vendor Enrollment Interest
-                    { id: 'ttt3eBFkIUjIqV6JBrpF', field_value: vFollow },    // Voice Agent Vendor Follow Up Preference
-                    { id: 'IzhYTD89SrsXDUZFGxLK', field_value: vSummary.slice(0, 500) } // Voice Agent Vendor Summary
-                  ].filter(f => f.field_value)
-                })
-              }
-            );
-            console.log('Vendor v2 custom fields updated:', updateRespV.status);
-          } else {
-            console.log('Vendor fork — contact not found for phone:', vPhone);
-          }
-        }
-      } catch (e) {
-        console.error('Vendor v2 API update error:', e.message);
-      }
 
       // Record the vendor call in voice_agent_calls, tagged as a vendor call.
       try {
