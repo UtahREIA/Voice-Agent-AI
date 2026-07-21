@@ -160,6 +160,17 @@ export default async function handler(req, res) {
   };
   const paramFor = (q) => QKEY_PARAM[q.question_key] || q.dimension;
 
+  // Some dimensions get answered implicitly by another one. A caller who has
+  // just listed the books, courses and mentors they have been through has also
+  // told us what they already tried, so asking both back to back reads as the
+  // same question twice. Whichever lands first satisfies the other.
+  const COVERED_BY = {
+    already_tried: ['education_history'],
+    education_history: ['already_tried']
+  };
+  const haveAnswer = (p) =>
+    isSet(collected[p]) || (COVERED_BY[p] || []).some(src => isSet(collected[src]));
+
   // ---- Resolve the effective path (discovery A, resource seeker B, vendor V) ----
   const NEW_STAGES = ['exploring__new', 'getting_started'];
   const ACTIVE_STAGES = ['active_investor', 'experienced_investor', 'veteran__operator'];
@@ -186,7 +197,7 @@ export default async function handler(req, res) {
   // ---- Per path REQUIRED floor, DESIRED set, EXTRAS, and soft ceiling ----
   const FLOW = {
     A: {
-      required: ['stage', 'strategy', 'goal'],
+      required: ['stage', 'strategy', 'goal', 'blocker'],
       desired: ['capital', 'credit', 'education_history', 'already_tried'],
       extras: ['time_availability', 'knowledge_intent', 'learning_format', 'support_network', 'readiness', 'timeline'],
       ceiling: 8
@@ -238,7 +249,7 @@ export default async function handler(req, res) {
         : (isSet(stage) && stages.includes(stage));
       if (!stageOk) return false;
       const p = paramFor(q);
-      if (isSet(collected[p])) return false;
+      if (haveAnswer(p)) return false;
       if (pruneSet.has(p)) return false;
       return true;
     });
@@ -253,14 +264,14 @@ export default async function handler(req, res) {
       if (fastExitB) return null;
       // Required floor first, in declared order.
       for (const p of flow.required) {
-        if (!isSet(collected[p])) {
+        if (!haveAnswer(p)) {
           const q = byParam(p);
           if (q) return q;
         }
       }
-      // Desired next (skipped silently if pruned or has no row for this stage).
+      // Desired next (skipped silently if pruned, covered, or has no row for this stage).
       for (const p of flow.desired) {
-        if (!isSet(collected[p])) {
+        if (!haveAnswer(p)) {
           const q = byParam(p);
           if (q) return q;
         }
@@ -268,7 +279,7 @@ export default async function handler(req, res) {
       // Extras only while under the soft ceiling.
       if (collectedCount < flow.ceiling) {
         for (const p of flow.extras) {
-          if (!isSet(collected[p])) {
+          if (!haveAnswer(p)) {
             const q = byParam(p);
             if (q) return q;
           }
@@ -403,6 +414,7 @@ export default async function handler(req, res) {
       dimensions_collected: collectedCount,
       rule_matched: matchedRule.rule_name,
       path_active: path
+      
     }));
 
   } catch (e) {
