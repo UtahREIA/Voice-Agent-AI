@@ -20,9 +20,10 @@ and the `getResourceStack` discovery that followed it.
 | 10 | Stop Lani inventing questions                     | Vapi   | no      | [ ]    |
 | 11 | Tier on the deal-finding rule                     | Chris  | n/a     | [x]    |
 | 12 | Rewrite`resources.js` for matched mixed results | Vercel | yes     | [x]    |
-| 13 | Create the`getResourceStack` tool in Vapi       | Vapi   | no      | [ ]    |
-| 14 | Add`resource_request` to getIntakeRouting       | Vapi   | no      | [ ]    |
-| 15 | Route intake to`getResourceStack`               | Vercel | yes     | [ ]    |
+| 13 | Create the`getResourceStack` tool in Vapi       | Vapi   | no      | [x]    |
+| 14 | Add`resource_request` to getIntakeRouting       | Vapi   | no      | [x]    |
+| 15 | Route intake to`getResourceStack`               | Vercel | yes     | [x]    |
+| 16 | Verification call: 5-6 mixed resources            | both   | no      | [ ]    |
 
 Steps 7, 8 and 9 shipped together. Re-run the step 6 call to verify, and add a
 Path B call (an active investor) since that is the path steps 7 and 8 unblocked.
@@ -649,6 +650,43 @@ wrong only because the tool did not exist and `resources.js` could not match.
 Both are now fixed, so the remap comes back deliberately: route to
 `getResourceStack`, pass `mode` from `resource_request`, and keep `escalate`
 and `1_info` as no-tool sentinels.
+
+**Done.** One deliberate change of shape: `routing_action` no longer picks the
+tool. Narrowing to one category is the caller's call, not the rule's, and a
+rule saying `getVendorMatch` was handing an investor vendors only when they had
+asked for nothing of the sort. The rule still supplies `tier` and
+`voice_bridge`, which is where its intelligence actually lives, and an
+unrecognized `routing_action` still logs a warning so data drift stays visible.
+
+Verified against production:
+
+```
+default             -> Now call getResourceStack ... "mode":"all"
+resource_request=vendor -> Now call getResourceStack ... "mode":"vendor"
+```
+
+---
+
+## Step 16 — Verification call
+
+The whole chain is live but no voice call has exercised it yet. Everything
+below has only been proven by direct HTTP.
+
+Run the step 6 call again (`getting_started` / commercial industrial /
+cannot find deals) and check three things:
+
+1. **`POST /api/resources` appears in the Vercel log.** This is the decisive
+   one. That endpoint had never been hit in the project's history, so its
+   presence proves the Vapi tool exists and was actually invoked. Its absence
+   means the tool is still not wired, whatever the intake log says.
+2. **Lani names 5-6 resources**, spread across categories, not one course.
+3. The intake log line shows `action: getResourceStack | mode: all`.
+
+Then a second call where you interrupt with "just show me vendors" partway
+through, and confirm `mode: vendor` in the log and vendors only in the reply.
+
+Watch for: the caller hearing records literally named "Wholesaler TESTING" and
+"Frankie Testing". Those are live rows in Supabase and will be read aloud.
 
 ---
 
