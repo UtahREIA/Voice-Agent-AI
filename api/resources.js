@@ -1,21 +1,103 @@
 /**
  * resources.js — Combined resource stack tool
- * Called by Vapi tool getResourceStack when the caller is not specific about resource type.
- * Queries vendor_routing_matrix, education_routing_matrix, and tools_routing_matrix
- * simultaneously and returns up to 5 ranked matches across all three categories.
  *
- * Called by: getVendorMatch, getEducationMatch, getResourceStack (all route here)
+ * Vapi tool: getResourceStack
+ *
+ * Default (mode 'all'): returns up to 6 resources spread ACROSS the five
+ * categories, keeping only what matches the caller's stage and strategy.
+ * Specific request (mode 'vendor' | 'educator' | 'education' | 'tools' |
+ * 'events'): returns up to 5 of that one category. When a specific request
+ * comes back thin, we deliver what matched and OFFER to widen rather than
+ * silently padding with things the caller did not ask for.
+ *
+ * THREE VOCABULARIES — all three are live and none can be dropped:
+ *   1. long stage   active_investor      Vapi enum, educational_level on the
+ *                                        ghl_* record tables
+ *   2. short stage  active                education_routing_matrix.stage,
+ *                                        tools_routing_matrix.stage
+ *   3. topic        fix__flip             educational_topics on the ghl_* tables
+ * Callers send vocabulary 1. Everything here translates before querying.
+ *
+ * commercial_asset_types is empty on every active record today, so commercial
+ * strategies (industrial, retail, multi_family, ...) match through the
+ * 'commercial' topic instead. Revisit if that column ever gets populated.
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+
+// Vocabulary 1 -> 2. Only getting_started is spelled the same in both.
+const SHORT_STAGE = {
+  exploring__new: 'exploring',
+  getting_started: 'getting_started',
+  active_investor: 'active',
+  experienced_investor: 'experienced',
+  veteran__operator: 'veteran'
+};
+
+// Vocabulary 1 -> 3. Several strategies have no topic of their own and route
+// through 'commercial', which is how the commercial asset types are covered.
+const TOPICS_BY_STRATEGY = {
+  fix_and_flip: ['fix__flip'],
+  buy_and_hold: ['buy__hold__rentals'],
+  wholesale: ['wholesaling'],
+  brrrr: ['brrrr'],
+  creative_financing: ['creative_financing'],
+  raising_capital: ['raising_capital'],
+  development: ['development'],
+  notes_lending: ['notes__lending'],
+  land_entitlement: ['land__entitlement'],
+  short_term_rental: ['short_term_rental'],
+  mid_term_coliving: ['midterm__coliving_rentals'],
+  tax_deeds_liens: ['tax_deeds_and_liens'],
+  house_hacking: ['house_hacking'],
+  passive_investing: ['passive_investments'],
+  // Both spellings exist in the data; match either.
+  syndication: ['syndications__funds', 'syndication__funds'],
+  commercial: ['commercial'],
+  industrial: ['commercial'],
+  retail: ['commercial'],
+  multi_family: ['commercial'],
+  self_storage: ['commercial'],
+  mobile_home: ['commercial'],
+  hotel: ['commercial'],
+  assisted_living: ['commercial'],
+  farm_land: ['commercial'],
+  rv_parks: ['commercial'],
+  out_of_state: [],
+  tax_optimization: [],
+  mentoring_others: [],
+  not_sure: []
+};
+
+// Which categories a requested mode resolves to, and how deep to go.
+const MODE_CATEGORIES = {
+  all: ['education', 'vendor', 'tool', 'educator', 'event'],
+  vendor: ['vendor'],
+  education: ['education'],
+  educator: ['educator'],
+  mentor: ['educator'],
+  tool: ['tool'],
+  event: ['event']
+};
+
+// Caller phrasing -> canonical mode.
+const MODE_ALIASES = {
+  all: 'all', any: 'all', everything: 'all',
+  vendor: 'vendor', vendors: 'vendor', service_provider: 'vendor', professionals: 'vendor',
+  education: 'education', educations: 'education', course: 'education', courses: 'education',
+  training: 'education', class: 'education', classes: 'education',
+  educator: 'educator', educators: 'educator', mentor: 'educator', mentors: 'educator',
+  mentorship: 'educator', coach: 'educator', coaching: 'educator',
+  tool: 'tool', tools: 'tool', calculator: 'tool', calculators: 'tool', software: 'tool',
+  event: 'event', events: 'event', meetup: 'event', meetups: 'event'
+};
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Extract toolCallId for Vapi response format
   const toolCallId =
     req.body?.message?.toolCallList?.[0]?.id ||
     req.body?.message?.toolCalls?.[0]?.id ||
@@ -33,305 +115,303 @@ export default async function handler(req, res) {
         || body?.message?.toolCalls?.[0]?.function?.arguments
         || body?.toolCallList?.[0]?.function?.arguments;
       if (args) return typeof args === 'string' ? JSON.parse(args) : args;
-    } catch(e) {}
+    } catch (e) {}
     return body || {};
   }
 
   const args = extractArgs(req.body);
-  const stage    = (args.stage    || args.investor_stage || '').toLowerCase();
-  const strategy = (args.strategy || '').toLowerCase();
-  const blocker  = (args.blocker  || '').toLowerCase();
-  const goal     = (args.goal     || '').toLowerCase();
-  const mode     = (args.mode     || 'all').toLowerCase(); // 'all' | 'vendor' | 'education' | 'tools' | 'events' | 'mentor'
-  const maxResults = parseInt(args.max_results || '5', 10);
+  const rawStage = (args.stage || args.investor_stage || '').toLowerCase().trim();
+  const strategy = (args.strategy || '').toLowerCase().trim();
+  const blocker  = (args.blocker  || '').toLowerCase().trim();
+  const goal     = (args.goal     || '').toLowerCase().trim();
 
-  console.log('getResourceStack args:', { stage, strategy, blocker, goal, mode });
+  const rawMode = (args.mode || args.resource_request || 'all').toLowerCase().trim().replace(/\s+/g, '_');
+  const mode = MODE_ALIASES[rawMode] || 'all';
+  const categories = MODE_CATEGORIES[mode] || MODE_CATEGORIES.all;
+  const isSpecific = mode !== 'all';
+  const maxResults = parseInt(args.max_results || (isSpecific ? '5' : '6'), 10);
+
+  const shortStage = SHORT_STAGE[rawStage] || rawStage;
+  const longStage  = rawStage;
+  const topics = TOPICS_BY_STRATEGY[strategy] || (strategy ? [strategy] : []);
+
+  console.log('getResourceStack args:', { stage: rawStage, shortStage, strategy, topics, blocker, mode, maxResults });
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return vapiResult('Resource lookup unavailable. Recommend Mohammed Alhareb for personalized guidance.');
+    return vapiResult('Resource lookup unavailable. Say that someone from the Utah REIA team will follow up with the right resources.');
   }
 
-  const baseHeaders = {
+  const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
 
+  const get = async (path) => {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
+      const j = await r.json();
+      return Array.isArray(j) ? j : [];
+    } catch (e) {
+      console.error('Query error on', path.split('?')[0], '-', e.message);
+      return [];
+    }
+  };
+
+  // PostgREST array operators: cs = contains, ov = overlaps.
+  const levelFilter = longStage ? `&educational_level=cs.{${encodeURIComponent(longStage)}}` : '';
+  const topicFilter = topics.length ? `&educational_topics=ov.{${topics.map(encodeURIComponent).join(',')}}` : '';
+
+  // Progressive relaxation: try the tightest filter, widen only if empty. Each
+  // step is a real fallback, not a default, so a caller with no match still
+  // gets something rather than nothing.
+  async function widen(steps) {
+    for (const step of steps) {
+      const rows = await get(step);
+      if (rows.length) return rows;
+    }
+    return [];
+  }
+
   try {
-    const results = [];
+    const want = (c) => categories.includes(c);
+    const depth = isSpecific ? maxResults : 3;
 
-    // ─── 1. VENDOR MATCHES ───────────────────────────────────────────────────
-    if (mode === 'all' || mode === 'vendor') {
-      try {
-        let vendorQuery = `${SUPABASE_URL}/rest/v1/vendor_routing_matrix?is_active=eq.true&order=priority.asc&limit=10&select=investor_need,strategy,vendor_categories,vendor_subtypes,connection_methods,priority`;
+    // ─── EDUCATION: routing-matrix tracks, then real courses ────────────────
+    const educationP = !want('education') ? [] : (async () => {
+      const base = `education_routing_matrix?is_active=eq.true&order=priority.asc&limit=${depth}&select=track_name,description,resource_titles,priority`;
+      const rows = await widen([
+        shortStage && strategy ? `${base}&stage=eq.${encodeURIComponent(shortStage)}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        shortStage ? `${base}&stage=eq.${encodeURIComponent(shortStage)}` : null,
+        base
+      ].filter(Boolean));
 
-        if (strategy) vendorQuery += `&strategy=eq.${encodeURIComponent(strategy)}`;
+      const out = rows.map(r => ({
+        type: 'education',
+        name: r.track_name || 'Education Track',
+        description: r.description || (Array.isArray(r.resource_titles) ? r.resource_titles.slice(0, 2).join(' and ') : ''),
+        contact: '',
+        connection_method: 'resource_page',
+        priority: r.priority || 5
+      }));
 
-        const vendorResp = await fetch(vendorQuery, { headers: baseHeaders });
-        const vendorRows = await vendorResp.json();
+      // Real courses matched on topic and level, not just the abstract track.
+      const cBase = `ghl_educational_courses?is_active=eq.true&limit=${depth}&select=course_name,educational_topics,education_url,paid_education,membership_required`;
+      const courses = await widen([
+        topicFilter || levelFilter ? `${cBase}${topicFilter}${levelFilter}` : null,
+        topicFilter ? `${cBase}${topicFilter}` : null,
+        levelFilter ? `${cBase}${levelFilter}` : null,
+        cBase
+      ].filter(Boolean));
 
-        if (Array.isArray(vendorRows) && vendorRows.length > 0) {
-          // Also fetch actual vendor records from ghl_vendor_resources
-          const vendorResourceResp = await fetch(
-            `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?is_active=eq.true&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities&limit=20`,
-            { headers: baseHeaders }
-          );
-          const vendorResources = await vendorResourceResp.json();
-
-          // Match matrix rows to actual vendor records
-          const matchedVendors = new Set();
-          for (const row of vendorRows) {
-            if (matchedVendors.size >= 2) break; // max 2 vendors in combined stack
-            const categories = row.vendor_categories || [];
-            for (const vendor of (Array.isArray(vendorResources) ? vendorResources : [])) {
-              const vendorName = vendor.company_name || '';
-              if (matchedVendors.has(vendorName)) continue;
-              const vendorServices = [
-                ...(vendor.funding_financial || []),
-                ...(vendor.deals_opportunities || [])
-              ].map(s => s.toLowerCase());
-              const categoryMatch = categories.some(c =>
-                vendorServices.some(s => s.includes(c.toLowerCase()) || c.toLowerCase().includes(s))
-              );
-              if (categoryMatch || categories.length === 0) {
-                const connectionMethods = Array.isArray(row.connection_methods) ? row.connection_methods : [];
-                const primaryMethod = connectionMethods[0] || 'ai_recommendation';
-                results.push({
-                  type: 'vendor',
-                  name: vendorName,
-                  description: vendor.business_description || categories.slice(0,2).join(', '),
-                  contact: vendor.company_website || vendor.company_phone || '',
-                  connection_method: primaryMethod,
-                  priority: row.priority || 5,
-                  need: row.investor_need || ''
-                });
-                matchedVendors.add(vendorName);
-                break;
-              }
-            }
-          }
-        }
-      } catch(e) {
-        console.error('Vendor query error:', e.message);
+      for (const c of courses) {
+        if (out.some(o => o.name === c.course_name)) continue;
+        out.push({
+          type: 'education',
+          name: c.course_name || 'Course',
+          description: (c.educational_topics || []).slice(0, 2).join(' and ').replace(/__/g, ' ').replace(/_/g, ' '),
+          contact: c.education_url || '',
+          connection_method: 'resource_page',
+          priority: c.paid_education ? 6 : 5
+        });
       }
-    }
+      return out;
+    })();
 
-    // ─── 2. EDUCATION MATCHES ─────────────────────────────────────────────────
-    if (mode === 'all' || mode === 'education') {
-      try {
-        // Three-tier fallback: exact stage+strategy → stage only → strategy only
-        let eduRows = [];
-        const eduBase = `${SUPABASE_URL}/rest/v1/education_routing_matrix?is_active=eq.true&order=priority.asc&limit=5&select=track_name,description,resource_titles,delivery_methods,priority,stage,strategy`;
+    // ─── EDUCATORS / MENTORS ────────────────────────────────────────────────
+    const educatorP = !want('educator') ? [] : (async () => {
+      const base = `ghl_educators_mentors?is_active=eq.true&limit=${depth}&select=educators_name,educational_topics,educators_url`;
+      const rows = await widen([
+        topicFilter && levelFilter ? `${base}${topicFilter}${levelFilter}` : null,
+        topicFilter ? `${base}${topicFilter}` : null,
+        levelFilter ? `${base}${levelFilter}` : null,
+        base
+      ].filter(Boolean));
 
-        if (stage && strategy) {
-          const r = await fetch(`${eduBase}&stage=eq.${encodeURIComponent(stage)}&strategy=eq.${encodeURIComponent(strategy)}`, { headers: baseHeaders });
-          eduRows = await r.json();
-        }
-        if (!Array.isArray(eduRows) || eduRows.length === 0) {
-          if (strategy) {
-            const r = await fetch(`${eduBase}&strategy=eq.${encodeURIComponent(strategy)}`, { headers: baseHeaders });
-            eduRows = await r.json();
-          }
-        }
-        if (!Array.isArray(eduRows) || eduRows.length === 0) {
-          if (stage) {
-            const r = await fetch(`${eduBase}&stage=eq.${encodeURIComponent(stage)}`, { headers: baseHeaders });
-            eduRows = await r.json();
-          }
-        }
+      return rows.map(r => ({
+        type: 'educator',
+        name: r.educators_name || 'Utah REIA educator',
+        description: (r.educational_topics || []).slice(0, 2).join(' and ').replace(/__/g, ' ').replace(/_/g, ' ')
+          || 'Personalized mentorship and strategy sessions',
+        contact: r.educators_url || '',
+        connection_method: 'warm_intro',
+        priority: 4
+      }));
+    })();
 
-        // Fetch educator for booking URL
-        let educatorName = '';
-        let bookingUrl = '';
-        try {
-          const eduResp = await fetch(
-            `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?is_active=eq.true&select=educators_name,educators_url&limit=1`,
-            { headers: baseHeaders }
-          );
-          const educators = await eduResp.json();
-          if (Array.isArray(educators) && educators.length > 0) {
-            educatorName = educators[0].educators_name || '';
-            bookingUrl = educators[0].educators_url || '';
-          }
-        } catch(e) {}
+    // ─── TOOLS: routing matrix joined to real records via tool_record_id ────
+    const toolP = !want('tool') ? [] : (async () => {
+      const base = `tools_routing_matrix?is_active=eq.true&order=priority.asc&limit=${depth}&select=tool_title,recommendation_reason,priority,tool_record_id`;
+      const rows = await widen([
+        shortStage && strategy ? `${base}&stage=eq.${encodeURIComponent(shortStage)}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        blocker ? `${base}&blocker=eq.${encodeURIComponent(blocker)}` : null,
+        shortStage ? `${base}&stage=eq.${encodeURIComponent(shortStage)}` : null,
+        base
+      ].filter(Boolean));
 
-        if (Array.isArray(eduRows) && eduRows.length > 0) {
-          const row = eduRows[0];
-          const titles = Array.isArray(row.resource_titles) ? row.resource_titles.slice(0,2).join(' and ') : '';
-          results.push({
-            type: 'education',
-            name: row.track_name || 'Education Track',
-            description: row.description || titles || '',
-            contact: bookingUrl || '',
-            educator: educatorName,
-            connection_method: 'resource_page',
-            priority: row.priority || 5,
-            resource_titles: row.resource_titles || []
+      const records = await get(`ghl_tools_resources?is_active=eq.true&limit=50&select=ghl_record_id,resource_title,resource_url,resource_url_nonmember`);
+      const byId = new Map(records.map(t => [t.ghl_record_id, t]));
+
+      return rows.map(r => {
+        // Prefer the explicit id join; fall back to title match only if absent.
+        const rec = byId.get(r.tool_record_id)
+          || records.find(t => (t.resource_title || '').toLowerCase() === (r.tool_title || '').toLowerCase())
+          || null;
+        return {
+          type: 'tool',
+          name: r.tool_title || rec?.resource_title || 'Calculator',
+          description: r.recommendation_reason || 'Analyze your deals before committing',
+          contact: rec?.resource_url || rec?.resource_url_nonmember || '',
+          connection_method: 'resource_page',
+          priority: r.priority || 6
+        };
+      });
+    })();
+
+    // ─── VENDORS ────────────────────────────────────────────────────────────
+    const vendorP = !want('vendor') ? [] : (async () => {
+      const base = `vendor_routing_matrix?is_active=eq.true&order=priority.asc&limit=10&select=investor_need,strategy,vendor_categories,connection_methods,priority`;
+      const rows = await widen([
+        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        base
+      ].filter(Boolean));
+      if (!rows.length) return [];
+
+      const vendors = await get(`ghl_vendor_resources?is_active=eq.true&limit=60&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities`);
+
+      const out = [];
+      const seen = new Set();
+      for (const row of rows) {
+        if (out.length >= depth) break;
+        const cats = (row.vendor_categories || []).map(c => String(c).toLowerCase());
+        for (const v of vendors) {
+          if (out.length >= depth) break;
+          const name = v.company_name || '';
+          if (!name || seen.has(name)) continue;
+          const services = [...(v.funding_financial || []), ...(v.deals_opportunities || [])].map(s => String(s).toLowerCase());
+          const hit = cats.length === 0 || cats.some(c => services.some(s => s.includes(c) || c.includes(s)));
+          if (!hit) continue;
+          seen.add(name);
+          out.push({
+            type: 'vendor',
+            name,
+            description: v.business_description || cats.slice(0, 2).join(', '),
+            contact: v.company_website || v.company_phone || '',
+            connection_method: (row.connection_methods || [])[0] || 'ai_recommendation',
+            priority: row.priority || 5
           });
         }
-
-        // Add educator as separate resource if available
-        if (educatorName && (mode === 'all' || mode === 'education' || mode === 'mentor')) {
-          results.push({
-            type: 'mentor',
-            name: educatorName,
-            description: 'Personalized mentorship and strategy sessions',
-            contact: bookingUrl || '',
-            connection_method: 'warm_intro',
-            priority: 4
-          });
-        }
-
-      } catch(e) {
-        console.error('Education query error:', e.message);
       }
+      return out;
+    })();
+
+    // ─── EVENTS ─────────────────────────────────────────────────────────────
+    const eventP = !want('event') ? [] : (async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const rows = await get(`ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=10&select=event_title,event_subtitle,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_description`);
+      if (!rows.length) return [];
+
+      // An event with no strategies listed is open to everyone.
+      const relevant = strategy
+        ? rows.filter(e => !Array.isArray(e.strategies) || !e.strategies.length ||
+            e.strategies.some(s => String(s).toLowerCase().includes(strategy) || strategy.includes(String(s).toLowerCase())))
+        : rows;
+
+      return (relevant.length ? relevant : rows).map(e => {
+        const when = `${e.event_date || ''}${e.event_time ? ' at ' + e.event_time : ''}`;
+        const where = e.event_location ? ` at ${e.event_location}` : '';
+        const desc = e.event_subtitle || e.event_description || '';
+        return {
+          type: 'event',
+          name: e.event_title || 'Utah REIA event',
+          description: `${desc ? desc + ' ' : ''}${when}${where}`.trim(),
+          contact: e.registration_url || '',
+          speaker: e.speaker_name || '',
+          connection_method: 'event_referral',
+          priority: 3
+        };
+      });
+    })();
+
+    const [education, educators, tools, vendors, events] =
+      await Promise.all([educationP, educatorP, toolP, vendorP, eventP]);
+
+    const buckets = { education, vendor: vendors, tool: tools, educator: educators, event: events };
+    for (const k of Object.keys(buckets)) {
+      buckets[k].sort((a, b) => (a.priority || 5) - (b.priority || 5));
     }
 
-    // ─── 3. TOOLS MATCHES ─────────────────────────────────────────────────────
-    if (mode === 'all' || mode === 'tools') {
-      try {
-        let toolsQuery = `${SUPABASE_URL}/rest/v1/tools_routing_matrix?is_active=eq.true&order=priority.asc&limit=5&select=tool_title,recommendation_reason,priority,strategy,blocker`;
-
-        if (strategy) toolsQuery += `&strategy=eq.${encodeURIComponent(strategy)}`;
-        else if (blocker) toolsQuery += `&blocker=eq.${encodeURIComponent(blocker)}`;
-
-        const toolsResp = await fetch(toolsQuery, { headers: baseHeaders });
-        let toolsRows = await toolsResp.json();
-
-        // Fallback — get all tools if no strategy match
-        if (!Array.isArray(toolsRows) || toolsRows.length === 0) {
-          const r = await fetch(
-            `${SUPABASE_URL}/rest/v1/tools_routing_matrix?is_active=eq.true&order=priority.asc&limit=3&select=tool_title,recommendation_reason,priority`,
-            { headers: baseHeaders }
-          );
-          toolsRows = await r.json();
+    // Round-robin across categories so the default stack is genuinely mixed
+    // instead of five results from whichever category happened to score best.
+    let top = [];
+    if (isSpecific) {
+      top = (buckets[categories[0]] || []).slice(0, maxResults);
+    } else {
+      for (let pass = 0; top.length < maxResults; pass++) {
+        let added = 0;
+        for (const c of categories) {
+          if (top.length >= maxResults) break;
+          const item = (buckets[c] || [])[pass];
+          if (item) { top.push(item); added++; }
         }
-
-        // Fetch tool URLs from ghl_tools_resources
-        const toolResourceResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/ghl_tools_resources?is_active=eq.true&select=resource_title,resource_url,resource_url_nonmember&limit=10`,
-          { headers: baseHeaders }
-        );
-        const toolResources = await toolResourceResp.json();
-
-        if (Array.isArray(toolsRows) && toolsRows.length > 0) {
-          for (const row of toolsRows.slice(0, 1)) { // max 1 tool in combined stack
-            const toolResource = Array.isArray(toolResources)
-              ? toolResources.find(t => t.resource_title?.toLowerCase().includes((row.tool_title || '').toLowerCase().split(' ')[0]))
-              : null;
-            results.push({
-              type: 'tool',
-              name: row.tool_title || 'Calculator Tool',
-              description: row.recommendation_reason || 'Analyze your deals before committing',
-              contact: toolResource?.resource_url || toolResource?.resource_url_nonmember || '',
-              connection_method: 'resource_page',
-              priority: row.priority || 6
-            });
-          }
-        }
-      } catch(e) {
-        console.error('Tools query error:', e.message);
+        if (!added) break;
       }
     }
-
-    // ─── 4. UPCOMING EVENTS ──────────────────────────────────────────────────
-    if (mode === 'all' || mode === 'events') {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        let eventsQuery = `${SUPABASE_URL}/rest/v1/ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=5&select=event_title,event_subtitle,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_description`;
-
-        const evResp = await fetch(eventsQuery, { headers: baseHeaders });
-        const evRows = await evResp.json();
-
-        if (Array.isArray(evRows) && evRows.length > 0) {
-          // Filter events by strategy match if strategy provided
-          const matchingEvents = strategy
-            ? evRows.filter(e =>
-                !Array.isArray(e.strategies) || e.strategies.length === 0 ||
-                e.strategies.some(s => s.toLowerCase().includes(strategy) || strategy.includes(s.toLowerCase()))
-              )
-            : evRows;
-
-          const topEvent = (matchingEvents.length > 0 ? matchingEvents : evRows)[0];
-          if (topEvent) {
-            const dateStr = topEvent.event_date || '';
-            const timeStr = topEvent.event_time ? ` at ${topEvent.event_time}` : '';
-            const locStr = topEvent.event_location ? ` at ${topEvent.event_location}` : '';
-            const desc = topEvent.event_subtitle || topEvent.event_description || '';
-
-            results.push({
-              type: 'event',
-              name: topEvent.event_title || 'Upcoming Utah REE-AH Event',
-              description: desc ? `${desc}${dateStr ? ' on ' + dateStr : ''}${timeStr}${locStr}` : `${dateStr}${timeStr}${locStr}`,
-              contact: topEvent.registration_url || '',
-              speaker: topEvent.speaker_name || '',
-              connection_method: 'event_referral',
-              priority: 3
-            });
-          }
-        }
-      } catch(e) {
-        console.error('Events query error:', e.message);
-      }
-    }
-
-    // ─── SORT AND LIMIT ───────────────────────────────────────────────────────
-    results.sort((a, b) => (a.priority || 5) - (b.priority || 5));
-    const top = results.slice(0, maxResults);
 
     if (top.length === 0) {
       return vapiResult(
         'NO_MATCH — Say exactly this to the caller: ' +
         '"I was not able to find a specific match for what you are looking for right now. ' +
-        'I will make sure someone from our Utah REE-AH team reaches out to you directly to help find the right resources." ' +
+        'I will make sure someone from our Utah REIA team reaches out to you directly to help find the right resources." ' +
         'Then ask "Is there anything else I can help you with today?" and close the call normally with Mahalo.'
       );
     }
 
-    // ─── BUILD VOICE RESPONSE ─────────────────────────────────────────────────
-    const parts = [];
-    top.forEach((r, i) => {
-      const num = i + 1;
-      const contact = r.contact ? ` — ${r.contact}` : '';
-      const educator = r.educator ? ` with ${r.educator}` : '';
-
-      const method = r.connection_method || 'ai_recommendation';
-
+    // ─── VOICE RESPONSE ─────────────────────────────────────────────────────
+    const parts = top.map((r, i) => {
+      const n = i + 1;
+      const link = r.contact ? ' I will include the link in your follow-up message.' : '';
       if (r.type === 'vendor') {
-        if (method === 'warm_intro') {
-          parts.push(`${num}. ${r.name} — ${r.description}. I will send them your contact info so they reach out to you directly within 24 hours.`);
-        } else if (method === 'vendor_directory') {
-          parts.push(`${num}. ${r.name} — ${r.description}. I will include their link in your follow-up message.`);
-        } else {
-          parts.push(`${num}. ${r.name} — ${r.description}${contact}`);
+        if (r.connection_method === 'warm_intro') {
+          return `${n}. ${r.name} — ${r.description}. I will send them your contact info so they reach out within 24 hours.`;
         }
-      } else if (r.type === 'education') {
-        parts.push(`${num}. ${r.name}${educator} — ${r.description}${contact}`);
-      } else if (r.type === 'mentor') {
-        const bookLink = r.contact ? ` — book at ${r.contact}` : '';
-        parts.push(`${num}. ${r.name} for a personalized mentorship session${bookLink}`);
-      } else if (r.type === 'tool') {
-        const toolLink = r.contact ? ` — I will include the link in your follow-up message` : '';
-        parts.push(`${num}. ${r.name} — ${r.description}${toolLink}`);
-      } else if (r.type === 'event') {
-        const speaker = r.speaker ? ` featuring ${r.speaker}` : '';
-        const reg = r.contact ? ` — I will include the registration link in your follow-up message` : '';
-        parts.push(`${num}. Upcoming event: ${r.name}${speaker} — ${r.description}${reg}`);
+        return `${n}. ${r.name} — ${r.description}.${link}`;
       }
+      if (r.type === 'educator') return `${n}. ${r.name} for ${r.description}.${link}`;
+      if (r.type === 'tool')     return `${n}. ${r.name} — ${r.description}.${link}`;
+      if (r.type === 'event') {
+        const sp = r.speaker ? ` featuring ${r.speaker}` : '';
+        return `${n}. Upcoming event: ${r.name}${sp} — ${r.description}.${r.contact ? ' I will include the registration link in your follow-up message.' : ''}`;
+      }
+      return `${n}. ${r.name} — ${r.description}.${link}`;
     });
 
-    const summary = top.map(r => r.name).join('. ');
-    // Check if any resource uses warm_intro — mention it proactively
-    const hasWarmIntro = top.some(r => r.connection_method === 'warm_intro');
-    const warmIntroNote = hasWarmIntro ? ' For any warm intro resources, I will send your contact info to the vendor automatically after this call.' : '';
+    const warmIntro = top.some(r => r.connection_method === 'warm_intro')
+      ? ' For any warm intro, I will send your contact info to them automatically after this call.'
+      : '';
 
-    const response = `Here are the resources that match your needs. ${parts.join('. ')}.${warmIntroNote} Which of these would be most useful to start with, or would you like all of them?`;
+    let closer;
+    if (isSpecific && top.length < 5) {
+      // Deliver what matched, then offer to widen. Never pad silently.
+      const label = { vendor: 'vendors', education: 'trainings', educator: 'educators', tool: 'tools', event: 'events' }[mode] || 'resources';
+      closer = ` Those are the ${label} that fit what you described. Would you like me to include some other resources that go along with it?`;
+    } else {
+      closer = ' Which of these would be most useful to start with, or would you like all of them?';
+    }
 
-    console.log('getResourceStack returning', top.length, 'resources:', summary);
-    return vapiResult(response);
+    const lead = isSpecific
+      ? `Here is what I found for you.`
+      : `Here are the resources that match your needs.`;
 
-  } catch(e) {
+    console.log('getResourceStack returning', top.length, 'of', maxResults,
+      '| mode:', mode, '| mix:', top.map(r => r.type).join(','), '|', top.map(r => r.name).join(' / '));
+
+    return vapiResult(`${lead} ${parts.join(' ')}${warmIntro}${closer}`);
+
+  } catch (e) {
     console.error('getResourceStack error:', e.message);
-    return vapiResult('Resource lookup encountered an error. Recommend Mohammed Alhareb for personalized guidance.');
+    return vapiResult('Resource lookup encountered an error. Say that someone from the Utah REIA team will follow up with the right resources.');
   }
 }
