@@ -232,13 +232,13 @@ export default async function handler(req, res) {
       }));
 
       // Real courses matched on topic and level, not just the abstract track.
-      const cBase = `ghl_educational_courses?is_active=eq.true&limit=${depth}&select=course_name,educational_topics,education_url,paid_education,membership_required`;
-      const courses = await widen([
-        topicFilter || levelFilter ? `${cBase}${topicFilter}${levelFilter}` : null,
-        topicFilter ? `${cBase}${topicFilter}` : null,
-        levelFilter ? `${cBase}${levelFilter}` : null,
-        cBase
-      ].filter(Boolean));
+      // When the strategy is known, only topic-matched courses qualify. Falling
+      // back to level-only matches nearly every course, which pads the answer
+      // with material the caller never asked about.
+      const cBase = `ghl_educational_courses?is_active=eq.true&limit=${depth}&select=course_name,educational_topics,education_url,paid_education`;
+      const courses = await widen(topics.length
+        ? [`${cBase}${topicFilter}${levelFilter}`, `${cBase}${topicFilter}`]
+        : [levelFilter ? `${cBase}${levelFilter}` : null, cBase].filter(Boolean));
 
       for (const c of courses) {
         if (out.some(o => o.name === c.course_name)) continue;
@@ -256,13 +256,13 @@ export default async function handler(req, res) {
 
     // ─── EDUCATORS / MENTORS ────────────────────────────────────────────────
     const educatorP = !want('educator') ? [] : (async () => {
+      // Same rule as courses: a known strategy means topic-matched educators
+      // only. 43 educators are active, so a level-only fallback would return
+      // five essentially arbitrary people.
       const base = `ghl_educators_mentors?is_active=eq.true&limit=${depth}&select=educators_name,educational_topics,educators_url`;
-      const rows = await widen([
-        topicFilter && levelFilter ? `${base}${topicFilter}${levelFilter}` : null,
-        topicFilter ? `${base}${topicFilter}` : null,
-        levelFilter ? `${base}${levelFilter}` : null,
-        base
-      ].filter(Boolean));
+      const rows = await widen(topics.length
+        ? [`${base}${topicFilter}${levelFilter}`, `${base}${topicFilter}`]
+        : [levelFilter ? `${base}${levelFilter}` : null, base].filter(Boolean));
 
       return rows.map(r => ({
         type: 'educator',
