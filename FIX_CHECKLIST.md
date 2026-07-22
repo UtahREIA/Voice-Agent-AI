@@ -18,7 +18,7 @@ and the `getResourceStack` discovery that followed it.
 | 8  | Fix the stage vocabulary mismatch                 | Vercel | yes     | [x]    |
 | 9  | Add 2 missing aliases to`education.js`          | Vercel | yes     | [x]    |
 | 10 | Stop Lani inventing questions                     | Vapi   | no      | [ ]    |
-| 11 | Decision: tier on the three`deals` rules        | Chris  | n/a     | [ ]    |
+| 11 | Tier on the deal-finding rule                     | Chris  | n/a     | [x]    |
 
 Steps 7, 8 and 9 shipped together. Re-run the step 6 call to verify, and add a
 Path B call (an active investor) since that is the path steps 7 and 8 unblocked.
@@ -110,7 +110,7 @@ each one causes a specific misbehaviour you have already seen on calls.
 | Description says                                       | Code actually does                         | Symptom on the call                               |
 | ------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------- |
 | routing arrives at 3 dimensions                        | Path A needs 7-8; no count exists anywhere | Lani improvises questions to make progress        |
-| next tool is`getEducationMatch` / `getVendorMatch` | both remap to`getResourceStack`          | she called`GetVendorMatch`, it returned nothing |
+| next tool is`getEducationMatch` / `getVendorMatch` | at the time, both were remapped to the nonexistent`getResourceStack` | she called`GetVendorMatch`, it returned nothing |
 | pass these 7 dimensions                                | 23 dimensions are tracked                  | unlisted ones get under-reported, then re-asked   |
 
 Replace the whole description with:
@@ -126,15 +126,25 @@ the tool ask for it again.
 Read the result:
 - action "ask_more": ask next_question word for word. Do not skip
   ahead, do not substitute your own wording, do not call another tool.
+- action "escalate" or "1_info": say voice_bridge and do not call
+  any tool at all.
 - any other action: say voice_bridge, then call the tool named in
-  action using tool_args exactly as given. This is usually
-  getResourceStack.
+  action using tool_args exactly as given. It will be
+  getEducationMatch or getVendorMatch.
+
+Never call a tool that is not named in the action field.
 
 There is no question count. Keep calling until it stops returning
 ask_more.
 ```
 
 Save and publish.
+
+**Re-paste this if you applied step 3 before 2026-07-22.** The first version of
+this block ended with "This is usually getResourceStack", which was written
+before we discovered that tool does not exist. Leaving it in place tells Lani to
+expect a tool she cannot call, which is the exact behaviour step 7 fixed in the
+code.
 
 ---
 
@@ -425,30 +435,55 @@ requiring all three coupled layers, for a question nobody asked for.
 
 ---
 
-## Step 11 — Decision for Chris
+## Step 11 — Tier on the deal-finding rule (done)
 
-Once Path A collects a blocker, George's scenario changes tier. Scoring path A /
-`getting_started` / `industrial` / `deals`:
+Once Path A collects a blocker, `Getting Started - Deal Finding` (priority 31)
+beats `Commercial - Industrial - Getting Started` (priority 126) on the
+lowest-priority tiebreak at equal score, so Jonathan landed on `3_educator`
+where George had been `2_and_3`.
 
-| rule                                      | score | priority | tier           |
-| ----------------------------------------- | ----- | -------- | -------------- |
-| Getting Started - Deal Finding            | 15    | 31       | `3_educator` |
-| Commercial - Industrial - Getting Started | 15    | 126      | `2_and_3`    |
+**Deciding rule: tier describes what the caller needs, not what the call
+delivered.** `2_and_3` means this caller needs both education and a vendor. It
+is not a claim that a vendor was named on the call.
 
-They tie on score, and the tiebreak is lowest priority number wins, so the
-blocker rule takes it and the tier drops from `2_and_3` to `3_educator`. The
-resource stack is unaffected, since both remap to `getResourceStack`, but the
-GHL tier field changes and that is what the workflow routes on. In practice a
-commercial investor who cannot find deals stops being tagged for the vendor
-side, which is how George got PropStream on the test call.
-
-Recommendation: promote the three `deals` rules to `2_and_3`. Someone who cannot
-find deals wants a vendor as much as a course. Needs Chris's sign-off, then:
+Applied:
 
 ```sql
 update intake_routing_rules set tier = '2_and_3'
-where is_active = true and blocker = 'deals';
+where is_active = true and rule_name = 'Getting Started - Deal Finding';
 ```
+
+A new investor who cannot find deals needs to learn how to find and analyze one
+(education) and needs somewhere to look (vendor). Both, so `2_and_3`.
+
+The other two `deals` rules were left alone. An earlier version of this document
+recommended updating all three; that was written without reading the rows.
+
+- **Active - Needs Deals** stays `2_vendor`. An active investor already knows
+  the mechanics. Their gap is sourcing, which is a vendor need, not a teaching
+  need.
+- **Property Listings - Deals Blocker** stays `1_info`. It only points the
+  caller at the Utah REIA marketplace, which is genuinely information-only.
+
+### Verify this actually reaches GHL
+
+The tier in GHL comes from `structured.tier`, the Vapi structured output, not
+straight from `intake.js` (`api/ghl-sync.js` reads `structured.tier` at the
+payload, tag and custom-field writes). The chain is: rule tier -> intake META
+-> Lani carries it into the structured output -> `ghl-sync`.
+
+That chain held on the Jonathan call, where intake returned `3_educator` and
+the structured output emitted `3_educator`. On the next matching test call,
+confirm `Structured data extracted:` shows `"tier":"2_and_3"` and the contact
+picks up the `VA Tier: 2_and_3` tag. If the log line shows `2_and_3` from
+intake but the structured output still says `3_educator`, the gap is in the
+structured-output description telling Lani to reuse the tool's tier.
+
+### Not solved by this
+
+Jonathan still only heard about a course. The tag now records that he needed a
+vendor too, but nothing surfaced one on the call. That is the combined-stack
+gap in step 7, and it is the real fix.
 
 ---
 
