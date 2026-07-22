@@ -70,6 +70,32 @@ const TOPICS_BY_STRATEGY = {
   not_sure: []
 };
 
+// Vocabulary 1 -> the routing matrices, which spell strategies differently
+// again. education_routing_matrix carries no per-asset commercial rows, so the
+// commercial asset types collapse to 'commercial' here. The remaining entries
+// are nearest-neighbour fallbacks, only ever tried after the caller's own
+// strategy has been attempted verbatim.
+const MATRIX_STRATEGY = {
+  industrial: ['commercial'],
+  retail: ['commercial'],
+  multi_family: ['commercial'],
+  self_storage: ['commercial'],
+  mobile_home: ['commercial'],
+  hotel: ['commercial'],
+  assisted_living: ['commercial'],
+  farm_land: ['commercial'],
+  rv_parks: ['commercial'],
+  tax_deeds_liens: ['tax_deeds'],
+  notes_lending: ['notes_and_lending'],
+  not_sure: ['not_sure_yet'],
+  wholesale: ['wholesale', 'wholesaling'],
+  syndication: ['raising_capital'],
+  passive_investing: ['buy_and_hold'],
+  house_hacking: ['buy_and_hold'],
+  mid_term_coliving: ['short_term_rental'],
+  land_entitlement: ['development']
+};
+
 // Which categories a requested mode resolves to, and how deep to go.
 const MODE_CATEGORIES = {
   all: ['education', 'vendor', 'tool', 'educator', 'event'],
@@ -135,6 +161,13 @@ export default async function handler(req, res) {
   const longStage  = rawStage;
   const topics = TOPICS_BY_STRATEGY[strategy] || (strategy ? [strategy] : []);
 
+  // The caller's own strategy is always tried first; altStrategy is the
+  // matrix-vocabulary fallback for when the matrices have no row for it.
+  const altStrategies = MATRIX_STRATEGY[strategy] || [];
+  const inList = (vals) => `in.(${vals.map(encodeURIComponent).join(',')})`;
+  const stratEq  = strategy ? `&strategy=eq.${encodeURIComponent(strategy)}` : '';
+  const stratAlt = altStrategies.length ? `&strategy=${inList(altStrategies)}` : '';
+
   console.log('getResourceStack args:', { stage: rawStage, shortStage, strategy, topics, blocker, mode, maxResults });
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -180,11 +213,13 @@ export default async function handler(req, res) {
     // ─── EDUCATION: routing-matrix tracks, then real courses ────────────────
     const educationP = !want('education') ? [] : (async () => {
       const base = `education_routing_matrix?is_active=eq.true&order=priority.asc&limit=${depth}&select=track_name,description,resource_titles,priority`;
+      const stageEq = shortStage ? `&stage=eq.${encodeURIComponent(shortStage)}` : '';
       const rows = await widen([
-        shortStage && strategy ? `${base}&stage=eq.${encodeURIComponent(shortStage)}&strategy=eq.${encodeURIComponent(strategy)}` : null,
-        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
-        shortStage ? `${base}&stage=eq.${encodeURIComponent(shortStage)}` : null,
-        base
+        stageEq && stratEq  ? `${base}${stageEq}${stratEq}`  : null,
+        stageEq && stratAlt ? `${base}${stageEq}${stratAlt}` : null,
+        stratEq  ? `${base}${stratEq}`  : null,
+        stratAlt ? `${base}${stratAlt}` : null,
+        stageEq  ? `${base}${stageEq}`  : null
       ].filter(Boolean));
 
       const out = rows.map(r => ({
@@ -242,14 +277,16 @@ export default async function handler(req, res) {
 
     // ─── TOOLS: routing matrix joined to real records via tool_record_id ────
     const toolP = !want('tool') ? [] : (async () => {
+      // Only 11 tool rows exist across 5 strategies, so most callers legitimately
+      // have no matching tool. Stop at blocker rather than falling back to "any
+      // tool" — a relevant stack of 5 beats a padded 6 with a wrong one in it.
       const base = `tools_routing_matrix?is_active=eq.true&order=priority.asc&limit=${depth}&select=tool_title,recommendation_reason,priority,tool_record_id`;
       const rows = await widen([
-        shortStage && strategy ? `${base}&stage=eq.${encodeURIComponent(shortStage)}&strategy=eq.${encodeURIComponent(strategy)}` : null,
-        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
-        blocker ? `${base}&blocker=eq.${encodeURIComponent(blocker)}` : null,
-        shortStage ? `${base}&stage=eq.${encodeURIComponent(shortStage)}` : null,
-        base
+        stratEq  ? `${base}${stratEq}`  : null,
+        stratAlt ? `${base}${stratAlt}` : null,
+        blocker  ? `${base}&blocker=eq.${encodeURIComponent(blocker)}` : null
       ].filter(Boolean));
+      if (!rows.length) return [];
 
       const records = await get(`ghl_tools_resources?is_active=eq.true&limit=50&select=ghl_record_id,resource_title,resource_url,resource_url_nonmember`);
       const byId = new Map(records.map(t => [t.ghl_record_id, t]));
@@ -272,9 +309,16 @@ export default async function handler(req, res) {
 
     // ─── VENDORS ────────────────────────────────────────────────────────────
     const vendorP = !want('vendor') ? [] : (async () => {
+      // investor_need carries the same vocabulary as blocker (deals, funding,
+      // team, legal, ...), so the caller's blocker picks the right vendor kind.
       const base = `vendor_routing_matrix?is_active=eq.true&order=priority.asc&limit=10&select=investor_need,strategy,vendor_categories,connection_methods,priority`;
+      const needEq = blocker ? `&investor_need=eq.${encodeURIComponent(blocker)}` : '';
       const rows = await widen([
-        strategy ? `${base}&strategy=eq.${encodeURIComponent(strategy)}` : null,
+        stratEq && needEq  ? `${base}${stratEq}${needEq}`  : null,
+        stratAlt && needEq ? `${base}${stratAlt}${needEq}` : null,
+        stratEq  ? `${base}${stratEq}`  : null,
+        stratAlt ? `${base}${stratAlt}` : null,
+        needEq   ? `${base}${needEq}`   : null,
         base
       ].filter(Boolean));
       if (!rows.length) return [];
