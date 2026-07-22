@@ -403,23 +403,30 @@ export default async function handler(req, res) {
       readiness: readiness || ''
     };
 
-    // Only name tools that actually exist in Vapi. There is no getResourceStack
-    // tool, so routing to it left the agent guessing and substituting whatever
-    // it did have. A few routing_action rows also carry a tier value such as
-    // 1_info by mistake, which is not a tool name either.
-    const VALID_ACTIONS = ['getEducationMatch', 'getVendorMatch', 'escalate'];
+    // routing_action holds either a Vapi tool name or a sentinel meaning no tool
+    // call at all. escalate hands off to a human. 1_info delivers the rule's
+    // voice_bridge on its own, which is how the property marketplace rules work,
+    // since there is no tool sitting behind the marketplace. Only getResourceStack
+    // was neither, and naming it left the agent to substitute whatever it had.
+    const TOOL_ACTIONS = ['getEducationMatch', 'getVendorMatch'];
+    const NO_TOOL_ACTIONS = ['escalate', '1_info'];
     const specificMode = vapiArgs.specific_mode || vapiArgs.mode || '';
     let finalAction = matchedRule.routing_action;
-    if (!VALID_ACTIONS.includes(finalAction)) {
-      console.warn('Intake routing — rule', matchedRule.rule_name, 'has unusable routing_action:', finalAction, '— falling back to getEducationMatch');
+    if (!TOOL_ACTIONS.includes(finalAction) && !NO_TOOL_ACTIONS.includes(finalAction)) {
+      console.warn('Intake routing — rule', matchedRule.rule_name, 'has unrecognized routing_action:', finalAction, '— falling back to getEducationMatch');
       finalAction = 'getEducationMatch';
     }
     const finalArgs = { ...mergedArgs, mode: specificMode || 'all' };
 
-    const routingInstruction = finalAction === 'escalate'
-      ? 'Say: Totally fair, I will get someone from our team to reach out within an hour. Then end the call.'
-      : 'Now call ' + finalAction + ' with these args: ' + JSON.stringify(finalArgs) +
+    let routingInstruction;
+    if (finalAction === 'escalate') {
+      routingInstruction = 'Say: Totally fair, I will get someone from our team to reach out within an hour. Then end the call.';
+    } else if (finalAction === '1_info') {
+      routingInstruction = 'Say this, then ask if there is anything else. Do not call another tool: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
+    } else {
+      routingInstruction = 'Now call ' + finalAction + ' with these args: ' + JSON.stringify(finalArgs) +
         '. Say this first: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
+    }
 
     console.log('Intake routing — path:', path, '| stage:', stage, '(rule key:', ruleStage + ')', '| blocker:', blocker, '| action:', finalAction, '| tier:', matchedRule.tier, '| rule:', matchedRule.rule_name);
 

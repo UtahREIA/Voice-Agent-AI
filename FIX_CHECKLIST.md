@@ -319,16 +319,23 @@ Fix applied in `api/intake.js`:
 
 - deleted the remap so the rule's own `routing_action` passes through
 - both catch-all fallbacks now name `getEducationMatch` instead
-- added a `VALID_ACTIONS` guard, because two live rules carry a tier value in
-  the action column and would otherwise tell Lani to call a tool named `1_info`:
+- taught it that `routing_action` holds either a tool name or a no-tool
+  sentinel, and added a warning for anything that is neither
 
-| rule                                | priority | routing_action |
-| ----------------------------------- | -------- | -------------- |
-| Property Listings - Wholesale Strategy | 8     | `1_info`     |
-| Property Listings - Deals Blocker      | 10    | `1_info`     |
+`routing_action` across all rules: `getEducationMatch` (128), `getVendorMatch`
+(38), `1_info` (2), `escalate` (1).
 
-Those two rows should be corrected in Supabase rather than left to the guard.
-The guard logs a warning naming the rule when it fires.
+`escalate` was already handled as a sentinel. `1_info` is the same pattern and
+was not, so it fell through to "Now call 1_info with these args". It sits on the
+two Property Listings rules, whose `voice_bridge` points at the Utah REIA
+marketplace. There is no tool behind the marketplace, so the rule is meant to
+deliver its line and stop.
+
+**This was initially misdiagnosed in this document as a data error, and the
+first version of the guard rewrote `1_info` to `getEducationMatch`.** That was
+a regression: a caller who should hear "Utah REIA has a marketplace for exactly
+that" would have got an education lookup instead. Corrected so `1_info`
+delivers the voice_bridge and calls nothing.
 
 ### Why not wire up getResourceStack instead
 
