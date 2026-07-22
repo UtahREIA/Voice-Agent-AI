@@ -111,7 +111,10 @@ export default async function handler(req, res) {
     vendor_market = '',
     vendor_reia_connection = '',
     vendor_enrollment_interest = '',
-    vendor_follow_up_preference = ''
+    vendor_follow_up_preference = '',
+    // Not a dimension to collect. Set only when the caller explicitly asks for
+    // one kind of resource, which narrows the stack to that category.
+    resource_request = ''
   } = vapiArgs;
 
   // Map of collected values, keyed by the param name each question fills.
@@ -376,10 +379,10 @@ export default async function handler(req, res) {
     // Absolute fallback if no catch all exists.
     if (!matchedRule) {
       return res.status(200).json(vapiResult({
-        result: 'Now call getEducationMatch with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
-        action: 'getEducationMatch',
+        result: 'Now call getResourceStack with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
+        action: 'getResourceStack',
         tier: '1_info',
-        tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' },
+        tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' },
         voice_bridge: 'Based on what you have shared, here is where I would start.',
         stage_context: stageContext,
         next_question: null,
@@ -403,20 +406,26 @@ export default async function handler(req, res) {
       readiness: readiness || ''
     };
 
-    // routing_action holds either a Vapi tool name or a sentinel meaning no tool
-    // call at all. escalate hands off to a human. 1_info delivers the rule's
-    // voice_bridge on its own, which is how the property marketplace rules work,
-    // since there is no tool sitting behind the marketplace. Only getResourceStack
-    // was neither, and naming it left the agent to substitute whatever it had.
-    const TOOL_ACTIONS = ['getEducationMatch', 'getVendorMatch'];
+    // Every caller gets the combined stack, which returns 5-6 resources across
+    // vendors, educators, education, tools and events. Narrowing to a single
+    // category is the caller's call to make, not the rule's, so the rule's
+    // routing_action no longer picks the tool. It still supplies tier and
+    // voice_bridge, which is where its real intelligence lives.
+    //
+    // escalate and 1_info stay as no-tool sentinels: escalate hands off to a
+    // human, 1_info delivers the rule's voice_bridge on its own, which is how
+    // the property marketplace rules work since no tool sits behind them.
     const NO_TOOL_ACTIONS = ['escalate', '1_info'];
-    const specificMode = vapiArgs.specific_mode || vapiArgs.mode || '';
-    let finalAction = matchedRule.routing_action;
-    if (!TOOL_ACTIONS.includes(finalAction) && !NO_TOOL_ACTIONS.includes(finalAction)) {
-      console.warn('Intake routing — rule', matchedRule.rule_name, 'has unrecognized routing_action:', finalAction, '— falling back to getEducationMatch');
-      finalAction = 'getEducationMatch';
+    const KNOWN_ACTIONS = ['getEducationMatch', 'getVendorMatch', ...NO_TOOL_ACTIONS];
+    if (!KNOWN_ACTIONS.includes(matchedRule.routing_action)) {
+      console.warn('Intake routing — rule', matchedRule.rule_name, 'has unrecognized routing_action:', matchedRule.routing_action);
     }
-    const finalArgs = { ...mergedArgs, mode: specificMode || 'all' };
+
+    const requestedMode = (resource_request || vapiArgs.specific_mode || vapiArgs.mode || '').trim();
+    const finalAction = NO_TOOL_ACTIONS.includes(matchedRule.routing_action)
+      ? matchedRule.routing_action
+      : 'getResourceStack';
+    const finalArgs = { ...mergedArgs, mode: requestedMode || 'all' };
 
     let routingInstruction;
     if (finalAction === 'escalate') {
@@ -428,7 +437,7 @@ export default async function handler(req, res) {
         '. Say this first: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
     }
 
-    console.log('Intake routing — path:', path, '| stage:', stage, '(rule key:', ruleStage + ')', '| blocker:', blocker, '| action:', finalAction, '| tier:', matchedRule.tier, '| rule:', matchedRule.rule_name);
+    console.log('Intake routing — path:', path, '| stage:', stage, '(rule key:', ruleStage + ')', '| blocker:', blocker, '| action:', finalAction, '| mode:', finalArgs.mode, '| tier:', matchedRule.tier, '| rule:', matchedRule.rule_name);
 
     return res.status(200).json(vapiResult({
       result: routingInstruction,
@@ -447,10 +456,10 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('Intake routing error:', e.message);
     return res.status(200).json(vapiResult({
-      result: 'Now call getEducationMatch with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
-      action: 'getEducationMatch',
+      result: 'Now call getResourceStack with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
+      action: 'getResourceStack',
       tier: '1_info',
-      tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' },
+      tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' },
       voice_bridge: 'Based on what you have shared, here is where I would start.',
       stage_context: null,
       next_question: null
