@@ -24,6 +24,7 @@ and the `getResourceStack` discovery that followed it.
 | 14 | Add`resource_request` to getIntakeRouting       | Vapi   | no      | [x]    |
 | 15 | Route intake to`getResourceStack`               | Vercel | yes     | [x]    |
 | 16 | Verification call: 5-6 mixed resources            | both   | no      | [ ]    |
+| 17 | Re-paste the step 3 description (names the tool)   | Vapi   | no      | [ ]    |
 
 Steps 7, 8 and 9 shipped together. Re-run the step 6 call to verify, and add a
 Path B call (an active investor) since that is the path steps 7 and 8 unblocked.
@@ -134,8 +135,9 @@ Read the result:
 - action "escalate" or "1_info": say voice_bridge and do not call
   any tool at all.
 - any other action: say voice_bridge, then call the tool named in
-  action using tool_args exactly as given. It will be
-  getEducationMatch or getVendorMatch.
+  action using tool_args exactly as given. It will normally be
+  getResourceStack. Pass tool_args through unchanged, including
+  the mode field.
 
 Never call a tool that is not named in the action field.
 
@@ -145,11 +147,18 @@ ask_more.
 
 Save and publish.
 
-**Re-paste this if you applied step 3 before 2026-07-22.** The first version of
-this block ended with "This is usually getResourceStack", which was written
-before we discovered that tool does not exist. Leaving it in place tells Lani to
-expect a tool she cannot call, which is the exact behaviour step 7 fixed in the
-code.
+**Re-paste this whenever the routing target changes.** This block has now been
+wrong twice, both times because the text named a tool the code no longer
+returned:
+
+| version | said | why it was wrong |
+| --- | --- | --- |
+| original | "usually getResourceStack" | that tool did not exist yet |
+| after step 7 | "getEducationMatch or getVendorMatch" | step 15 moved routing to getResourceStack |
+
+The durable instruction is "call the tool named in the action field". Treat any
+named example as something that goes stale, and re-check it against what
+`intake.js` actually emits after every routing change.
 
 ---
 
