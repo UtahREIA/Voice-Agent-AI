@@ -554,20 +554,65 @@ until it does.
 - **Description:** Returns a matched set of Utah REIA resources. Call it with
   every dimension known about the caller. Read the result aloud as written.
 
-Parameters, all strings:
+Parameters. Paste the **whole** object below into the JSON view, including the
+`type` and `properties` wrapper. A bare map of property names is rejected with
+`Invalid JSON Schema ... expected "object" ... properties Required`.
 
 ```json
 {
-  "stage":    { "type": "string", "description": "Caller's investing stage, same value passed to getIntakeRouting." },
-  "strategy": { "type": "string", "description": "Caller's investing strategy, same value passed to getIntakeRouting." },
-  "blocker":  { "type": "string", "description": "Caller's main blocker, same value passed to getIntakeRouting." },
-  "goal":     { "type": "string", "description": "What the caller wants to accomplish, in their words." },
-  "mode":     { "type": "string", "description": "Which kind of resource the caller asked for. Use all unless they named one.",
-                "enum": ["all", "vendor", "education", "educator", "tool", "event"] }
+  "type": "object",
+  "properties": {
+    "stage": {
+      "type": "string",
+      "description": "The caller's investing stage. Pass the same value you passed to getIntakeRouting.",
+      "enum": ["exploring__new", "getting_started", "active_investor", "experienced_investor", "veteran__operator"]
+    },
+    "strategy": {
+      "type": "string",
+      "description": "The caller's investing strategy. Pass the same value you passed to getIntakeRouting.",
+      "enum": [
+        "assisted_living", "brrrr", "buy_and_hold", "commercial",
+        "creative_financing", "development", "farm_land", "fix_and_flip",
+        "hotel", "house_hacking", "industrial", "land_entitlement",
+        "mentoring_others", "mid_term_coliving", "mobile_home", "multi_family",
+        "not_sure", "notes_lending", "out_of_state", "passive_investing",
+        "raising_capital", "retail", "rv_parks", "self_storage",
+        "short_term_rental", "syndication", "tax_deeds_liens",
+        "tax_optimization", "wholesale"
+      ]
+    },
+    "blocker": {
+      "type": "string",
+      "description": "The caller's main blocker. Pass the same value you passed to getIntakeRouting.",
+      "enum": [
+        "analysis_paralysis", "build_network", "capital", "connections",
+        "deal_analysis", "deals", "education", "escalation", "legal",
+        "management", "mindset", "numbers_confidence", "strategy_clarity",
+        "take_action", "team"
+      ]
+    },
+    "goal": {
+      "type": "string",
+      "description": "What the caller wants to accomplish, in their own words."
+    },
+    "mode": {
+      "type": "string",
+      "description": "Which kind of resource the caller asked for. Use all unless the caller explicitly named one kind, for example just vendors or only classes.",
+      "enum": ["all", "vendor", "education", "educator", "tool", "event"]
+    }
+  },
+  "required": []
 }
 ```
 
+The `stage`, `strategy` and `blocker` enums must match the `getIntakeRouting`
+ones exactly. `resources.js` looks strategy up in `TOPICS_BY_STRATEGY` and
+`MATRIX_STRATEGY`, so free text misses every map and silently degrades to a
+weaker fallback.
+
 `mode` defaults to `all` when omitted, which returns the mixed 5-6 stack.
+`required` is intentionally empty; every field is optional so a sparse call
+still returns something.
 
 ---
 
@@ -575,7 +620,12 @@ Parameters, all strings:
 
 Lani currently has no way to tell the routing layer that the caller asked for a
 specific category, which is the same three-layer coupling gap `specific_need`
-had. Add to `getIntakeRouting`:
+had.
+
+Unlike step 13, this is a **fragment**, not a whole schema. `getIntakeRouting`
+already exists, so paste this *inside* its existing `properties` object
+alongside `stage`, `blocker` and the rest. Do not wrap it in `type`/`properties`
+or you will nest a schema inside a schema. Same for steps 1 and 4.
 
 ```json
 "resource_request": {
