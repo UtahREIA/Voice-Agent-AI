@@ -19,6 +19,10 @@ and the `getResourceStack` discovery that followed it.
 | 9  | Add 2 missing aliases to`education.js`          | Vercel | yes     | [x]    |
 | 10 | Stop Lani inventing questions                     | Vapi   | no      | [ ]    |
 | 11 | Tier on the deal-finding rule                     | Chris  | n/a     | [x]    |
+| 12 | Rewrite`resources.js` for matched mixed results | Vercel | yes     | [x]    |
+| 13 | Create the`getResourceStack` tool in Vapi       | Vapi   | no      | [ ]    |
+| 14 | Add`resource_request` to getIntakeRouting       | Vapi   | no      | [ ]    |
+| 15 | Route intake to`getResourceStack`               | Vercel | yes     | [ ]    |
 
 Steps 7, 8 and 9 shipped together. Re-run the step 6 call to verify, and add a
 Path B call (an active investor) since that is the path steps 7 and 8 unblocked.
@@ -483,7 +487,118 @@ structured-output description telling Lani to reuse the tool's tier.
 
 Jonathan still only heard about a course. The tag now records that he needed a
 vendor too, but nothing surfaced one on the call. That is the combined-stack
-gap in step 7, and it is the real fix.
+gap, now addressed in steps 12-15.
+
+---
+
+## Step 12 — Rewrite `resources.js` (done)
+
+Requirement: every caller hears 5-6 resources spread across the five
+categories, filtered to what matches. If they ask for one category, up to 5 of
+that category, and when it comes back thin we deliver what matched and offer to
+widen rather than padding.
+
+The blocker was never the shape, it was matching. **Four** vocabularies are
+live at once and nothing translated between them:
+
+| vocabulary | used by | example |
+| --- | --- | --- |
+| long stage | Vapi enum, `educational_level` on the ghl_* tables | `active_investor` |
+| short stage | `education_routing_matrix.stage`, `tools_routing_matrix.stage` | `active` |
+| topics | `educational_topics` on the ghl_* tables | `fix__flip` |
+| matrix strategy | `education_routing_matrix.strategy` | `notes_and_lending` |
+
+`education_routing_matrix` has no `industrial` row but does have `commercial`,
+and `commercial_asset_types` is empty on every active record, so all commercial
+asset types route through the `commercial` topic and strategy.
+
+Also fixed:
+
+- educators were never matched at all, just the first active row via `limit=1`
+- tools now join `ghl_tools_resources` on `tool_record_id`, not a first-word
+  substring guess
+- real courses from `ghl_educational_courses` are surfaced, not only tracks
+- vendors filter on `investor_need`, which shares the blocker vocabulary
+- a known strategy means topic-matched or nothing; level-only fallbacks matched
+  nearly every course and 35 of 43 educators
+- tools stop widening at blocker; only 11 tool rows exist across 5 strategies,
+  so most callers genuinely have no tool and a clean 5 beats a padded 6
+- REE-AH replaced with Utah REIA per the naming rule
+
+Verified live. Jonathan's inputs (`getting_started` / `industrial` / `deals`):
+
+| | before | after |
+| --- | --- | --- |
+| 1 | BRRRR Execution Track | **Commercial Real Estate Execution Track** |
+| 2 | Build Scope AI rehab estimator (fix and flip) | wholesaler / agent vendor (deal sourcing) |
+| 3 | Summer BBQ event | commercial educator |
+| 4 | Zion Testing (unmatched educator) | Summer BBQ event |
+| 5 | Mortgage Broker TESTING | commercial course |
+
+`mode=education` returns the commercial track alone plus the offer.
+`mode=tools` correctly returns NO_MATCH. An `active_investor` /
+`fix_and_flip` / `team` caller gets all six across all five categories.
+
+Remaining noise is test data in Supabase, not code: several records are still
+named "TESTING" and will read out on live calls.
+
+---
+
+## Step 13 — Create the `getResourceStack` tool in Vapi
+
+This is the tool that has never existed. Nothing in step 12 reaches a caller
+until it does.
+
+- **Name:** `getResourceStack`
+- **Server URL:** `https://voice-agent-ai-nu.vercel.app/api/resources`
+- **Description:** Returns a matched set of Utah REIA resources. Call it with
+  every dimension known about the caller. Read the result aloud as written.
+
+Parameters, all strings:
+
+```json
+{
+  "stage":    { "type": "string", "description": "Caller's investing stage, same value passed to getIntakeRouting." },
+  "strategy": { "type": "string", "description": "Caller's investing strategy, same value passed to getIntakeRouting." },
+  "blocker":  { "type": "string", "description": "Caller's main blocker, same value passed to getIntakeRouting." },
+  "goal":     { "type": "string", "description": "What the caller wants to accomplish, in their words." },
+  "mode":     { "type": "string", "description": "Which kind of resource the caller asked for. Use all unless they named one.",
+                "enum": ["all", "vendor", "education", "educator", "tool", "event"] }
+}
+```
+
+`mode` defaults to `all` when omitted, which returns the mixed 5-6 stack.
+
+---
+
+## Step 14 — Add `resource_request` to getIntakeRouting
+
+Lani currently has no way to tell the routing layer that the caller asked for a
+specific category, which is the same three-layer coupling gap `specific_need`
+had. Add to `getIntakeRouting`:
+
+```json
+"resource_request": {
+  "type": "string",
+  "description": "Set only if the caller explicitly asks for one kind of resource, for example just vendors or only classes. Leave empty otherwise so they get the full mixed recommendation.",
+  "enum": ["vendor", "education", "educator", "tool", "event"]
+}
+```
+
+---
+
+## Step 15 — Route intake to `getResourceStack`
+
+Only after 13 and 14 are live, or routing breaks again exactly the way it did
+before. `intake.js` currently returns the rule's own `routing_action`
+(`getEducationMatch` / `getVendorMatch`), which delivers one category, not the
+5-6 mix.
+
+The original remap this document removed in step 7 was right in intent and
+wrong only because the tool did not exist and `resources.js` could not match.
+Both are now fixed, so the remap comes back deliberately: route to
+`getResourceStack`, pass `mode` from `resource_request`, and keep `escalate`
+and `1_info` as no-tool sentinels.
 
 ---
 
