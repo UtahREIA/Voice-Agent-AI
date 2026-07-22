@@ -175,6 +175,21 @@ export default async function handler(req, res) {
   const NEW_STAGES = ['exploring__new', 'getting_started'];
   const ACTIVE_STAGES = ['active_investor', 'experienced_investor', 'veteran__operator'];
 
+  // Two stage vocabularies exist. intake_questions.applies_to_stages, the Vapi
+  // enum and the constants above use the GHL derived long keys. intake_stages
+  // and intake_routing_rules were authored with short ones. Only
+  // getting_started is spelled the same in both, so it was the only stage whose
+  // rules could ever match. Normalize before querying those two tables, and
+  // keep the long form everywhere else.
+  const RULE_STAGE_KEY = {
+    exploring__new: 'exploring',
+    getting_started: 'getting_started',
+    active_investor: 'active',
+    experienced_investor: 'experienced',
+    veteran__operator: 'veteran'
+  };
+  const ruleStage = RULE_STAGE_KEY[stage] || stage;
+
   function resolvePath() {
     const ct = (caller_type || '').toLowerCase();
     // Vendor only (not also an investor) forks to V.
@@ -228,7 +243,7 @@ export default async function handler(req, res) {
     const pathOr = 'or=(path.eq.' + encodeURIComponent(path) + ',path.eq.both)';
     const [stageData, allRulesData, questionData] = await Promise.all([
       isSet(stage)
-        ? fetch(SUPABASE_URL + '/rest/v1/intake_stages?stage_key=eq.' + encodeURIComponent(stage) + '&select=*&limit=1', { headers }).then(r => r.json()).catch(() => [])
+        ? fetch(SUPABASE_URL + '/rest/v1/intake_stages?stage_key=eq.' + encodeURIComponent(ruleStage) + '&select=*&limit=1', { headers }).then(r => r.json()).catch(() => [])
         : Promise.resolve([]),
       fetch(SUPABASE_URL + '/rest/v1/intake_routing_rules?is_active=eq.true&order=priority.asc&select=*', { headers }).then(r => r.json()).catch(() => []),
       fetch(SUPABASE_URL + '/rest/v1/intake_questions?is_active=eq.true&' + pathOr + '&order=priority.asc&select=*', { headers }).then(r => r.json()).catch(() => [])
@@ -331,7 +346,7 @@ export default async function handler(req, res) {
         let mismatch = false;
         if (rule.path && rule.path !== 'both' && rule.path !== path) mismatch = true;
         if (rule.stage_key) {
-          if (rule.stage_key === stage) score += 10;
+          if (rule.stage_key === ruleStage) score += 10;
           else mismatch = true;
         }
         if (rule.strategy) {
@@ -361,8 +376,8 @@ export default async function handler(req, res) {
     // Absolute fallback if no catch all exists.
     if (!matchedRule) {
       return res.status(200).json(vapiResult({
-        result: 'Call getResourceStack with all available inputs and deliver your best recommendation.',
-        action: 'getResourceStack',
+        result: 'Now call getEducationMatch with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
+        action: 'getEducationMatch',
         tier: '1_info',
         tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' },
         voice_bridge: 'Based on what you have shared, here is where I would start.',
@@ -388,11 +403,16 @@ export default async function handler(req, res) {
       readiness: readiness || ''
     };
 
-    // Map vendor/education to the combined stack unless a mode was requested.
+    // Only name tools that actually exist in Vapi. There is no getResourceStack
+    // tool, so routing to it left the agent guessing and substituting whatever
+    // it did have. A few routing_action rows also carry a tier value such as
+    // 1_info by mistake, which is not a tool name either.
+    const VALID_ACTIONS = ['getEducationMatch', 'getVendorMatch', 'escalate'];
     const specificMode = vapiArgs.specific_mode || vapiArgs.mode || '';
     let finalAction = matchedRule.routing_action;
-    if (!specificMode && (finalAction === 'getVendorMatch' || finalAction === 'getEducationMatch')) {
-      finalAction = 'getResourceStack';
+    if (!VALID_ACTIONS.includes(finalAction)) {
+      console.warn('Intake routing — rule', matchedRule.rule_name, 'has unusable routing_action:', finalAction, '— falling back to getEducationMatch');
+      finalAction = 'getEducationMatch';
     }
     const finalArgs = { ...mergedArgs, mode: specificMode || 'all' };
 
@@ -401,7 +421,7 @@ export default async function handler(req, res) {
       : 'Now call ' + finalAction + ' with these args: ' + JSON.stringify(finalArgs) +
         '. Say this first: ' + (matchedRule.voice_bridge || 'Here is what I recommend.');
 
-    console.log('Intake routing — path:', path, '| stage:', stage, '| blocker:', blocker, '| action:', finalAction, '| tier:', matchedRule.tier);
+    console.log('Intake routing — path:', path, '| stage:', stage, '(rule key:', ruleStage + ')', '| blocker:', blocker, '| action:', finalAction, '| tier:', matchedRule.tier, '| rule:', matchedRule.rule_name);
 
     return res.status(200).json(vapiResult({
       result: routingInstruction,
@@ -420,8 +440,8 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('Intake routing error:', e.message);
     return res.status(200).json(vapiResult({
-      result: 'Call getResourceStack with all available inputs and deliver your best recommendation.',
-      action: 'getResourceStack',
+      result: 'Now call getEducationMatch with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
+      action: 'getEducationMatch',
       tier: '1_info',
       tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: 'all' },
       voice_bridge: 'Based on what you have shared, here is where I would start.',

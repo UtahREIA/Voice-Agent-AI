@@ -67,6 +67,7 @@ export default async function handler(req, res) {
     // Map all possible caller stage inputs to education_routing_matrix stage keys
     const stageMapping = {
       'exploring':        'exploring',
+      'exploring__new':   'exploring',
       'new':              'exploring',
       'beginner':         'exploring',
       'just_starting':    'exploring',
@@ -75,6 +76,7 @@ export default async function handler(req, res) {
       'active':           'active',
       'active_investor':  'active',
       'experienced':      'experienced',
+      'experienced_investor': 'experienced',
       'advanced':         'experienced',
       'veteran':          'veteran',
       'operator':         'veteran',
