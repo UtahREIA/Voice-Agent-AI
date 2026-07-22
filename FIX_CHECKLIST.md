@@ -681,8 +681,61 @@ resource_request=vendor -> Now call getResourceStack ... "mode":"vendor"
 The whole chain is live but no voice call has exercised it yet. Everything
 below has only been proven by direct HTTP.
 
-Run the step 6 call again (`getting_started` / commercial industrial /
-cannot find deals) and check three things:
+### Call 1 — Path A, the headline test
+
+Deliberately the same profile as the George and Jonathan calls so the result is
+directly comparable. Say these lines as written; they are phrased so the enums
+resolve cleanly.
+
+| she asks | you say | what it proves |
+| --- | --- | --- |
+| first / last name | "David Tester", spell it if asked | greeting flow |
+| getting started or already active | **"I am just getting started"** | `stage=getting_started`, Path A |
+| what type of investing | **"Commercial industrial, flex space"** | `strategy=industrial` |
+| what success looks like | **"Buying two more properties this year"** | `goal` |
+| what is holding you back | **"I cannot find the right deals"** | `blocker=deals`, the step 5 fix |
+| capital | **"Yes, I have funds ready to invest"** | `capital` |
+| credit | **"Strong, I could get a bank loan"** | reworded question, see below |
+| education so far | **"Books and podcasts, never had a mentor"** | `education_history` |
+| time per week | **"Ten to twenty hours"** | `time_availability`, last question |
+
+Then she should deliver **5-6 resources across categories**.
+
+Two things to notice during the call:
+
+- The credit question must be the **new** wording, "is your credit strong
+  enough for a traditional bank loan, or would you need other ways to fund a
+  deal?" The old wording drew "I don't think I can understand that question"
+  from Jonathan. Old wording means the Supabase change did not take.
+- She must **not** ask what you have already tried after the education
+  question. That was George's original complaint.
+
+### Call 1b — narrowing, same call
+
+After she delivers the stack, say: **"Can you just show me the vendors?"**
+
+She should re-call `getIntakeRouting` with `resource_request=vendor`, then
+return vendors only. Because few vendors will match, expect her to finish with
+"Would you like me to include some other resources that go along with it?"
+rather than padding the list out to five.
+
+### Call 2 — Path B, the least-proven path
+
+Short call. This path had an infinite loop, 128 dead rules and a missing
+parameter, and no voice call has ever completed it.
+
+| she asks | you say |
+| --- | --- |
+| first / last name | "Sam Tester" |
+| getting started or already active | **"I am already active, I have four rentals"** |
+| what specifically do you need | **"I need a property manager"** |
+
+Path B fast-exits, so she should go almost straight to a recommendation. **If
+she asks "what specifically do you need right now" a second time, stop** —
+that is the original loop and it means `specific_need` is not reaching the
+tool.
+
+### What to check in the Vercel log afterwards
 
 1. **`POST /api/resources` appears in the Vercel log.** This is the decisive
    one. That endpoint had never been hit in the project's history, so its
