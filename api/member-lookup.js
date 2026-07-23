@@ -62,6 +62,64 @@ export default async function handler(req, res) {
 
   const last10 = phone ? phone.replace(/\D/g, '').slice(-10) : null;
 
+  // A call only counts as having DELIVERED a recommendation when one of the
+  // real recommendation fields is populated with an ACTUAL recommendation.
+  // Two traps this guards against, both seen live in the David Tester bug:
+  //  1. stack_summary does NOT count — ghl-sync writes it as `stackSummary ||
+  //     summary`, so a call cut off mid-intake still has a long stack_summary
+  //     (usually the plain call summary, often starting with the caller's name).
+  //  2. recommended_next is populated even on cut-off calls with a sentence
+  //     SAYING no recommendation was made ("The AI did not reach the point of
+  //     delivering a specific next step ... before the caller ended the call").
+  //     Those sentinel sentences must be treated as empty.
+  function looksIncomplete(text) {
+    const t = (text || '').toLowerCase();
+    if (!t) return false;
+    return [
+      'did not reach', 'did not deliver', 'did not provide', 'did not complete',
+      'did not get to', 'was not able to', 'were not able to', 'unable to',
+      'no recommendation', 'no specific next step', 'no next step', 'not deliver',
+      'before the caller ended', 'ended the call', 'call ended', 'ended before',
+      'intake was in progress', 'incomplete', 'no result'
+    ].some(p => t.includes(p));
+  }
+  function recText(s) {
+    if (!s) return '';
+    const ven = Array.isArray(s.vendor_matches)
+      ? s.vendor_matches.filter(Boolean).join(', ')
+      : (s.vendor_matches || '');
+    const rec = (s.recommended_next || '').trim();
+    const cleanRec = looksIncomplete(rec) ? '' : rec;
+    return (cleanRec || (s.educator_match || '').trim() || ven || '').trim();
+  }
+  // rows are most-recent-first. Prefer the most recent call that actually
+  // delivered a recommendation; otherwise fall back to the most recent call so
+  // the caller (a returning caller) is still recognized, with has_recommendation
+  // false so the greeting acknowledges an unfinished call instead of inventing one.
+  function pickLastCall(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const withRec = rows.find(s => recText(s).length > 2);
+    const src = withRec || rows[0];
+    const ven = Array.isArray(src.vendor_matches)
+      ? src.vendor_matches.filter(Boolean).join(', ')
+      : (src.vendor_matches || '');
+    return {
+      has_recommendation: !!withRec,
+      // recommendation is the cleaned, ready-to-speak text (sentinel "did not
+      // reach ..." strings already stripped). index.html should speak THIS, not
+      // the raw recommended_next.
+      recommendation: withRec ? recText(src) : '',
+      recommended_next: src.recommended_next || '',
+      educator_match: src.educator_match || '',
+      vendor_matches: ven,
+      stack_summary: src.stack_summary || '',
+      blocker: src.blocker || '',
+      date: src.created_at
+        ? new Date(src.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : ''
+    };
+  }
+
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(200).json({
       result: 'Member profile lookup unavailable. phone_received=' + (phone || 'null')
@@ -179,28 +237,15 @@ export default async function handler(req, res) {
           const callerName = lastCall.caller_name || '';
           const firstName = callerName.split(' ')[0] || '';
 
-          // Build history block from past calls
-          const meaningfulCall = vacRows.find(s => {
-            const summary = (s.stack_summary || '').toLowerCase();
-            const badPhrases = ['no recommendations','intake was in progress','ended before','call ended','not delivered'];
-            return !badPhrases.some(p => summary.includes(p)) && s.stack_summary && s.stack_summary.length > 30;
-          });
-
-          const lastCallData = meaningfulCall ? {
-            stack_summary: meaningfulCall.stack_summary || '',
-            recommended_next: meaningfulCall.recommended_next || '',
-            educator_match: meaningfulCall.educator_match || '',
-            vendor_matches: Array.isArray(meaningfulCall.vendor_matches) ? meaningfulCall.vendor_matches.join(', ') : (meaningfulCall.vendor_matches || ''),
-            blocker: meaningfulCall.blocker || ''
-          } : null;
+          const lastCallData = pickLastCall(vacRows);
 
           const greeting = callerName
             ? 'RETURNING CALLER (not yet in contacts): ' + callerName + ' | phone: ' + last10 + ' | past calls: ' + vacRows.length
             : 'RETURNING CALLER (unnamed): phone: ' + last10 + ' | past calls: ' + vacRows.length;
 
-          const historyBlock = meaningfulCall
-            ? ' LAST CALL RECOMMENDATION: ' + (meaningfulCall.stack_summary || '').slice(0, 150)
-            : '';
+          const historyBlock = lastCallData && lastCallData.has_recommendation
+            ? ' LAST CALL RECOMMENDATION: ' + recText(lastCallData).slice(0, 150)
+            : ' NOTE: the last call did not finish and no recommendation was made. Do not reference a past recommendation.';
 
           return res.status(200).json({
             result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock,
@@ -293,14 +338,13 @@ export default async function handler(req, res) {
       greeting += ' I can see ' + facts.slice(0, 3).join(', and ') + '.';
     }
 
-    // Reference past calls if they exist
-    if (pastCallCount > 0 && lastCallDate) {
-      if (lastBlocker) {
-        greeting += ' Last time you called on ' + lastCallDate + ' you were working through ' + lastBlocker + '.';
-      } else if (lastRecommendation) {
-        greeting += ' Last time you called we recommended ' + lastRecommendation.slice(0, 80) + '.';
-      }
-      greeting += ' How has that been going?';
+    // Reference past calls only if we have something concrete to reference.
+    // Do not claim a past recommendation from pastCallCount alone — an
+    // unfinished call has a count but nothing was recommended.
+    if (pastCallCount > 0 && lastBlocker) {
+      greeting += ' Last time you called on ' + (lastCallDate || 'your last call') + ' you were working through ' + lastBlocker + '. How has that been going?';
+    } else if (pastCallCount > 0 && lastRecommendation) {
+      greeting += ' Last time you called we recommended ' + lastRecommendation.slice(0, 80) + '. How has that been going?';
     } else {
       greeting += ' What can I help you with today?';
     }
@@ -340,49 +384,21 @@ export default async function handler(req, res) {
       }
 
       if (Array.isArray(surveys) && surveys.length > 0) {
-        // Find the most recent call with a meaningful recommendation
-        // Skip calls with no real recommendations
-        const badPhrases = [
-          'no recommendations', 'intake was in progress', 'ended before',
-          'returning to utah', 'call ended', 'not delivered', 'unable to',
-          'no result', 'did not complete', 'incomplete'
-        ];
-
-        const meaningfulCall = surveys.find(s => {
-          const summary = (s.stack_summary || '').toLowerCase();
-          const hasBadPhrase = badPhrases.some(p => summary.includes(p));
-          if (hasBadPhrase) return false;
-
-          const hasGoodSummary = s.stack_summary && s.stack_summary.length > 30;
-          const hasEducator = s.educator_match && s.educator_match.length > 2;
-          const hasVendor = Array.isArray(s.vendor_matches) && s.vendor_matches.length > 0;
-
-          return hasGoodSummary || hasEducator || hasVendor;
-        }) || null;
-
-        if (meaningfulCall) {
-          lastCallData = {
-            stack_summary: meaningfulCall.stack_summary || '',
-            recommended_next: meaningfulCall.recommended_next || '',
-            educator_match: meaningfulCall.educator_match || '',
-            vendor_matches: Array.isArray(meaningfulCall.vendor_matches)
-              ? meaningfulCall.vendor_matches.join(', ')
-              : (meaningfulCall.vendor_matches || ''),
-            blocker: meaningfulCall.blocker || '',
-            date: meaningfulCall.created_at
-              ? new Date(meaningfulCall.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              : ''
-          };
-        }
+        // last_call feeds the spoken firstMessage in index.html. Base it on the
+        // real recommendation fields (recommended_next / educator / vendor), not
+        // stack_summary — see pickLastCall. has_recommendation false means the
+        // caller is recognized but no recommendation was ever delivered.
+        lastCallData = pickLastCall(surveys);
 
         const historyParts = surveys.map(s => {
           try {
             const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+            const rec = recText(s);
             return [
               date ? 'Call on ' + date : 'Previous call',
               s.summary ? 'Summary: ' + s.summary.slice(0, 100) : '',
               s.blocker ? 'Blocker was: ' + s.blocker : '',
-              s.stack_summary ? 'Recommended: ' + s.stack_summary.slice(0, 120) : ''
+              rec ? 'Recommended: ' + rec.slice(0, 120) : 'No recommendation was delivered on this call.'
             ].filter(Boolean).join('. ');
           } catch(e) { return null; }
         }).filter(Boolean);

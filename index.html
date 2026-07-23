@@ -793,15 +793,31 @@ async function startCall() {
       const firstName = window._memberFirstName || '';
       const lastCall = window._lastCall;
 
-      if (lastCall && (lastCall.stack_summary || lastCall.recommended_next)) {
-        // Returning member WITH past call — open with personalized follow-up
-        const recommendation = (lastCall.stack_summary || lastCall.recommended_next || '').slice(0, 160);
+      // Only follow up on an ACTUAL recommendation. stack_summary is a call
+      // summary (ghl-sync falls back to it when no stack was delivered), so it
+      // must NOT gate this opener or a cut-off intake gets read back as a
+      // fabricated recommendation. has_recommendation is set by member-lookup
+      // only when recommended_next / educator_match / vendor_matches exist.
+      // member-lookup already cleaned this (sentinel "did not reach ..." strings
+      // stripped) and set has_recommendation only for real recommendations.
+      const recommendation = lastCall && lastCall.has_recommendation
+        ? (lastCall.recommendation || '').slice(0, 160)
+        : '';
+
+      if (recommendation) {
+        // Returning member WITH a real past recommendation — follow up on it
         overrides.firstMessage = firstName
           ? 'Aloha ' + firstName + ', it is Lani, welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
           : 'Aloha, it is Lani, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
         overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name or phone number.';
+      } else if (lastCall) {
+        // Returning member whose last call was cut off before any recommendation
+        overrides.firstMessage = firstName
+          ? 'Aloha ' + firstName + ', it is Lani, welcome back to Utah REIA. It looks like we did not get to finish last time. Would you like to pick up where we left off, or is today something new?'
+          : 'Aloha, it is Lani, welcome back to Utah REIA. It looks like we did not get to finish last time. Would you like to pick up where we left off, or is today something new?';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and noted that the last call did not finish. No recommendation was ever made, so do NOT invent or reference one. Wait for their response. Do NOT ask for their name or phone number.';
       } else {
-        // Returning member but no meaningful past call history
+        // Returning member with no prior voice call at all
         overrides.firstMessage = firstName
           ? 'Aloha ' + firstName + ', it is Lani, glad you reached out to Utah REIA. How can I help you today?'
           : 'Aloha, it is Lani, glad you reached out to Utah REIA. How can I help you today?';

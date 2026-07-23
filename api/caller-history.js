@@ -143,7 +143,7 @@ export default async function handler(req, res) {
       // This is the dedicated table for voice agent history
       fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + contactId +
-        '&select=summary,blocker,goals,strategies,educator_match,vendor_matches,tool_matches,booking_url,recommended_next_step,stack_summary,created_at&order=created_at.desc&limit=5',
+        '&select=summary,blocker,goals,strategies,educator_match,vendor_matches,tool_matches,booking_url,recommended_next,stack_summary,created_at&order=created_at.desc&limit=5',
         { headers }
       ).then(r => r.json()).catch(() => []),
 
@@ -169,17 +169,43 @@ export default async function handler(req, res) {
 
     // --- STEP 3: Parse past voice agent call data ---
     // voice_agent_calls has flat columns — no JSON parsing needed
+    // A recommendation was actually delivered only if a real recommendation
+    // field holds an ACTUAL recommendation. stack_summary does NOT count —
+    // ghl-sync falls back to the plain call summary for it. recommended_next
+    // also does not count when it is a sentinel sentence saying no
+    // recommendation was made (e.g. "The AI did not reach the point of
+    // delivering a specific next step ... before the caller ended the call").
+    // Without these gates the summary gets read back as an invented
+    // "I recommended ..." (the David Duster bug).
+    function looksIncomplete(text) {
+      const t = (text || '').toLowerCase();
+      if (!t) return false;
+      return [
+        'did not reach', 'did not deliver', 'did not provide', 'did not complete',
+        'did not get to', 'was not able to', 'were not able to', 'unable to',
+        'no recommendation', 'no specific next step', 'no next step', 'not deliver',
+        'before the caller ended', 'ended the call', 'call ended', 'ended before',
+        'intake was in progress', 'incomplete', 'no result'
+      ].some(p => t.includes(p));
+    }
     const pastCalls = surveys.map(s => {
       try {
+        const vendorMatches = Array.isArray(s.vendor_matches)
+          ? s.vendor_matches.filter(Boolean).join(', ')
+          : (s.vendor_matches || '');
+        const rawRec = (s.recommended_next || '').trim();
+        const cleanRec = looksIncomplete(rawRec) ? '' : rawRec;
+        const recommendation = (cleanRec || s.educator_match || vendorMatches || '').trim();
         return {
           date: s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
           strategies: Array.isArray(s.strategies) ? s.strategies.join(', ') : (s.strategies || ''),
           blocker: s.blocker || '',
           goals: s.goals || '',
           summary: s.summary || '',
-          recommendedNext: s.recommended_next || '',
+          recommendation,
+          hasRecommendation: recommendation.length > 2,
           educatorMatch: s.educator_match || '',
-          vendorMatches: s.vendor_matches || '',
+          vendorMatches,
           bookingUrl: s.booking_url || '',
           stackSummary: s.stack_summary || ''
         };
@@ -215,13 +241,19 @@ export default async function handler(req, res) {
     }
 
     // Past voice agent calls
+    const recCall = pastCalls.find(c => c.hasRecommendation) || null;
     if (pastCalls.length > 0) {
       const lastCall = pastCalls[0];
       parts.push('Last voice agent call (' + (lastCall.date || 'recent') + '): ' +
-        (lastCall.summary || 'Discussed ' + (lastCall.strategies || lastCall.stage || 'investing topics')));
+        (lastCall.summary || 'Discussed ' + (lastCall.strategies || 'investing topics')));
 
       if (lastCall.blocker) parts.push('Previous blocker: ' + lastCall.blocker);
-      if (lastCall.recommendedNext) parts.push('Previously recommended: ' + lastCall.recommendedNext);
+
+      if (recCall) {
+        parts.push('Previously recommended: ' + recCall.recommendation);
+      } else {
+        parts.push('No recommendation was delivered on the last call (it did not finish) — do NOT reference or invent one');
+      }
 
       if (pastCalls.length > 1) {
         parts.push('Total past voice agent calls: ' + pastCalls.length);
@@ -246,11 +278,15 @@ export default async function handler(req, res) {
 
     const historyBlock = parts.join(' | ');
 
-    // Build the instruction for Claude
-    const result = 'CALLER HISTORY for ' + firstName + ': ' + historyBlock +
-      '. Use this to avoid repeating past recommendations, acknowledge their progress, ' +
-      'and build on what they already know. Reference their previous interactions naturally ' +
-      'without reading the data back verbatim.';
+    // Build the instruction for Claude. Only invite a follow-up on a past
+    // recommendation when one was actually delivered — otherwise the model
+    // invents one to satisfy the instruction.
+    const guidance = recCall
+      ? '. Use this to acknowledge their progress and avoid repeating the past recommendation noted above. '
+        + 'Reference their previous interactions naturally without reading the data back verbatim.'
+      : '. This caller has prior contact but NO past recommendation was ever delivered. '
+        + 'Do NOT claim or invent a past recommendation or ask how one went. Acknowledge them warmly and move forward.';
+    const result = 'CALLER HISTORY for ' + firstName + ': ' + historyBlock + guidance;
 
     console.log('Caller history loaded for:', contactName, '| past calls:', pastCalls.length, '| tools:', tools.length);
 
