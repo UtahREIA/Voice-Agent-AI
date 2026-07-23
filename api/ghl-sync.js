@@ -631,6 +631,33 @@ export default async function handler(req, res) {
       }
     }
 
+    // --- RESOURCE STACK LINKS (for the follow-up SMS) ---
+    // resources.js cached the exact links getResourceStack delivered on this
+    // call, keyed by vapi_call_id (voice_agent_stack_links). Read them back so
+    // the SMS carries real links, not just a summary. This is deterministic and
+    // does not depend on the per-resource structured outputs, which per CLAUDE.md
+    // do not reliably emit.
+    let stackLinks = '';
+    if (vapiCallId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      try {
+        const linkResp = await fetch(
+          `${process.env.SUPABASE_URL}/rest/v1/voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=sms_links&limit=1`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': process.env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+            }
+          }
+        );
+        const linkData = await linkResp.json();
+        if (Array.isArray(linkData) && linkData[0]?.sms_links) stackLinks = linkData[0].sms_links;
+        console.log('Resource stack links resolved:', stackLinks ? stackLinks.length + ' chars' : 'none');
+      } catch(e) {
+        console.error('Stack links lookup error:', e.message);
+      }
+    }
+
     console.log('Phone sources — structured:', structured.callerPhone,
       '| preCallPhone:', variableValues.preCallPhone,
       '| fromContext:', phoneFromContext,
@@ -691,13 +718,21 @@ export default async function handler(req, res) {
       // Append booking URL to stack summary if educator was matched
       // This ensures the URL always appears in the SMS even if Claude omitted it
       stackSummary: (() => {
-        let s = structured.stackSummary || summary || '';
+        let s = (structured.stackSummary || summary || '').slice(0, 300);
         const bookingUrl = educatorBookingUrl || structured.bookingUrl || '';
         const educatorName = structured.educatorMatch || '';
-        if (bookingUrl && s && !s.includes(bookingUrl)) {
+        // Append the educator booking URL only if it is not already carried by
+        // the cached stack links below (avoids listing it twice).
+        const bookingInLinks = bookingUrl && stackLinks.includes(bookingUrl);
+        if (bookingUrl && s && !s.includes(bookingUrl) && !bookingInLinks) {
           s = s + (educatorName ? ' Book ' + educatorName + ': ' : ' Book here: ') + bookingUrl;
         }
-        return s.slice(0, 300); // keep under SMS limit
+        // Fold in the real resource links captured during the call so the SMS
+        // delivers on Lani's "I will include the link in your follow-up message".
+        if (stackLinks) {
+          s = s + '\n\n' + stackLinks;
+        }
+        return s.slice(0, 900); // multi-segment SMS is fine; links must survive
       })(),
       alreadyTried:   structured.alreadyTried  || '',
       vendorMatches:  structured.vendorMatches || '',

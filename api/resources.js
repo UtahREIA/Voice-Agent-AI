@@ -145,6 +145,13 @@ export default async function handler(req, res) {
     return body || {};
   }
 
+  // Vapi call id — used to cache the links this stack delivers so ghl-sync can
+  // fold them into the follow-up SMS at end of call (see voice_agent_stack_links).
+  const vapiCallId =
+    req.body?.message?.call?.id ||
+    req.body?.call?.id ||
+    null;
+
   const args = extractArgs(req.body);
   const rawStage = (args.stage || args.investor_stage || '').toLowerCase().trim();
   const strategy = (args.strategy || '').toLowerCase().trim();
@@ -452,7 +459,34 @@ export default async function handler(req, res) {
     console.log('getResourceStack returning', top.length, 'of', maxResults,
       '| mode:', mode, '| mix:', top.map(r => r.type).join(','), '|', top.map(r => r.name).join(' / '));
 
-    return vapiResult(`${lead} ${parts.join(' ')}${warmIntro}${closer}`);
+    // ─── SMS LINKS ──────────────────────────────────────────────────────────
+    // Lani never reads URLs aloud (they go in the follow-up SMS), so capture the
+    // real links for exactly the items she promised a link for — the ones with a
+    // web URL in `contact`. Cache them keyed by the Vapi call id so ghl-sync can
+    // fold them into the SMS at end of call. Warm-intro vendors are excluded:
+    // they were promised a callback, not a link.
+    const linkItems = top
+      .filter(r => r.contact && /^https?:\/\//i.test(r.contact))
+      .map(r => ({ name: r.name, type: r.type, url: r.contact }));
+    const smsLinks = linkItems.length
+      ? 'Your links:\n' + linkItems.map(r => `- ${r.name}: ${r.url}`).join('\n')
+      : '';
+
+    if (vapiCallId && smsLinks) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_stack_links?on_conflict=vapi_call_id`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ vapi_call_id: vapiCallId, sms_links: smsLinks, links: linkItems, mode })
+        });
+      } catch (e) {
+        console.error('stack-links cache write error:', e.message);
+      }
+    }
+
+    const voiceText = `${lead} ${parts.join(' ')}${warmIntro}${closer}`;
+    if (toolCallId) return res.status(200).json({ results: [{ toolCallId, result: voiceText }], links: linkItems, sms_links: smsLinks });
+    return res.status(200).json({ result: voiceText, links: linkItems, sms_links: smsLinks });
 
   } catch (e) {
     console.error('getResourceStack error:', e.message);
