@@ -472,12 +472,26 @@ export default async function handler(req, res) {
       ? 'Your links:\n' + linkItems.map(r => `- ${r.name}: ${r.url}`).join('\n')
       : '';
 
-    if (vapiCallId && smsLinks) {
+    // Capture the educator in the stack (if any), even when they have no booking
+    // URL, so ghl-sync can set bookingRequired=true off a reliable signal rather
+    // than the educatorMatch structured output, which does not always emit.
+    const educatorItem = top.find(r => r.type === 'educator');
+    const educatorName = educatorItem ? (educatorItem.name || '') : '';
+    const educatorUrl  = educatorItem ? (educatorItem.contact || '') : '';
+
+    if (vapiCallId && (smsLinks || educatorName)) {
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_stack_links?on_conflict=vapi_call_id`, {
           method: 'POST',
           headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify({ vapi_call_id: vapiCallId, sms_links: smsLinks, links: linkItems, mode })
+          body: JSON.stringify({
+            vapi_call_id: vapiCallId,
+            sms_links: smsLinks,
+            links: linkItems,
+            educator_name: educatorName,
+            educator_url: educatorUrl,
+            mode
+          })
         });
       } catch (e) {
         console.error('stack-links cache write error:', e.message);

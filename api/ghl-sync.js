@@ -600,17 +600,51 @@ export default async function handler(req, res) {
       }
     }
 
-    // --- EDUCATOR BOOKING URL LOOKUP ---
-    // When an educator is matched (educatorMatch structured output has a value),
-    // look up their booking URL from Supabase education_resources and add it to
-    // the GHL payload so the workflow can send the correct booking link via SMS.
-    let educatorBookingUrl = structured.bookingUrl || '';
-    const matchedEducatorName = structured.educatorMatch || '';
+    // --- RESOURCE STACK (cached by resources.js, keyed by vapi_call_id) ---
+    // resources.js cached the exact links AND the educator getResourceStack
+    // delivered on this call (voice_agent_stack_links). Read them back so the SMS
+    // carries real links and so an educator booking is triggered off a reliable
+    // signal, not the per-resource structured outputs, which per CLAUDE.md do not
+    // reliably emit.
+    let stackLinks = '';
+    let stackEducatorName = '';
+    let stackEducatorUrl = '';
+    if (vapiCallId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      try {
+        const linkResp = await fetch(
+          `${process.env.SUPABASE_URL}/rest/v1/voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=sms_links,educator_name,educator_url&limit=1`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': process.env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+            }
+          }
+        );
+        const linkData = await linkResp.json();
+        if (Array.isArray(linkData) && linkData[0]) {
+          stackLinks        = linkData[0].sms_links     || '';
+          stackEducatorName = linkData[0].educator_name || '';
+          stackEducatorUrl  = linkData[0].educator_url  || '';
+        }
+        console.log('Resource stack resolved — links:', stackLinks ? stackLinks.length + ' chars' : 'none',
+          '| educator:', stackEducatorName || 'none');
+      } catch(e) {
+        console.error('Stack lookup error:', e.message);
+      }
+    }
+
+    // --- EDUCATOR BOOKING ---
+    // An educator counts as recommended if the delivered stack contained one
+    // (reliable) or the educatorMatch structured output named one. Prefer the
+    // cached booking URL, then the structured output, then a Supabase lookup by
+    // name (ghl_educators_mentors is the source of truth for booking URLs).
+    const matchedEducatorName = structured.educatorMatch || stackEducatorName || '';
+    let educatorBookingUrl = structured.bookingUrl || stackEducatorUrl || '';
 
     if (matchedEducatorName && !educatorBookingUrl && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       try {
         const firstWord = encodeURIComponent(matchedEducatorName.split(' ')[0]);
-        // Use ghl_educators_mentors as source of truth for educator booking URLs
         const eduResp = await fetch(
           `${process.env.SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_url,educators_name&educators_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
           {
@@ -631,32 +665,16 @@ export default async function handler(req, res) {
       }
     }
 
-    // --- RESOURCE STACK LINKS (for the follow-up SMS) ---
-    // resources.js cached the exact links getResourceStack delivered on this
-    // call, keyed by vapi_call_id (voice_agent_stack_links). Read them back so
-    // the SMS carries real links, not just a summary. This is deterministic and
-    // does not depend on the per-resource structured outputs, which per CLAUDE.md
-    // do not reliably emit.
-    let stackLinks = '';
-    if (vapiCallId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-      try {
-        const linkResp = await fetch(
-          `${process.env.SUPABASE_URL}/rest/v1/voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=sms_links&limit=1`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': process.env.SUPABASE_SERVICE_KEY,
-              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
-            }
-          }
-        );
-        const linkData = await linkResp.json();
-        if (Array.isArray(linkData) && linkData[0]?.sms_links) stackLinks = linkData[0].sms_links;
-        console.log('Resource stack links resolved:', stackLinks ? stackLinks.length + ' chars' : 'none');
-      } catch(e) {
-        console.error('Stack links lookup error:', e.message);
-      }
-    }
+    // bookingRequired: true when an educator was recommended (the caller who
+    // accepts the stack is accepting the educator with it) OR the structured
+    // output explicitly asked for a booking. Derived here so it no longer
+    // depends on structured.bookingRequired emitting.
+    const bookingRequired =
+      (structured.bookingRequired === 'true' || structured.bookingRequired === true || !!matchedEducatorName)
+        ? 'true' : 'false';
+    console.log('Booking required:', bookingRequired,
+      '| educator:', matchedEducatorName || 'none',
+      '| booking url:', educatorBookingUrl || 'none');
 
     console.log('Phone sources — structured:', structured.callerPhone,
       '| preCallPhone:', variableValues.preCallPhone,
@@ -693,7 +711,7 @@ export default async function handler(req, res) {
     // isNoMatch — only true when genuinely no resources were found
     // Check structured outputs AND stackSummary as a safety net
     const hasVendors   = structured.vendorMatches && structured.vendorMatches.length > 0;
-    const hasEducator  = structured.educatorMatch && structured.educatorMatch.trim().length > 2;
+    const hasEducator  = matchedEducatorName && matchedEducatorName.trim().length > 2;
     const hasTools     = structured.toolMatches && structured.toolMatches.length > 0;
     const hasStack     = structured.stackSummary && structured.stackSummary.trim().length > 20 &&
                          !structured.stackSummary.toLowerCase().includes('no recommendation') &&
@@ -720,7 +738,7 @@ export default async function handler(req, res) {
       stackSummary: (() => {
         let s = (structured.stackSummary || summary || '').slice(0, 300);
         const bookingUrl = educatorBookingUrl || structured.bookingUrl || '';
-        const educatorName = structured.educatorMatch || '';
+        const educatorName = matchedEducatorName || '';
         // Append the educator booking URL only if it is not already carried by
         // the cached stack links below (avoids listing it twice).
         const bookingInLinks = bookingUrl && stackLinks.includes(bookingUrl);
@@ -737,7 +755,7 @@ export default async function handler(req, res) {
       alreadyTried:   structured.alreadyTried  || '',
       vendorMatches:  structured.vendorMatches || '',
       toolMatches:    structured.toolMatches   || '',
-      educatorMatch:  structured.educatorMatch  || '',
+      educatorMatch:  matchedEducatorName  || '',
       eventMatch:     structured.eventMatch     || '',
       bookingUrl:     educatorBookingUrl || structured.bookingUrl || '', // resolved from Supabase or structured output
 
@@ -750,7 +768,7 @@ export default async function handler(req, res) {
       fundingNeeds:       blocker === 'capital' ? 'Private Money / Hard Money' : '',
       dealNeeds:          blocker === 'deals' ? 'Off Market Deals' : '',
       teamNeeds:          (blocker === 'team' || blocker === 'contractors') ? 'Contractors' : '',
-      wantsMentor:        structured.bookingRequired === 'true' ? 'Yes' : '',
+      wantsMentor:        bookingRequired === 'true' ? 'Yes' : '',
       wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
       handoffChannel: structured.handoffChannel || 'sms',
       tier:           structured.tier           || '1_info',
@@ -762,7 +780,7 @@ export default async function handler(req, res) {
       investingInterests: strategiesArray.slice(0, 3).join(', ') || '',
       accomplish6to12:    goals || '',
       whatDescribesYou:   profileType || '',
-      wantsMentor:        structured.bookingRequired === 'true' ? 'Yes' : '',
+      wantsMentor:        bookingRequired === 'true' ? 'Yes' : '',
       wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
 
       // Vendor warm intro fields — used by GHL workflow to send parallel SMS to vendor
@@ -780,7 +798,7 @@ export default async function handler(req, res) {
       recommendedNextStep,
       profileType,
       noMatch:         isNoMatch ? 'true' : 'false',
-      bookingRequired: structured.bookingRequired || 'false',
+      bookingRequired: bookingRequired,
       tier:            structured.tier            || '1_info',
 
       // Tags applied to the contact in GHL
@@ -792,7 +810,7 @@ export default async function handler(req, res) {
         'voice-agent-call-complete',
         isNoMatch ? 'va-no-match' : null,
         structured.tier         ? 'VA Tier: ' + structured.tier              : null,
-        structured.educatorMatch ? 'VA Educator: ' + structured.educatorMatch : null,
+        matchedEducatorName ? 'VA Educator: ' + matchedEducatorName : null,
         // va-vendor-matched tag removed — workflow now checks Voice Agent Vendor Matches field directly
         investorStage           ? 'Stage: ' + investorStage                  : null,
         blocker                 ? 'Blocker: ' + blocker                      : null,
@@ -816,8 +834,8 @@ export default async function handler(req, res) {
         { id: '192I9uLeuO0eFLRE9VLq', field_value: structured.vendorMatches || '' },  // Vendor Matches
         { id: 'gWwvq2pv8P6jcSGOZKa8', field_value: structured.toolMatches   || '' },  // Tool Matches
         { id: 's6q99vaJ472SDrn3lKfS', field_value: structured.eventMatch     || '' },  // Event Match
-        { id: 'A6oIIJNzdW2MdVTYX9I5', field_value: structured.educatorMatch  || '' },  // Educator Match
-        { id: 'OuoM1zSW9cwlMxpceERy', field_value: structured.bookingRequired || 'false' },     // Booking Required
+        { id: 'A6oIIJNzdW2MdVTYX9I5', field_value: matchedEducatorName  || '' },  // Educator Match
+        { id: 'OuoM1zSW9cwlMxpceERy', field_value: bookingRequired },     // Booking Required
         { id: 'stkOiKKMZh2H1EEBb47z', field_value: educatorBookingUrl || structured.bookingUrl || '' }, // Booking URL — resolved from Supabase
         { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel  || 'sms' }, // Handoff Channel
         { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },                        // Vendor Contacted (default)
@@ -1089,7 +1107,7 @@ export default async function handler(req, res) {
                 customFields: [
                   // ── VOICE AGENT FIELDS ──────────────────────────────────
                   { id: 'Ed5YpSfkVwceWfnuDK8M', field_value: structured.tier || '1_info' },
-                  { id: 'OuoM1zSW9cwlMxpceERy', field_value: structured.bookingRequired || 'false' },
+                  { id: 'OuoM1zSW9cwlMxpceERy', field_value: bookingRequired },
                   { id: '6VsempNA8BBF65gPShrQ', field_value: structured.handoffChannel || 'sms' },
                   { id: '4fpADU1aLMIF5GMW85bo', field_value: 'unknown' },
                   { id: 'XLTxDRmto8uDjYhkeEsq', field_value: isNoMatch ? 'true' : 'false' },
@@ -1119,7 +1137,7 @@ export default async function handler(req, res) {
                   }] : []),
 
                   // Would you like us to connect you with a mentor? (SINGLE_OPTIONS)
-                  ...(structured.bookingRequired === 'true' ? [{
+                  ...(bookingRequired === 'true' ? [{
                     id: 'kKWtIpls9sY2W4BZJMi8',
                     field_value: 'Yes'
                   }] : []),
@@ -1256,9 +1274,9 @@ export default async function handler(req, res) {
           summary:          summary || '',
           vendor_matches:   structured.vendorMatches || '',
           tool_matches:     structured.toolMatches || '',
-          educator_match:   structured.educatorMatch || '',
+          educator_match:   matchedEducatorName || '',
           booking_url:      educatorBookingUrl || structured.bookingUrl || '',
-          booking_required: structured.bookingRequired === 'true',
+          booking_required: bookingRequired === 'true',
           stack_summary:    structured.stackSummary || summary || '',
           recommended_next: structured.recommendedNextStep || recommendedNextStep || '',
           handoff_channel:  structured.handoffChannel || 'sms',
