@@ -427,6 +427,7 @@
       </svg>
       Begin Journey
     </button>
+    <a id="vendorLink" href="#" style="font-size:11px;color:rgba(40,15,2,.5);text-decoration:underline;cursor:pointer;margin-top:-8px;letter-spacing:0.3px;">Are you a service provider? Partner with us</a>
   </div>
   <div class="call-screen" id="callScreen">
     <div class="call-orb-area">
@@ -497,6 +498,7 @@ let timerInterval = null;
 let callStartTime = 0;
 let transcriptVisible = false;
 let vapi = null;
+let _callerType = 'investor';
 
 function log(msg) {
   debugLog.classList.add('show');
@@ -783,6 +785,7 @@ async function startCall() {
     // Always inject preCallPhone into variableValues so ghl-sync.js has it
     // even when the agent skips intake and callerPhone structured output is empty
     overrides.variableValues.preCallPhone = preCallPhone || window._memberPhone || '';
+    overrides.variableValues.caller_type = _callerType;
 
     // CLOSING RULE prepended so it never gets truncated
     const mahaloRule = 'CLOSING RULE — NON-NEGOTIABLE: The ONLY word permitted to end this call is Mahalo. Never say Goodbye. Never say Bye. Never say Take care. If you are about to say any other closing word, stop and say Mahalo instead.\n\n';
@@ -895,8 +898,27 @@ startBtn.addEventListener('click', () => {
     return;
   }
   phoneInput.style.border = '1px solid rgba(120,60,10,.25)';
+  _callerType = 'investor';
   startCall();
 });
+
+const vendorLink = document.getElementById('vendorLink');
+if (vendorLink) {
+  vendorLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    const phoneInput = document.getElementById('preCallPhone');
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+    if (!phone || phone.replace(/\D/g, '').length < 10) {
+      phoneInput.style.border = '1.5px solid rgba(180,60,20,.6)';
+      phoneInput.placeholder = 'Please enter your phone number';
+      phoneInput.focus();
+      return;
+    }
+    phoneInput.style.border = '1px solid rgba(120,60,10,.25)';
+    _callerType = 'vendor';
+    startCall();
+  });
+}
 
 
 endBtn.addEventListener('click', () => {

@@ -197,6 +197,8 @@ export default async function handler(req, res) {
     const ct = (caller_type || '').toLowerCase();
     // Vendor only (not also an investor) forks to V.
     if (/vendor|service provider|provider/.test(ct) && !/investor/.test(ct)) return 'V';
+    // TODO (planned investor+vendor combined call): when caller_type is 'both', run the investor
+    // path first, then vendor enrollment. For now 'both' falls through to investor A/B logic below.
     if (rawPath === 'V') return 'V';
     if (rawPath === 'B') return 'B';
     if (isSet(stage) && ACTIVE_STAGES.includes(stage)) return 'B';
