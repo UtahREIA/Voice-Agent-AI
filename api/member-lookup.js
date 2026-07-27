@@ -120,6 +120,18 @@ export default async function handler(req, res) {
     };
   }
 
+  function computePriorProfileType(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return '';
+    const types = rows.map(r => (r.profile_type || '').toLowerCase()).filter(Boolean);
+    if (!types.length) return '';
+    const hasVendor   = types.some(t => t === 'vendor'   || t.includes('vendor')   || t === 'both');
+    const hasInvestor = types.some(t => t === 'investor'  || t.includes('investor') || t === 'both');
+    if (hasVendor && hasInvestor) return 'both';
+    if (hasVendor)   return 'vendor';
+    if (hasInvestor) return 'investor';
+    return types[0];
+  }
+
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(200).json({
       result: 'Member profile lookup unavailable. phone_received=' + (phone || 'null')
@@ -215,9 +227,9 @@ export default async function handler(req, res) {
         // Format 1: +1XXXXXXXXXX (E.164)
         // Format 2: plain last 10 digits
         const vacUrl1 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3';
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=3';
         const vacUrl2 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=like.*' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,created_at&order=created_at.desc&limit=3';
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=3';
 
         let vacRows = [];
         const vacResp1 = await fetch(vacUrl1, { headers: vacHeaders });
@@ -250,7 +262,8 @@ export default async function handler(req, res) {
           return res.status(200).json({
             result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock,
             member_name: firstName,
-            last_call: lastCallData
+            last_call: lastCallData,
+            prior_profile_type: computePriorProfileType(vacRows)
           });
         }
       } catch(e) {
@@ -351,6 +364,7 @@ export default async function handler(req, res) {
 
     // --- FETCH PAST VOICE AGENT CALL HISTORY ---
     let lastCallData = null;
+    let priorProfileType = '';
     // Pull last 3 voice agent surveys for this contact to surface
     // what was discussed, recommended, and what they have already tried
     let historyBlock = '';
@@ -362,7 +376,7 @@ export default async function handler(req, res) {
 
       const surveyResp = await fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + match.id +
-        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=5',
+        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=5',
         { headers: histHeaders }
       );
       const surveyData = await surveyResp.json();
@@ -373,7 +387,7 @@ export default async function handler(req, res) {
         const phoneE164 = encodeURIComponent('+1' + last10);
         const surveyResp2 = await fetch(
           SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.' + phoneE164 +
-          '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,created_at&order=created_at.desc&limit=5',
+          '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=5',
           { headers: histHeaders }
         );
         const surveyData2 = await surveyResp2.json();
@@ -384,6 +398,7 @@ export default async function handler(req, res) {
       }
 
       if (Array.isArray(surveys) && surveys.length > 0) {
+        priorProfileType = computePriorProfileType(surveys);
         // last_call feeds the spoken firstMessage in index.html. Base it on the
         // real recommendation fields (recommended_next / educator / vendor), not
         // stack_summary — see pickLastCall. has_recommendation false means the
@@ -418,7 +433,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       result: fullResult,
       member_name: firstName,
-      last_call: lastCallData   // exposed so index.html can build personalized firstMessage
+      last_call: lastCallData,
+      prior_profile_type: priorProfileType
     });
 
   } catch (e) {

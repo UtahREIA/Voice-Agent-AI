@@ -375,6 +375,32 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, skipped: true, reason: 'vendor: no contact info' });
       }
 
+      // Cross-door detection: if this vendor has prior investor calls, mark profile as 'Both'.
+      let resolvedVendorProfile = 'Vendor';
+      if (SUPABASE_URL_V && SUPABASE_KEY_V && vPhone) {
+        try {
+          const priorVendorResp = await fetch(
+            `${SUPABASE_URL_V}/rest/v1/voice_agent_calls?caller_phone=eq.${encodeURIComponent(vPhone)}&select=profile_type&order=created_at.desc&limit=10`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY_V,
+                'Authorization': 'Bearer ' + SUPABASE_KEY_V
+              }
+            }
+          );
+          const priorVendorRows = await priorVendorResp.json();
+          if (Array.isArray(priorVendorRows)) {
+            const priorVendorTypes = priorVendorRows.map(r => (r.profile_type || '').toLowerCase());
+            const hadInvestorBefore = priorVendorTypes.some(t => t === 'investor' || t.includes('investor') || t === 'both');
+            if (hadInvestorBefore) resolvedVendorProfile = 'Both';
+          }
+        } catch(e) {
+          console.error('Cross-door check error (vendor fork):', e.message);
+        }
+      }
+      console.log('Vendor profile resolved:', resolvedVendorProfile);
+
       // Send to the GHL inbound webhook so the post-call workflow fires.
       // The "Vendor Pending Review" tag is what the workflow branches on to send
       // the internal team notification. va-vendor-enroll is a stable machine tag.
@@ -389,7 +415,7 @@ export default async function handler(req, res) {
               lastName: vLast,
               phone: vPhone,
               // Flat fields for {{inboundWebhookRequest.*}} use in the workflow
-              profileType: 'Vendor',
+              profileType: resolvedVendorProfile,
               vendorServiceType: vService,
               vendorInvestorTypes: vTypes,
               vendorMarket: vMarket,
@@ -448,7 +474,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
               caller_name: vName,
               caller_phone: vPhone,
-              profile_type: 'Vendor',
+              profile_type: resolvedVendorProfile,
               path: 'V',
               tier: 'vendor_enroll',
               summary: vSummary,
@@ -992,6 +1018,51 @@ export default async function handler(req, res) {
       }
     }
 
+    // Cross-door detection: check if this investor has prior vendor calls.
+    // Runs BEFORE STEP 6 so resolvedProfileType is available for the GHL v2 update,
+    // and BEFORE STEP 7 so the voice_agent_calls INSERT writes the correct value once.
+    let resolvedProfileType = profileType;
+    if (SUPABASE_URL && SUPABASE_KEY && effectivePhone) {
+      try {
+        const priorInvResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/voice_agent_calls?caller_phone=eq.${encodeURIComponent(effectivePhone)}&select=profile_type&order=created_at.desc&limit=10`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+          }
+        );
+        const priorInvRows = await priorInvResp.json();
+        if (Array.isArray(priorInvRows)) {
+          const priorInvTypes = priorInvRows.map(r => (r.profile_type || '').toLowerCase());
+          const hadVendorBefore = priorInvTypes.some(t => t === 'vendor' || t.includes('vendor') || t === 'both');
+          if (hadVendorBefore) resolvedProfileType = 'Both';
+        }
+      } catch(e) {
+        console.error('Cross-door check error (investor path):', e.message);
+      }
+      if (resolvedProfileType !== profileType && contactId) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${contactId}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ profile_type: resolvedProfileType, updated_at: new Date().toISOString() })
+          });
+          console.log('Contact profile_type updated to', resolvedProfileType, 'for contact:', contactId);
+        } catch(e) {
+          console.error('Contact profile_type update error:', e.message);
+        }
+      }
+    }
+    console.log('Profile type resolved:', resolvedProfileType, '| original:', profileType);
+
     // --- STEP 6: GHL v2 API — update contact custom fields ---
     // GHL workflow variables ({{inboundWebhookRequest.*}}) cannot set SINGLE_OPTIONS
     // or MULTIPLE_OPTIONS custom fields. Those require a direct API call using the
@@ -1121,7 +1192,7 @@ export default async function handler(req, res) {
                   { id: 'swDtahR8SAnG4S34s2a6', field_value: ghlStageMap[investorStage] || investorStage },
 
                   // Profile type (SINGLE_OPTIONS)
-                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },
+                  { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: resolvedProfileType },
 
                   // What type of investing are you most interested in? (MULTIPLE_OPTIONS)
                   // Map strategy key to exact GHL picklist label
@@ -1264,7 +1335,7 @@ export default async function handler(req, res) {
           caller_phone:     effectivePhone || '',
           // caller_email removed — emails not collected during voice calls
           investor_stage:   investorStage || '',
-          profile_type:     profileType || '',
+          profile_type:     resolvedProfileType || '',
           path:             (investorStage === 'Exploring' || investorStage === 'Getting Started') ? 'A' : 'B',
           tier:             structured.tier || '1_info',
           strategies:       strategiesArray.length ? strategiesArray : null,
