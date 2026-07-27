@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split('T')[0];
       const evResp = await fetch(
         `${SUPABASE_URL}/rest/v1/ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=6&select=event_title,event_subtitle,event_description,event_description_2,event_date,event_time,event_location,speaker_name,registration_url,strategies,event_type`,
-        { headers: supabaseHeaders }
+        { headers: baseHeaders }
       );
       const evData = await evResp.json();
       if (Array.isArray(evData)) {

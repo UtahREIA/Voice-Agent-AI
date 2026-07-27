@@ -56,6 +56,8 @@ export default async function handler(req, res) {
 
   const vapiArgs = extractArgs(req.body);
 
+  console.log('INTAKE DIAG — caller_type received:', vapiArgs.caller_type || '(empty)', '| rawPath:', vapiArgs.path || '(none)');
+
   const toolCallId =
     req.body?.message?.toolCallList?.[0]?.id
     || req.body?.message?.toolCalls?.[0]?.id
