@@ -70,6 +70,23 @@ same output via direct curl to `/api/resources`.
    "Wholesaler TESTING", "Frankie Testing", etc. and get spoken on live calls.
 5. **`baseHeaders is not defined`** — a live ReferenceError in `ghl-sync.js`
    silently failing the Supabase contact write. Untouched by this work.
+6. **`commercial_asset_types` not syncing to `ghl_educators_mentors`** (and
+   `ghl_educational_courses`). Root cause found and half-fixed: the daily bulk
+   cron in `sync-ghl-objects.js` never mapped the field, though the webhook path
+   did, so the column is empty on every record. Code now maps it with fallback
+   keys plus a diagnostic, committed and deployed. **Two things remain, both
+   need live connectors:**
+   - Confirm the real GHL key. GHL mangles multi-select keys (double underscore
+     + `_partner`, e.g. `deals__opportunities_partner`), so the plain
+     `commercial_asset_types` may be wrong. Read **Blair Testing**'s educator
+     object via the GHL MCP (custom object endpoints 403 from external IPs, so
+     GHL MCP is the only way) and check the actual property key. Or trigger the
+     cron (`/api/sync-ghl-objects`) and read the `SYNC DIAG — educator ... prop
+     keys:` line in the Vercel log, which dumps every key.
+   - Backfill existing rows once the key is confirmed, then re-verify the
+     resource stack, since `resources.js` can match educators/courses on
+     `commercial_asset_types` (CLAUDE.md currently says that column is empty and
+     to not match on it — revisit that note once this is fixed).
 
 ## Parked for Chris (decisions, not bugs)
 
