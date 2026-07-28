@@ -178,11 +178,28 @@ export default async function handler(req, res) {
                 };
               } else if (obj.type === 'educators_mentors') {
                 upsertTable = 'ghl_educators_mentors';
+                // commercial_asset_types was omitted here entirely, so the daily
+                // cron never wrote it even though the webhook path did. GHL
+                // mangles multi-select keys with double underscores and a
+                // _partner suffix (see the vendor block above), so the real key
+                // may be commercial__asset__types_partner rather than the plain
+                // name. Try the known variants; the diagnostic below prints the
+                // actual key set when none of them hit, so it can be pinned.
+                const educatorAssetTypes = parseArray(
+                  props.commercial_asset_types
+                  || props.commercial__asset__types_partner
+                  || props.commercial_asset_types_partner
+                );
+                if (educatorAssetTypes.length === 0) {
+                  console.log('SYNC DIAG — educator', (props.educators_name || props.name || recId),
+                    'has no commercial_asset_types under known keys. prop keys:', Object.keys(props).join(','));
+                }
                 upsertRow = {
                   ghl_record_id: recId,
                   educators_name: props.educators_name || props.name || '',
                   educational_topics: parseArray(props.educational_topics),
                   educational_level: parseArray(props.educational_level),
+                  commercial_asset_types: educatorAssetTypes,
                   educators_url: props.educators_url || '',
                   is_active: true,
                   synced_at: now2
@@ -196,6 +213,12 @@ export default async function handler(req, res) {
                   // GHL stores topics in 'what_type_of_investing_are_you_most_interested_in'
                   educational_topics: parseArray(props.what_type_of_investing_are_you_most_interested_in || props.educational_topics),
                   educational_level: parseArray(props.educational_level),
+                  // Same omission as educators — the cron never carried this.
+                  commercial_asset_types: parseArray(
+                    props.commercial_asset_types
+                    || props.commercial__asset__types_partner
+                    || props.commercial_asset_types_partner
+                  ),
                   video_url: props.video_url || '',
                   education_url: props.education_url || '',
                   // GHL stores these as arrays e.g. ["true"] -- parseBool handles both
