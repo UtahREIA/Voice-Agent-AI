@@ -813,6 +813,13 @@ async function startCall() {
           ? 'Aloha ' + firstName + ', it is Lani, welcome back to Utah REIA. Before we dive into why you called today, I just want to follow up on what we discussed last time. I recommended ' + recommendation + '. How did that go?'
           : 'Aloha, it is Lani, welcome back to Utah REIA. Last time I recommended ' + recommendation + '. How did that go?';
         overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and asked about your last recommendation. Wait for their response before moving to new topics. Do NOT ask for their name or phone number.';
+      } else if (lastCall && lastCall.is_vendor_call) {
+        // Returning caller whose most recent call was a vendor enrollment handoff.
+        // WORDING: conservative default, open for Harmonie to refine.
+        overrides.firstMessage = firstName
+          ? 'Aloha ' + firstName + ', it is Lani, welcome back to Utah REIA. Last time you reached out about listing your services with us. I can pick that back up, or help with something new today. What would you like to do?'
+          : 'Aloha, it is Lani, welcome back to Utah REIA. Last time you reached out about listing your services with us. I can pick that back up, or help with something new today. What would you like to do?';
+        overrides.variableValues.liveContext += '\n\nIMPORTANT: You already greeted this caller by name and noted their last call was about listing their services as a vendor. Do NOT reference an investor recommendation. Wait for their response. Do NOT ask for their name or phone number.';
       } else if (lastCall) {
         // Returning member whose last call was cut off before any recommendation
         overrides.firstMessage = firstName

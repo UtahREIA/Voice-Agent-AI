@@ -92,12 +92,43 @@ export default async function handler(req, res) {
     const cleanRec = looksIncomplete(rec) ? '' : rec;
     return (cleanRec || (s.educator_match || '').trim() || ven || '').trim();
   }
+  // A vendor enrollment call is a COMPLETE interaction (a handoff to get the
+  // caller listed) but populates none of the recommendation fields, so recText
+  // is empty. Without this guard, pickLastCall skips it and resurfaces an OLDER
+  // investor recommendation, which is how a returning Both/vendor caller heard a
+  // stale investor rec ("I recommended X, how did that go?") instead of being
+  // recognized for the vendor call they actually just made.
+  function isVendorHandoff(s) {
+    const pt = ((s && s.profile_type) || '').toLowerCase();
+    return /vendor|both/.test(pt) && recText(s).length <= 2;
+  }
+
   // rows are most-recent-first. Prefer the most recent call that actually
   // delivered a recommendation; otherwise fall back to the most recent call so
   // the caller (a returning caller) is still recognized, with has_recommendation
   // false so the greeting acknowledges an unfinished call instead of inventing one.
   function pickLastCall(rows) {
     if (!Array.isArray(rows) || rows.length === 0) return null;
+    const dateOf = (s) => s.created_at
+      ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : '';
+
+    // If the caller's MOST RECENT interaction was a vendor handoff, surface that
+    // and stop here, so recall does not reach back to an older investor rec.
+    if (isVendorHandoff(rows[0])) {
+      return {
+        has_recommendation: false,
+        is_vendor_call: true,
+        recommendation: '',
+        recommended_next: rows[0].recommended_next || '',
+        educator_match: '',
+        vendor_matches: '',
+        stack_summary: rows[0].stack_summary || '',
+        blocker: rows[0].blocker || '',
+        date: dateOf(rows[0])
+      };
+    }
+
     const withRec = rows.find(s => recText(s).length > 2);
     const src = withRec || rows[0];
     const ven = Array.isArray(src.vendor_matches)
@@ -105,6 +136,7 @@ export default async function handler(req, res) {
       : (src.vendor_matches || '');
     return {
       has_recommendation: !!withRec,
+      is_vendor_call: false,
       // recommendation is the cleaned, ready-to-speak text (sentinel "did not
       // reach ..." strings already stripped). index.html should speak THIS, not
       // the raw recommended_next.
@@ -114,9 +146,7 @@ export default async function handler(req, res) {
       vendor_matches: ven,
       stack_summary: src.stack_summary || '',
       blocker: src.blocker || '',
-      date: src.created_at
-        ? new Date(src.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : ''
+      date: dateOf(src)
     };
   }
 
@@ -257,7 +287,9 @@ export default async function handler(req, res) {
 
           const historyBlock = lastCallData && lastCallData.has_recommendation
             ? ' LAST CALL RECOMMENDATION: ' + recText(lastCallData).slice(0, 150)
-            : ' NOTE: the last call did not finish and no recommendation was made. Do not reference a past recommendation.';
+            : lastCallData && lastCallData.is_vendor_call
+              ? ' NOTE: the most recent call was about listing services as a vendor with Utah REIA. Acknowledge that if relevant. Do not reference a past investor recommendation.'
+              : ' NOTE: the last call did not finish and no recommendation was made. Do not reference a past recommendation.';
 
           return res.status(200).json({
             result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock,
