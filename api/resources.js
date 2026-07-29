@@ -162,7 +162,10 @@ export default async function handler(req, res) {
   const mode = MODE_ALIASES[rawMode] || 'all';
   const categories = MODE_CATEGORIES[mode] || MODE_CATEGORIES.all;
   const isSpecific = mode !== 'all';
-  const maxResults = parseInt(args.max_results || (isSpecific ? '5' : '6'), 10);
+  const maxResultsRaw = parseInt(args.max_results, 10);
+  const maxResults = Number.isFinite(maxResultsRaw) && maxResultsRaw > 0
+    ? maxResultsRaw
+    : (isSpecific ? 5 : 6);
 
   const shortStage = SHORT_STAGE[rawStage] || rawStage;
   const longStage  = rawStage;
@@ -465,7 +468,12 @@ export default async function handler(req, res) {
     // web URL in `contact`. Cache them keyed by the Vapi call id so ghl-sync can
     // fold them into the SMS at end of call. Warm-intro vendors are excluded:
     // they were promised a callback, not a link.
+    // Exclude warm-intro vendors: the voice told the caller that vendor will
+    // reach out and never promised a link, so a link in the SMS would contradict
+    // what Lani said. Educators are warm-intro too, but their spoken line does
+    // promise a link, so they stay.
     const linkItems = top
+      .filter(r => !(r.type === 'vendor' && r.connection_method === 'warm_intro'))
       .filter(r => r.contact && /^https?:\/\//i.test(r.contact))
       .map(r => ({ name: r.name, type: r.type, url: r.contact }));
     const smsLinks = linkItems.length
