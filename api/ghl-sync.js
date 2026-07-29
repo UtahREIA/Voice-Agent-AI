@@ -457,11 +457,24 @@ export default async function handler(req, res) {
       // Record the vendor call in voice_agent_calls, tagged as a vendor call.
       try {
         if (SUPABASE_URL_V && SUPABASE_KEY_V) {
-          const startedAtV = payload.message?.call?.startedAt || payload.call?.startedAt || null;
-          const endedAtV   = payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+          // Vapi puts startedAt/endedAt/durationSeconds directly on
+          // payload.message for the end-of-call-report, NOT under .call, which
+          // is why call_duration_secs came back null. Prefer Vapi's own
+          // durationSeconds, then durationMs, then compute from the timestamps.
+          // The .call.* paths stay as a last-resort fallback for older shapes.
+          const msgV = payload.message || {};
+          const startedAtV = msgV.startedAt || payload.message?.call?.startedAt || payload.call?.startedAt || null;
+          const endedAtV   = msgV.endedAt   || payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+          const dSecsV = Number(msgV.durationSeconds);
+          const dMsV   = Number(msgV.durationMs);
           let durationV = null;
-          if (startedAtV && endedAtV) {
-            durationV = Math.round((new Date(endedAtV) - new Date(startedAtV)) / 1000);
+          if (Number.isFinite(dSecsV) && dSecsV > 0) {
+            durationV = Math.round(dSecsV);
+          } else if (Number.isFinite(dMsV) && dMsV > 0) {
+            durationV = Math.round(dMsV / 1000);
+          } else if (startedAtV && endedAtV) {
+            const s = Math.round((new Date(endedAtV) - new Date(startedAtV)) / 1000);
+            durationV = Number.isFinite(s) ? s : null;
           }
           await fetch(SUPABASE_URL_V + '/rest/v1/voice_agent_calls', {
             method: 'POST',
@@ -1321,12 +1334,23 @@ export default async function handler(req, res) {
           'Prefer': 'return=minimal'
         };
 
-        // Calculate call duration from Vapi timestamps
-        const callStartedAt = payload.message?.call?.startedAt || payload.call?.startedAt || null;
-        const callEndedAt   = payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+        // Calculate call duration. Vapi puts startedAt/endedAt/durationSeconds
+        // directly on payload.message, NOT under .call — the old .call path is
+        // why this was null. Prefer Vapi's own durationSeconds, then durationMs,
+        // then compute from timestamps, with .call.* as a last-resort fallback.
+        const msgI = payload.message || {};
+        const callStartedAt = msgI.startedAt || payload.message?.call?.startedAt || payload.call?.startedAt || null;
+        const callEndedAt   = msgI.endedAt   || payload.message?.call?.endedAt   || payload.call?.endedAt   || null;
+        const dSecsI = Number(msgI.durationSeconds);
+        const dMsI   = Number(msgI.durationMs);
         let callDurationSecs = null;
-        if (callStartedAt && callEndedAt) {
-          callDurationSecs = Math.round((new Date(callEndedAt) - new Date(callStartedAt)) / 1000);
+        if (Number.isFinite(dSecsI) && dSecsI > 0) {
+          callDurationSecs = Math.round(dSecsI);
+        } else if (Number.isFinite(dMsI) && dMsI > 0) {
+          callDurationSecs = Math.round(dMsI / 1000);
+        } else if (callStartedAt && callEndedAt) {
+          const s = Math.round((new Date(callEndedAt) - new Date(callStartedAt)) / 1000);
+          callDurationSecs = Number.isFinite(s) ? s : null;
         }
 
         const callRecord = {
