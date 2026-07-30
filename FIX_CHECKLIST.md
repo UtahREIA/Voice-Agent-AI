@@ -17,14 +17,19 @@ and the `getResourceStack` discovery that followed it.
 | 7  | Remove the`getResourceStack` remap              | Vercel | yes     | [x]    |
 | 8  | Fix the stage vocabulary mismatch                 | Vercel | yes     | [x]    |
 | 9  | Add 2 missing aliases to`education.js`          | Vercel | yes     | [x]    |
-| 10 | Stop Lani inventing questions                     | Vapi   | no      | [ ]    |
+| 10 | Stop Lani inventing questions (prompt hardening)  | Vapi   | no      | [x]    |
 | 11 | Tier on the deal-finding rule                     | Chris  | n/a     | [x]    |
 | 12 | Rewrite`resources.js` for matched mixed results | Vercel | yes     | [x]    |
 | 13 | Create the`getResourceStack` tool in Vapi       | Vapi   | no      | [x]    |
 | 14 | Add`resource_request` to getIntakeRouting       | Vapi   | no      | [x]    |
 | 15 | Route intake to`getResourceStack`               | Vercel | yes     | [x]    |
 | 16 | Verification call: 5-6 mixed resources            | both   | no      | [ ]    |
-| 17 | Re-paste the step 3 description (names the tool)   | Vapi   | no      | [ ]    |
+| 17 | Re-paste getIntakeRouting description             | Vapi   | no      | [x]    |
+
+Steps 10, 13, 14 and 17 are user-reported as pasted-and-published on
+2026-07-30. Vapi config is not inspectable from Claude Code, so these are marked
+done on the operator's confirmation, not independently verified — the step 16
+verification call is what actually proves them live.
 
 Steps 7, 8 and 9 shipped together. Re-run the step 6 call to verify, and add a
 Path B call (an active investor) since that is the path steps 7 and 8 unblocked.
@@ -119,30 +124,20 @@ each one causes a specific misbehaviour you have already seen on calls.
 | next tool is`getEducationMatch` / `getVendorMatch` | at the time, both were remapped to the nonexistent`getResourceStack` | she called`GetVendorMatch`, it returned nothing |
 | pass these 7 dimensions                                | 23 dimensions are tracked                  | unlisted ones get under-reported, then re-asked   |
 
-Replace the whole description with:
+LIVE as of 2026-07-30 (user-reported pasted-and-published). Vapi caps this field
+at 1000 characters; the version below is 856 and is what is live:
 
 ```
-Returns either the next intake question or the routing decision.
-Call after every caller answer.
+Returns the next intake question or the routing decision. Call after every caller answer.
 
-Pass every dimension you have learned so far on EVERY call, not just
-the newest one. Omitting a dimension you already collected will make
-the tool ask for it again.
+Pass every dimension learned so far on EVERY call, not just the newest, and always include caller_type; omitting a known value makes the tool re-ask it. If the caller asked for one kind of resource, also pass resource_request (vendor, education, educator, tool, or event); leave it empty otherwise.
 
-Read the result:
-- action "ask_more": ask next_question word for word. Do not skip
-  ahead, do not substitute your own wording, do not call another tool.
-- action "escalate" or "1_info": say voice_bridge and do not call
-  any tool at all.
-- any other action: say voice_bridge, then call the tool named in
-  action using tool_args exactly as given. It will normally be
-  getResourceStack. Pass tool_args through unchanged, including
-  the mode field.
+Act on the action field:
+- ask_more: ask next_question word for word. Do not skip ahead, reword, add your own question, or call a tool.
+- escalate or 1_info: say voice_bridge, call no tool.
+- any other action: say voice_bridge, then call the tool named in action, passing tool_args exactly including mode. Normally getResourceStack.
 
-Never call a tool that is not named in the action field.
-
-There is no question count. Keep calling until it stops returning
-ask_more.
+Never call a tool not named in the action field. There is no fixed question count: keep calling until it stops returning ask_more.
 ```
 
 Save and publish.
