@@ -87,7 +87,7 @@ Callers always send the **long** form. Translate before querying anything else. 
 
 Other traps in the same family:
 - `education_routing_matrix` has **no `industrial`/`retail`/`multi_family` rows**, only `commercial`. All commercial asset types must collapse to `commercial`. `vendor_routing_matrix` *does* have them.
-- `commercial_asset_types` is empty on every active record. Don't match on it.
+- `commercial_asset_types` is now populated for commercial educators (the daily cron carries it as of 2026-07-30; before that it was empty everywhere and code was told not to match on it). Educator matching still goes through the `commercial` topic for breadth; per-asset-type refinement is future resource-hierarchy work. Courses have none yet because none are commercial-topic. Verified faithful against the GHL objects (Blair Testing has `farm_land`, Frankie/Devon have none, matching GHL exactly).
 - `vendor_routing_matrix.investor_need` shares the **blocker** vocabulary (`deals`, `funding`, `team`, `legal`), so blocker is the right filter for picking vendor kind.
 - Both `syndications__funds` and `syndication__funds` exist as topics. Match either.
 - Both `wholesale` and `wholesaling` exist as matrix strategies. Match either.

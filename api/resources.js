@@ -18,9 +18,11 @@
  *   3. topic        fix__flip             educational_topics on the ghl_* tables
  * Callers send vocabulary 1. Everything here translates before querying.
  *
- * commercial_asset_types is empty on every active record today, so commercial
- * strategies (industrial, retail, multi_family, ...) match through the
- * 'commercial' topic instead. Revisit if that column ever gets populated.
+ * Commercial strategies (industrial, retail, multi_family, ...) match through
+ * the 'commercial' topic. commercial_asset_types is now populated for commercial
+ * educators (one asset type each), but matching still goes through the topic for
+ * breadth; refining to the specific asset type belongs with the resource-
+ * hierarchy work, not here.
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
