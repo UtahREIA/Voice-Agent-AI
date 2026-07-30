@@ -11,9 +11,13 @@
  * and member-lookup already call the v2 contacts API from Vercel), so a nightly
  * reconciliation runs here without needing MCP. Confirmed 2026-07-30.
  *
- * SAFETY RULE baked in: only an explicit 404 from GHL counts as "deleted". A
- * rate-limit (429), a 5xx, or a network error is reported as an ERROR, never as
- * an orphan, so a future purge can never delete a record over a transient blip.
+ * SAFETY RULE baked in: a contact counts as "deleted" ONLY when GHL says so in
+ * the response body — a not-found message. GHL returns this as a 400 (verified
+ * 2026-07-30 against four ids the GHL MCP confirmed deleted), NOT a 404, so
+ * status alone is not enough. Anything else — a rate-limit (429), a 5xx, an
+ * auth failure, a malformed-id 400, or a network error — is reported as an
+ * ERROR, never an orphan, so a future purge can never act on a transient blip
+ * or a data-quality problem.
  *
  * There are ~5,200 contacts, so a full scan cannot finish in one serverless
  * request. This endpoint pages: it checks `limit` contacts starting at `offset`
@@ -32,6 +36,11 @@ const GHL_API_KEY  = process.env.GHL_API_KEY;
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// A GHL "this contact does not exist" message, whatever status it rides on.
+// Deliberately narrow: it must say not-found / does-not-exist, so a malformed-id
+// or auth 400 does NOT match and stays an error.
+const NOT_FOUND_RE = /not\s*found|does\s*not\s*exist|no\s*contact|doesn'?t\s*exist/i;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -84,12 +93,16 @@ export default async function handler(req, res) {
         const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(gid)}`, { headers: ghlHeaders });
         if (r.status === 200) {
           exists++;
-        } else if (r.status === 404) {
-          // The ONLY condition that means "deleted in GHL".
-          orphans.push({ supabase_id: c.id, ghl_contact_id: gid, name: c.full_name || '', phone: c.phone || '' });
         } else {
-          // 429 / 5xx / anything else — do NOT treat as deleted.
-          errors.push({ ghl_contact_id: gid, status: r.status });
+          // GHL reports a deleted contact as a not-found MESSAGE, and does it
+          // with a 400, so we match on the body, not the status. Only a genuine
+          // not-found is an orphan; every other non-200 stays an error.
+          const body = await r.text().catch(() => '');
+          if (NOT_FOUND_RE.test(body)) {
+            orphans.push({ supabase_id: c.id, ghl_contact_id: gid, name: c.full_name || '', phone: c.phone || '' });
+          } else {
+            errors.push({ ghl_contact_id: gid, status: r.status, body: body.slice(0, 120) });
+          }
         }
       } catch (e) {
         errors.push({ ghl_contact_id: gid, error: e.message });
