@@ -52,9 +52,14 @@ export default async function handler(req, res) {
   const days = Math.max(parseInt(req.query?.days, 10) || DEFAULT_DAYS, 1);
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
 
-  const confirmOk = PURGE_CONFIRM_TOKEN && req.query?.confirm === PURGE_CONFIRM_TOKEN;
+  // Accept the confirm token from ?confirm= OR an Authorization: Bearer header.
+  // The header keeps the secret out of URLs and logs, and matches how the
+  // sync-ghl-objects GitHub Actions cron authenticates.
+  const bearer = (req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const providedToken = req.query?.confirm || bearer || '';
+  const confirmOk = PURGE_CONFIRM_TOKEN && providedToken === PURGE_CONFIRM_TOKEN;
   const doPurge = Boolean(confirmOk);
-  const purgeRefused = (req.query?.confirm && !confirmOk)
+  const purgeRefused = (providedToken && !confirmOk)
     ? (!PURGE_CONFIRM_TOKEN ? 'PURGE_CONFIRM_TOKEN is not set on the server' : 'confirm token did not match')
     : null;
 

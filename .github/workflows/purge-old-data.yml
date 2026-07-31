@@ -1,0 +1,60 @@
+name: Purge Old Call Data (retention)
+
+# Deletes call-activity rows older than the retention window from Supabase.
+# The window lives on the endpoint (Vercel env RETENTION_DAYS, default 30 —
+# recommended 90); this workflow just triggers it on a schedule.
+#
+# SETUP (one time): add repo secret PURGE_CONFIRM_TOKEN with the same value set
+# as the PURGE_CONFIRM_TOKEN env var in Vercel. Until both exist and match, the
+# endpoint refuses to delete (runs dry-run), and this job fails loudly so a
+# misconfiguration cannot pass silently.
+
+on:
+  # Nightly at 4:17 AM UTC. Off the :00 mark and offset from the 3:15 GHL sync.
+  schedule:
+    - cron: '17 4 * * *'
+
+  # Manual trigger from the Actions tab (use this to validate before relying on
+  # the schedule).
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual purge'
+        required: false
+        default: 'Manual retention purge'
+
+jobs:
+  purge:
+    name: Purge old call-activity data
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger retention purge endpoint
+        run: |
+          echo "Triggering retention purge..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.PURGE_CONFIRM_TOKEN }}" \
+            "https://voice-agent-ai-nu.vercel.app/api/purge-old-data")
+
+          HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $HTTP_BODY"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Purge request failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          # The endpoint returns 200 even when it refuses to delete (dry-run), so
+          # assert it actually purged. A missing/mismatched token would land here.
+          if ! echo "$HTTP_BODY" | grep -q '"mode":"PURGE'; then
+            echo "Purge did NOT run — token missing or mismatched, or dry-run."
+            echo "Set repo secret PURGE_CONFIRM_TOKEN to match Vercel's env value."
+            exit 1
+          fi
+
+          echo "Retention purge completed."

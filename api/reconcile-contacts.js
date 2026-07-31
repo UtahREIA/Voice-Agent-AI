@@ -68,9 +68,13 @@ export default async function handler(req, res) {
   const limit = Math.min(parseInt(req.query?.limit, 10) || 50, 400);
   const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
 
-  // Purge is doubly gated: the flag AND a secret token that matches the env.
+  // Purge is doubly gated: the flag AND a secret token that matches the env. The
+  // token may come from ?confirm= or an Authorization: Bearer header (the header
+  // keeps it out of URLs/logs and matches the sync-ghl-objects cron).
   const purgeRequested = String(req.query?.purge) === 'true';
-  const confirmOk = PURGE_CONFIRM_TOKEN && req.query?.confirm === PURGE_CONFIRM_TOKEN;
+  const bearer = (req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const providedToken = req.query?.confirm || bearer || '';
+  const confirmOk = PURGE_CONFIRM_TOKEN && providedToken === PURGE_CONFIRM_TOKEN;
   const doPurge = purgeRequested && confirmOk;
   const purgeRefusedReason = !purgeRequested ? null
     : (!PURGE_CONFIRM_TOKEN ? 'PURGE_CONFIRM_TOKEN is not set on the server'
