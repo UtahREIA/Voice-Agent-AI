@@ -1,8 +1,8 @@
 name: Purge Old Call Data (retention)
 
 # Deletes call-activity rows older than the retention window from Supabase.
-# The window lives on the endpoint (Vercel env RETENTION_DAYS, default 30 —
-# recommended 90); this workflow just triggers it on a schedule.
+# The window is 90 days (endpoint default; override with Vercel env
+# RETENTION_DAYS); this workflow just triggers it on a schedule.
 #
 # SETUP (one time): add repo secret PURGE_CONFIRM_TOKEN with the same value set
 # as the PURGE_CONFIRM_TOKEN env var in Vercel. Until both exist and match, the

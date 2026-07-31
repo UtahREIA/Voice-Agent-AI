@@ -1,7 +1,7 @@
 /**
  * purge-old-data.js — retention purge for old call-activity data (Item 15)
  *
- * Retention window: 30 days (set 2026-07-31). Deletes rows older than the window
+ * Retention window: 90 days (set 2026-07-31). Deletes rows older than the window
  * from the call-activity tables below. Does NOT touch contacts, investor_profiles
  * or vendor_profiles — those are directory/profile records, not call activity.
  *
@@ -11,10 +11,10 @@
  * deploying this cannot delete anything until an operator opts in.
  *
  * RECALL TRADEOFF: voice_agent_calls feeds the returning-caller recall in
- * member-lookup. Purging it at 30 days means a caller who last called more than
- * 30 days ago is treated as new. That is an accepted consequence of the 30-day
- * window. To preserve recall, remove 'voice_agent_calls' from RETENTION_TABLES
- * (or move it to a longer window) — everything else is unaffected.
+ * member-lookup. Purging it at 90 days means a caller who last called more than
+ * 90 days ago is treated as new. That is an accepted consequence of the window.
+ * To preserve recall, remove 'voice_agent_calls' from RETENTION_TABLES (or move
+ * it to a longer window) — everything else is unaffected.
  *
  * Usage:
  *   dry-run: GET /api/purge-old-data
@@ -22,7 +22,7 @@
  *   override window for one call: &days=60
  * Env: SUPABASE_URL, SUPABASE_SERVICE_KEY (or SUPABASE_KEY),
  *      PURGE_CONFIRM_TOKEN (only needed to actually delete),
- *      RETENTION_DAYS (optional, defaults to 30).
+ *      RETENTION_DAYS (optional, defaults to 90).
  */
 
 export const config = { maxDuration: 60 };
@@ -30,7 +30,7 @@ export const config = { maxDuration: 60 };
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const PURGE_CONFIRM_TOKEN = process.env.PURGE_CONFIRM_TOKEN || '';
-const DEFAULT_DAYS = parseInt(process.env.RETENTION_DAYS, 10) || 30;
+const DEFAULT_DAYS = parseInt(process.env.RETENTION_DAYS, 10) || 90;
 
 // Call-activity tables purged on the retention window. Each is filtered by
 // created_at. voice_agent_calls carries the recall tradeoff noted above.
