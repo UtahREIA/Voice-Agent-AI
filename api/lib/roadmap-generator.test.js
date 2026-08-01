@@ -7,11 +7,15 @@
  * No live DB connection required.
  */
 
-import { resolveArchetype, detectEntryPhase, setRefs } from './roadmap-generator.js';
+import {
+  resolveArchetype, detectEntryPhase, setRefs,
+  orderPhaseItems, buildRoadmapSummary, createRoadmap,
+} from './roadmap-generator.js';
 
 // ---------------------------------------------------------------------------
 // INLINE REFERENCE DATA  (mirrors roadmap_archetypes + archetype_phases +
-//                         strategy_archetype_map as of 2026-08-01)
+//                         strategy_archetype_map + phase_intent_precedence
+//                         as of 2026-08-01)
 // ---------------------------------------------------------------------------
 
 const archetypesById = {
@@ -108,7 +112,25 @@ const strategyMap = {
   wholesale:         { strategy:'wholesale',         default_archetype_id:1, promote_to_archetype_id:null, promote_trigger:null, notes:null },
 };
 
-const REFS = { archetypesById, strategyMap, phasesByArchetype };
+// Inline phase_intent_precedence (confirmed from DB 2026-08-01)
+const intentPrecedence = [
+  { canonical_intent: 'ACQUIRE',  resource_type: 'tool',      ord: 1 },
+  { canonical_intent: 'ACQUIRE',  resource_type: 'vendor',    ord: 2 },
+  { canonical_intent: 'ACQUIRE',  resource_type: 'education', ord: 3 },
+  { canonical_intent: 'CLARIFY',  resource_type: 'education', ord: 1 },
+  { canonical_intent: 'CLARIFY',  resource_type: 'mentor',    ord: 2 },
+  { canonical_intent: 'EXECUTE',  resource_type: 'vendor',    ord: 1 },
+  { canonical_intent: 'EXECUTE',  resource_type: 'tool',      ord: 2 },
+  { canonical_intent: 'HANDOFF',  resource_type: 'mentor',    ord: 1 },
+  { canonical_intent: 'LEARN',    resource_type: 'education', ord: 1 },
+  { canonical_intent: 'LEARN',    resource_type: 'mentor',    ord: 2 },
+  { canonical_intent: 'LEARN',    resource_type: 'tool',      ord: 3 },
+  { canonical_intent: 'PREPARE',  resource_type: 'tool',      ord: 1 },
+  { canonical_intent: 'PREPARE',  resource_type: 'vendor',    ord: 2 },
+  { canonical_intent: 'PREPARE',  resource_type: 'education', ord: 3 },
+];
+
+const REFS = { archetypesById, strategyMap, phasesByArchetype, intentPrecedence };
 
 // ---------------------------------------------------------------------------
 // MINIMAL TEST HARNESS
@@ -263,6 +285,177 @@ check('A7 brand-new → CLARIFY at phase_order 1',
 check('A7 stuck-point "funding" (no PREPARE in A7) → falls through, phase_order <= 3',
   detectEntryPhase(7, { stated_stuck_point: 'funding' }),
   r => r.entry_phase_order <= 3);
+
+// ---------------------------------------------------------------------------
+// TESTS — orderPhaseItems  (pure function, no DB)
+// ---------------------------------------------------------------------------
+
+console.log('\n── orderPhaseItems ───────────────────────────────────────');
+
+const LEARN_PREC = [
+  { resource_type: 'education', ord: 1 },
+  { resource_type: 'mentor',    ord: 2 },
+  { resource_type: 'tool',      ord: 3 },
+];
+
+const makeItem = (resource_type, display_name, within_type_priority) =>
+  ({ resource_type, display_name, within_type_priority, source_table: 'test', source_ref: 'x', is_cross_cutting: false, status: 'not_started', status_source: 'system', canonical_intent: 'LEARN' });
+
+check('LEARN: education(ord 1) precedes tool(ord 3)',
+  orderPhaseItems(
+    { education: [makeItem('education','Course A', 1)], tool: [makeItem('tool','DealMachine', 1)] },
+    LEARN_PREC,
+  ),
+  items => items[0].resource_type === 'education' && items[items.length - 1].resource_type === 'tool');
+
+check('LEARN: mentor(ord 2) between education and tool',
+  orderPhaseItems(
+    { education: [makeItem('education','Course A', 1)], mentor: [makeItem('mentor','Jane', 1)], tool: [makeItem('tool','DealMachine', 1)] },
+    LEARN_PREC,
+  ),
+  items => items[0].resource_type === 'education' && items[1].resource_type === 'mentor' && items[2].resource_type === 'tool');
+
+const EXEC_PREC = [
+  { resource_type: 'vendor', ord: 1 },
+  { resource_type: 'tool',   ord: 2 },
+];
+
+check('EXECUTE: vendor(ord 1) precedes tool(ord 2)',
+  orderPhaseItems(
+    { vendor: [makeItem('vendor','Contractor', 1)], tool: [makeItem('tool','ProjectMgmt', 1)] },
+    EXEC_PREC,
+  ),
+  items => items[0].resource_type === 'vendor' && items[1].resource_type === 'tool');
+
+check('within-type: lower within_type_priority comes first',
+  orderPhaseItems(
+    { education: [
+        makeItem('education','Track B', 2),
+        makeItem('education','Track A', 1),
+    ]},
+    [{ resource_type: 'education', ord: 1 }],
+  ),
+  items => items[0].display_name === 'Track A' && items[1].display_name === 'Track B');
+
+check('missing resource_type produces empty slot (no crash)',
+  orderPhaseItems({}, LEARN_PREC),
+  items => items.length === 0);
+
+// ---------------------------------------------------------------------------
+// TESTS — buildRoadmapSummary  (pure function, no DB)
+// ---------------------------------------------------------------------------
+
+console.log('\n── buildRoadmapSummary ───────────────────────────────────');
+
+const A1_PHASES = phasesByArchetype[1];
+
+check('5 phases from entry=1: names first 3, adds "a couple more after that"',
+  buildRoadmapSummary(
+    A1_PHASES[0],  // CLARIFY
+    A1_PHASES,
+    [],
+  ),
+  s => s.includes('Clarify & Commit') && s.includes('and a couple more after that'));
+
+check('3 phases from entry=3: names all 3, no ellipsis',
+  buildRoadmapSummary(
+    A1_PHASES[2],  // PREPARE (entry at order 3)
+    A1_PHASES,
+    [],
+  ),
+  s => s.includes('Get Deal-Ready') && s.includes('Source & Analyze Deals') && s.includes('Execute & Repeat') && !s.includes('couple more'));
+
+check('first item display_name appears in summary when items present',
+  buildRoadmapSummary(
+    A1_PHASES[0],
+    A1_PHASES,
+    [{ display_name: 'Fix & Flip 101' }],
+  ),
+  s => s.includes('Fix & Flip 101'));
+
+check('no items → fallback "connect you with the right starting point"',
+  buildRoadmapSummary(A1_PHASES[0], A1_PHASES, []),
+  s => s.includes("connect you"));
+
+check('A7 3 phases (<=4): names all 3, no ellipsis',
+  buildRoadmapSummary(
+    phasesByArchetype[7][0],  // CLARIFY
+    phasesByArchetype[7],
+    [],
+  ),
+  s => s.includes('Understand the Person') && s.includes('Assign & Hand Off') && !s.includes('couple more'));
+
+// ---------------------------------------------------------------------------
+// TESTS — createRoadmap  (dryRun=true, no DB writes or matrix fetches)
+// ---------------------------------------------------------------------------
+
+console.log('\n── createRoadmap (dryRun) ────────────────────────────────');
+
+// Case A: fix_and_flip, getting_started, deal_count null → CLARIFY (phase 1, A1)
+{
+  const result = await createRoadmap(
+    { strategy: 'fix_and_flip', stage: 'getting_started', deal_count: null, contact_id: 'test-001', phone: '8015551234' },
+    { url: 'http://placeholder.test', key: 'test-key' },
+    { dryRun: true },
+  );
+
+  check('dry-run A [fix_and_flip/getting_started]: archetype_key A1',
+    result, r => r.archetype_key === 'A1');
+
+  check('dry-run A: entry_phase_order 1 (CLARIFY)',
+    result, r => r.entry_phase_order === 1);
+
+  check('dry-run A: 5 phase descriptors created',
+    result, r => r._debug.phaseDescs.length === 5);
+
+  check('dry-run A: entry phase status=current',
+    result, r => r._debug.phaseDescs[0].status === 'current');
+
+  check('dry-run A: all non-entry phases status=shell (none completed since entry=1)',
+    result, r => r._debug.phaseDescs.slice(1).every(p => p.status === 'shell'));
+
+  check('dry-run A: summary includes Clarify display_label',
+    result, r => r.summary.includes('Clarify & Commit'));
+
+  check('dry-run A: summary is a non-empty string',
+    result, r => typeof r.summary === 'string' && r.summary.length > 10);
+}
+
+// Case B: fix_and_flip, deal_count 8 → PREPARE (phase 3, A1) — 2 phases completed
+{
+  const result = await createRoadmap(
+    { strategy: 'fix_and_flip', deal_count: 8 },
+    { url: 'http://placeholder.test', key: 'test-key' },
+    { dryRun: true },
+  );
+
+  check('dry-run B [deal_count 8]: entry_phase_order 3 (PREPARE)',
+    result, r => r.entry_phase_order === 3);
+
+  check('dry-run B: 2 phases marked completed (orders 1 and 2)',
+    result, r => r._debug.phaseDescs.filter(p => p.status === 'completed').length === 2);
+
+  check('dry-run B: entry phase (order 3) status=current',
+    result, r => r._debug.phaseDescs.find(p => p.phase_order === 3)?.status === 'current');
+
+  check('dry-run B: phases 4,5 status=shell',
+    result, r => r._debug.phaseDescs.filter(p => p.status === 'shell').length === 2);
+
+  check('dry-run B: summary includes Get Deal-Ready (PREPARE display_label)',
+    result, r => r.summary.includes('Get Deal-Ready'));
+}
+
+// Case C: contributor_handoff sentinel
+{
+  const result = await createRoadmap(
+    { strategy: 'mentoring_others' },
+    { url: 'http://placeholder.test', key: 'test-key' },
+    { dryRun: true },
+  );
+
+  check('dry-run C: mentoring_others → contributor_handoff route',
+    result, r => r.route === 'contributor_handoff' && r.roadmap_id === null);
+}
 
 // ---------------------------------------------------------------------------
 // SUMMARY
