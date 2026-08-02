@@ -454,6 +454,45 @@ export function buildRoadmapSummary(entryPhase, allPhases, items) {
 }
 
 // ---------------------------------------------------------------------------
+// PUBLIC PURE FUNCTIONS — Stage 2c/2d: per-type duplicate removal
+// ---------------------------------------------------------------------------
+
+/**
+ * Deduplicate a resource candidate list by underlying resource identity.
+ * When the same resource appears more than once (e.g. a tool matched by both
+ * a strategy-specific row and a null-strategy row from the `or=()` query),
+ * keep the single best instance:
+ *   1. lowest within_type_priority wins
+ *   2. on a tie, lower _specificity wins (0 = strategy-specific, 1 = generic/null)
+ *
+ * Always strips the internal _specificity field so it never reaches the DB.
+ *
+ * @param {object[]} candidates  items from one resource_type bucket
+ * @returns {object[]} deduped list
+ */
+export function dedupeByIdentity(candidates) {
+  const best = new Map();
+  for (const c of candidates) {
+    const key = c.source_ref || c.display_name;
+    if (!key) continue;
+    if (!best.has(key)) {
+      best.set(key, c);
+    } else {
+      const prev = best.get(key);
+      const cPri  = c.within_type_priority    ?? 999;
+      const pPri  = prev.within_type_priority  ?? 999;
+      const cSpec = c._specificity   ?? 0;
+      const pSpec = prev._specificity ?? 0;
+      if (cPri < pPri || (cPri === pPri && cSpec < pSpec)) {
+        best.set(key, c);
+      }
+    }
+  }
+  // Strip the internal field before returning — must not reach the DB
+  return Array.from(best.values()).map(({ _specificity: _s, ...rest }) => rest);
+}
+
+// ---------------------------------------------------------------------------
 // PUBLIC ASYNC FUNCTIONS — Stage 2c/2d: matrix population (no writes)
 // ---------------------------------------------------------------------------
 
@@ -534,13 +573,14 @@ export async function populatePhaseItems(context, phase) {
       } else if (resource_type === 'tool') {
         const url = `${db.url}/rest/v1/tools_routing_matrix`
           + `?or=(strategy.eq.${encodeURIComponent(strategy)},strategy.is.null)`
-          + `&is_active=eq.true&select=tool_record_id,tool_title,priority`
+          + `&is_active=eq.true&select=tool_record_id,tool_title,priority,strategy`
           + `&order=priority.asc&limit=${MAX_ITEMS_PER_TYPE}`;
         const body = await fetch(url, { headers: h }).then(r => r.json()).catch(() => []);
         candidatesByType[resource_type] = (Array.isArray(body) ? body : []).map(r => ({
           resource_type: 'tool', source_table: 'tools_routing_matrix',
           source_ref: r.tool_record_id, display_name: r.tool_title,
           within_type_priority: r.priority ?? 999, across_type_ord: ord,
+          _specificity: r.strategy == null ? 1 : 0,
           is_cross_cutting: false, status: 'not_started', status_source: 'system', canonical_intent,
         }));
       }
@@ -550,6 +590,9 @@ export async function populatePhaseItems(context, phase) {
     }
   }
 
+  for (const type of Object.keys(candidatesByType)) {
+    candidatesByType[type] = dedupeByIdentity(candidatesByType[type]);
+  }
   return orderPhaseItems(candidatesByType, precedence);
 }
 

@@ -10,6 +10,7 @@
 import {
   resolveArchetype, detectEntryPhase, setRefs,
   orderPhaseItems, buildRoadmapSummary, createRoadmap,
+  dedupeByIdentity,
 } from './roadmap-generator.js';
 
 // ---------------------------------------------------------------------------
@@ -384,6 +385,41 @@ check('A7 3 phases (<=4): names all 3, no ellipsis',
     [],
   ),
   s => s.includes('Understand the Person') && s.includes('Assign & Hand Off') && !s.includes('couple more'));
+
+// ---------------------------------------------------------------------------
+// TESTS — dedupeByIdentity  (pure function, no DB)
+// ---------------------------------------------------------------------------
+
+console.log('\n── dedupeByIdentity ──────────────────────────────────────');
+
+const makeCandidate = (source_ref, within_type_priority, _specificity = 0) =>
+  ({ source_ref, display_name: `Item-${source_ref}`, within_type_priority, _specificity });
+
+check('same source_ref 3× at priorities [1,1,2] → 1 item at priority 1',
+  dedupeByIdentity([
+    makeCandidate('tool-abc', 1),
+    makeCandidate('tool-abc', 1),
+    makeCandidate('tool-abc', 2),
+  ]),
+  result => result.length === 1 && result[0].source_ref === 'tool-abc' && result[0].within_type_priority === 1);
+
+check('two different source_refs → both survive (no over-collapse)',
+  dedupeByIdentity([
+    makeCandidate('tool-abc', 1),
+    makeCandidate('tool-xyz', 2),
+  ]),
+  result => result.length === 2);
+
+check('priority tie: specific (_specificity 0) beats generic (_specificity 1) even when generic is first',
+  dedupeByIdentity([
+    { source_ref: 'tool-abc', display_name: 'Tool A', within_type_priority: 1, _specificity: 1, source_table: 'generic-row' },
+    { source_ref: 'tool-abc', display_name: 'Tool A', within_type_priority: 1, _specificity: 0, source_table: 'specific-row' },
+  ]),
+  result => result.length === 1 && result[0].source_table === 'specific-row');
+
+check('_specificity field is stripped from returned items',
+  dedupeByIdentity([makeCandidate('tool-abc', 1, 0)]),
+  result => result[0]._specificity === undefined);
 
 // ---------------------------------------------------------------------------
 // TESTS — createRoadmap  (dryRun=true, no DB writes or matrix fetches)
