@@ -25,98 +25,8 @@
  * hierarchy work, not here.
  */
 
-import { waitUntil } from '@vercel/functions';
-import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
-
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-
-// ---------------------------------------------------------------------------
-// ROADMAP CREATE-ALONGSIDE (best-effort, never affects the live response)
-//
-// Fires createRoadmap() after a recommendation is delivered so a caller_roadmaps
-// row exists for later phases of the roadmap feature. The response is still not
-// awaited on this — it returns to the caller immediately, unchanged. But without
-// waitUntil(), Vercel can freeze the container the instant the response is sent,
-// killing this mid-write; that is exactly what happened on a live call (commit
-// 5ae5fff) — a caller_roadmaps parent got created with zero roadmap_phases.
-// waitUntil() tells the platform to keep the function alive until this promise
-// settles, without making the caller wait for it. See CLAUDE.md.
-// ---------------------------------------------------------------------------
-
-let _roadmapRefsPromise = null; // cached across warm invocations of this container
-function ensureRoadmapRefs() {
-  if (!_roadmapRefsPromise) {
-    _roadmapRefsPromise = loadRefs(SUPABASE_URL, SUPABASE_KEY).catch(err => {
-      _roadmapRefsPromise = null; // allow a retry on the next call
-      throw err;
-    });
-  }
-  return _roadmapRefsPromise;
-}
-
-// In-memory guard against the same live call invoking getResourceStack more
-// than once (e.g. caller asks for more after the first stack). Best-effort
-// only — does not survive a cold start or a different warm container.
-const _roadmapAttemptedForCall = new Set();
-
-function createRoadmapAlongside({ vapiCallId, strategy, stage, blocker, alreadyTried, phone }) {
-  return (async () => {
-    try {
-      if (!strategy) return; // nothing to build a roadmap from
-
-      if (vapiCallId) {
-        if (_roadmapAttemptedForCall.has(vapiCallId)) {
-          console.log('roadmap create-alongside: skipped, already attempted for this call');
-          return;
-        }
-        _roadmapAttemptedForCall.add(vapiCallId);
-      }
-
-      await ensureRoadmapRefs();
-
-      const db = { url: SUPABASE_URL, key: SUPABASE_KEY };
-      const headers = {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      };
-
-      // Idempotency: skip if an active roadmap already exists for this phone+strategy.
-      if (phone) {
-        const existing = await fetch(
-          `${SUPABASE_URL}/rest/v1/caller_roadmaps?phone=eq.${encodeURIComponent(phone)}`
-          + `&strategy=eq.${encodeURIComponent(strategy)}&status=eq.active&select=id&limit=1`,
-          { headers },
-        ).then(r => r.json()).catch(() => []);
-        if (Array.isArray(existing) && existing.length > 0) {
-          console.log('roadmap create-alongside: skipped, active roadmap already exists for phone+strategy');
-          return;
-        }
-      }
-
-      const diagnosis = {
-        strategy,
-        stage,
-        deal_count: null,                    // not collected anywhere in intake yet
-        stated_stuck_point: blocker || null,  // best-effort: blocker keyword-matches in detectEntryPhase
-        education_history: null,             // collected in intake.js but not forwarded to this tool
-        already_tried: alreadyTried || null,
-        signals: {},
-        phone: phone || null,
-        contact_id: null,                    // only resolved later, in ghl-sync.js
-      };
-
-      const result = await createRoadmap(diagnosis, db);
-      console.log('roadmap create-alongside:',
-        result.route === 'contributor_handoff'
-          ? 'contributor_handoff route (no roadmap created)'
-          : `created ${result.roadmap_id} (${result.archetype_key}, entry phase ${result.entry_phase_order})`);
-    } catch (e) {
-      console.error('roadmap create-alongside error (non-fatal, did not affect the response):', e.message);
-    }
-  })();
-}
 
 // Vocabulary 1 -> 2. Only getting_started is spelled the same in both.
 const SHORT_STAGE = {
@@ -553,17 +463,6 @@ export default async function handler(req, res) {
 
     console.log('getResourceStack returning', top.length, 'of', maxResults,
       '| mode:', mode, '| mix:', top.map(r => r.type).join(','), '|', top.map(r => r.name).join(' / '));
-
-    // Best-effort: does not block or alter this response, but waitUntil() keeps
-    // the function alive until the write finishes instead of freezing right away.
-    waitUntil(createRoadmapAlongside({
-      vapiCallId,
-      strategy,
-      stage: longStage,
-      blocker,
-      alreadyTried: args.already_tried,
-      phone: req.body?.message?.call?.customer?.number || null,
-    }));
 
     // ─── SMS LINKS ──────────────────────────────────────────────────────────
     // Lani never reads URLs aloud (they go in the follow-up SMS), so capture the
