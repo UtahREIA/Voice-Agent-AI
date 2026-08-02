@@ -25,6 +25,7 @@
  * hierarchy work, not here.
  */
 
+import { waitUntil } from '@vercel/functions';
 import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -34,8 +35,13 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 // ROADMAP CREATE-ALONGSIDE (best-effort, never affects the live response)
 //
 // Fires createRoadmap() after a recommendation is delivered so a caller_roadmaps
-// row exists for later phases of the roadmap feature. This is fire-and-forget:
-// it must never throw into, delay, or change what Lani says. See CLAUDE.md.
+// row exists for later phases of the roadmap feature. The response is still not
+// awaited on this — it returns to the caller immediately, unchanged. But without
+// waitUntil(), Vercel can freeze the container the instant the response is sent,
+// killing this mid-write; that is exactly what happened on a live call (commit
+// 5ae5fff) — a caller_roadmaps parent got created with zero roadmap_phases.
+// waitUntil() tells the platform to keep the function alive until this promise
+// settles, without making the caller wait for it. See CLAUDE.md.
 // ---------------------------------------------------------------------------
 
 let _roadmapRefsPromise = null; // cached across warm invocations of this container
@@ -55,7 +61,7 @@ function ensureRoadmapRefs() {
 const _roadmapAttemptedForCall = new Set();
 
 function createRoadmapAlongside({ vapiCallId, strategy, stage, blocker, alreadyTried, phone }) {
-  (async () => {
+  return (async () => {
     try {
       if (!strategy) return; // nothing to build a roadmap from
 
@@ -548,15 +554,16 @@ export default async function handler(req, res) {
     console.log('getResourceStack returning', top.length, 'of', maxResults,
       '| mode:', mode, '| mix:', top.map(r => r.type).join(','), '|', top.map(r => r.name).join(' / '));
 
-    // Best-effort, fire-and-forget: does not block or alter this response.
-    createRoadmapAlongside({
+    // Best-effort: does not block or alter this response, but waitUntil() keeps
+    // the function alive until the write finishes instead of freezing right away.
+    waitUntil(createRoadmapAlongside({
       vapiCallId,
       strategy,
       stage: longStage,
       blocker,
       alreadyTried: args.already_tried,
       phone: req.body?.message?.call?.customer?.number || null,
-    });
+    }));
 
     // ─── SMS LINKS ──────────────────────────────────────────────────────────
     // Lani never reads URLs aloud (they go in the follow-up SMS), so capture the

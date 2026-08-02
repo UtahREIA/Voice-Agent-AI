@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "@vercel/functions": "^3.7.6",
     "axios": "^1.15.2",
     "busboy": "^1.6.0",
     "form-data": "^4.0.5",

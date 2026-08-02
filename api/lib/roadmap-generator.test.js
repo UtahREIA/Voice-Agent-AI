@@ -262,8 +262,12 @@ check('Brand-new (no signals) → CLARIFY or LEARN (default)',
   detectEntryPhase(1, {}),
   r => r.canonical_intent === 'CLARIFY' || r.canonical_intent === 'LEARN');
 
-check('Stage active_investor, no deal_count → PREPARE (stage fallback)',
+check('Stage active_investor (long form), no deal_count → PREPARE (stage fallback)',
   detectEntryPhase(1, { stage: 'active_investor', deal_count: null }),
+  r => r.canonical_intent === 'PREPARE' && r.signal_used === 'stage_fallback');
+
+check('Stage active (already short form), no deal_count → PREPARE (deliberate translation, not substring luck)',
+  detectEntryPhase(1, { stage: 'active', deal_count: null }),
   r => r.canonical_intent === 'PREPARE' && r.signal_used === 'stage_fallback');
 
 // A7 has only 3 phases (CLARIFY=1, LEARN=2, HANDOFF=3). No PREPARE/ACQUIRE/EXECUTE.
@@ -491,6 +495,75 @@ console.log('\n── createRoadmap (dryRun) ───────────�
 
   check('dry-run C: mentoring_others → contributor_handoff route',
     result, r => r.route === 'contributor_handoff' && r.roadmap_id === null);
+}
+
+// ---------------------------------------------------------------------------
+// TESTS — createRoadmap (live write path): partial-write guard
+//
+// Reproduces the bug seen on a real call: caller_roadmaps parent inserted,
+// then roadmap_phases insert fails (container froze mid-sequence under
+// fire-and-forget on Vercel). Asserts createRoadmap now self-cleans: the
+// parent it just inserted gets deleted, and the failure still propagates
+// (so createRoadmapAlongside's caller sees it and logs it, per commit 5ae5fff).
+// ---------------------------------------------------------------------------
+
+console.log('\n── createRoadmap (live write): partial-write guard ──────');
+
+{
+  const FAKE_ROADMAP_ID = 'roadmap-under-test-123';
+  const calls = [];
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, opts) => {
+    const u = String(url);
+    const method = opts?.method || 'GET';
+    calls.push({ url: u, method });
+
+    if (u.includes('/caller_roadmaps') && method === 'POST') {
+      return { json: async () => [{ id: FAKE_ROADMAP_ID }] };
+    }
+    if (u.includes('/roadmap_phases') && method === 'POST') {
+      // Simulate the observed failure: phases insert never lands.
+      return { ok: false, status: 500, text: async () => 'simulated roadmap_phases insert failure' };
+    }
+    if (u.includes('/caller_roadmaps') && method === 'DELETE') {
+      return { ok: true, status: 204 };
+    }
+    return { json: async () => [] };
+  };
+
+  let threw = false;
+  let thrownMessage = '';
+  try {
+    await createRoadmap(
+      { strategy: 'fix_and_flip', stage: 'getting_started', deal_count: 0 },
+      { url: 'http://placeholder.test', key: 'test-key' },
+      // no dryRun — exercises the real write path with the stubbed fetch above
+    );
+  } catch (e) {
+    threw = true;
+    thrownMessage = e.message;
+  }
+
+  global.fetch = originalFetch;
+
+  const deleteCalls = calls.filter(c => c.method === 'DELETE' && c.url.includes('/caller_roadmaps'));
+  const deletedCorrectId = deleteCalls.some(c => c.url.includes(`id=eq.${FAKE_ROADMAP_ID}`));
+
+  check('partial-write: roadmap_phases failure propagates as a thrown error',
+    threw, ok => ok === true);
+
+  check('partial-write: error message reflects the roadmap_phases failure',
+    thrownMessage, msg => msg.includes('roadmap_phases insert failed'));
+
+  check('partial-write: exactly one DELETE issued against caller_roadmaps for the orphaned parent',
+    deleteCalls, arr => arr.length === 1);
+
+  check('partial-write: the DELETE targets the exact roadmap_id that was just inserted',
+    deletedCorrectId, ok => ok === true);
+
+  check('partial-write: no roadmap_items insert was attempted after the phases failure',
+    calls, arr => !arr.some(c => c.url.includes('/roadmap_items') && c.method === 'POST'));
 }
 
 // ---------------------------------------------------------------------------

@@ -326,11 +326,16 @@ export function detectEntryPhase(archetype_id, diagnosis) {
   }
 
   // --- Signal 4: STAGE FALLBACK (coarsest) ---
-  const stageKey = (stage || '').toLowerCase();
-  if (stageKey.includes('active') || stageKey.includes('experienced') || stageKey.includes('veteran')) {
+  // Deliberate translation to short stage before comparison — do not substring-match
+  // the raw (possibly long-form) value. Every current long-form key happens to share
+  // a substring with its short form (e.g. active_investor -> active), which let this
+  // work "by luck" on an untranslated match; that coincidence is not guaranteed to
+  // hold for future stage values, so translate explicitly and compare exactly.
+  const shortStageKey = (LONG_TO_SHORT_STAGE[stage] || stage || '').toLowerCase();
+  if (shortStageKey === 'active' || shortStageKey === 'experienced' || shortStageKey === 'veteran') {
     const prep = phaseByIntent('PREPARE');
     if (prep) return respond(prep,
-      `Stage '${stage}' suggests experience — tentatively enter at PREPARE`,
+      `Stage '${stage}' (short: '${shortStageKey}') suggests experience — tentatively enter at PREPARE`,
       'stage_fallback');
   }
 
@@ -596,6 +601,24 @@ export async function populatePhaseItems(context, phase) {
   return orderPhaseItems(candidatesByType, precedence);
 }
 
+/**
+ * Compensating cleanup: delete a caller_roadmaps parent that createRoadmap just
+ * inserted, after a later step (phases/items) failed. roadmap_phases and
+ * roadmap_items both cascade on roadmap_id, so one DELETE clears everything.
+ * Best-effort — if the DELETE itself fails, the original error still propagates;
+ * the orphan can be found later via a caller_roadmaps row with no roadmap_phases.
+ */
+async function _deleteOrphanRoadmap(db, roadmap_id, writeHeaders) {
+  try {
+    await fetch(`${db.url}/rest/v1/caller_roadmaps?id=eq.${roadmap_id}`, {
+      method: 'DELETE',
+      headers: { ...writeHeaders, Prefer: 'return=minimal' },
+    });
+  } catch (_e) {
+    // Swallow — this is best-effort cleanup, not the primary failure.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // PUBLIC ASYNC FUNCTIONS — Stage 2c/2d: orchestrator (reads + writes DB)
 // ---------------------------------------------------------------------------
@@ -676,11 +699,14 @@ export async function createRoadmap(diagnosis, db, options = {}) {
   };
 
   let roadmap_id;
+  let items = [];
 
   if (dryRun) {
     roadmap_id = 'dry-run-id';
   } else {
-    // Insert caller_roadmaps row
+    // Insert caller_roadmaps row (parent). roadmap_phases/roadmap_items both carry
+    // ON DELETE CASCADE on roadmap_id, so cleaning up the parent below is enough
+    // to remove any children a failed step below managed to insert.
     const rmRes  = await fetch(`${db.url}/rest/v1/caller_roadmaps`, {
       method: 'POST', headers: writeHeaders, body: JSON.stringify(roadmapRow),
     });
@@ -690,57 +716,64 @@ export async function createRoadmap(diagnosis, db, options = {}) {
     }
     roadmap_id = rmBody[0].id;
 
-    // Insert phase shells
-    const phaseRows = phaseDescs.map(d => ({ ...d, roadmap_id }));
-    const phRes = await fetch(`${db.url}/rest/v1/roadmap_phases`, {
-      method: 'POST',
-      headers: { ...writeHeaders, Prefer: 'return=minimal' },
-      body: JSON.stringify(phaseRows),
-    });
-    if (!phRes.ok) {
-      throw new Error(`createRoadmap: roadmap_phases insert failed (${phRes.status}): ${await phRes.text()}`);
-    }
-  }
-
-  // 5. Populate entry-phase items (skipped in dryRun)
-  const items = dryRun
-    ? []
-    : await populatePhaseItems({ strategy, stage, db }, entryPhase);
-
-  if (!dryRun && items.length > 0) {
-    const itemRows = items.map(item => ({
-      roadmap_id,
-      phase_order:          entry_phase_order,
-      canonical_intent:     entryPhase.canonical_intent,
-      resource_type:        item.resource_type,
-      source_table:         item.source_table,
-      source_ref:           String(item.source_ref ?? ''),
-      display_name:         item.display_name,
-      within_type_priority: item.within_type_priority,
-      across_type_ord:      item.across_type_ord,
-      status:               'not_started',
-      status_source:        'system',
-      is_cross_cutting:     item.is_cross_cutting ?? false,
-    }));
-
-    const irRes = await fetch(`${db.url}/rest/v1/roadmap_items`, {
-      method: 'POST',
-      headers: { ...writeHeaders, Prefer: 'return=minimal' },
-      body: JSON.stringify(itemRows),
-    });
-    if (!irRes.ok) {
-      throw new Error(`createRoadmap: roadmap_items insert failed (${irRes.status}): ${await irRes.text()}`);
-    }
-
-    // Stamp entry phase populated_at
-    await fetch(
-      `${db.url}/rest/v1/roadmap_phases?roadmap_id=eq.${roadmap_id}&phase_order=eq.${entry_phase_order}`,
-      {
-        method: 'PATCH',
+    // Everything below writes CHILD rows for this parent. A caller_roadmaps row
+    // with zero roadmap_phases is a headless/unusable roadmap (observed live when
+    // the container froze mid-sequence under fire-and-forget) — if any step here
+    // fails, delete the parent we just inserted rather than leave it orphaned.
+    try {
+      // Insert phase shells
+      const phaseRows = phaseDescs.map(d => ({ ...d, roadmap_id }));
+      const phRes = await fetch(`${db.url}/rest/v1/roadmap_phases`, {
+        method: 'POST',
         headers: { ...writeHeaders, Prefer: 'return=minimal' },
-        body: JSON.stringify({ populated_at: new Date().toISOString() }),
-      },
-    );
+        body: JSON.stringify(phaseRows),
+      });
+      if (!phRes.ok) {
+        throw new Error(`createRoadmap: roadmap_phases insert failed (${phRes.status}): ${await phRes.text()}`);
+      }
+
+      // Populate entry-phase items
+      items = await populatePhaseItems({ strategy, stage, db }, entryPhase);
+
+      if (items.length > 0) {
+        const itemRows = items.map(item => ({
+          roadmap_id,
+          phase_order:          entry_phase_order,
+          canonical_intent:     entryPhase.canonical_intent,
+          resource_type:        item.resource_type,
+          source_table:         item.source_table,
+          source_ref:           String(item.source_ref ?? ''),
+          display_name:         item.display_name,
+          within_type_priority: item.within_type_priority,
+          across_type_ord:      item.across_type_ord,
+          status:               'not_started',
+          status_source:        'system',
+          is_cross_cutting:     item.is_cross_cutting ?? false,
+        }));
+
+        const irRes = await fetch(`${db.url}/rest/v1/roadmap_items`, {
+          method: 'POST',
+          headers: { ...writeHeaders, Prefer: 'return=minimal' },
+          body: JSON.stringify(itemRows),
+        });
+        if (!irRes.ok) {
+          throw new Error(`createRoadmap: roadmap_items insert failed (${irRes.status}): ${await irRes.text()}`);
+        }
+
+        // Stamp entry phase populated_at
+        await fetch(
+          `${db.url}/rest/v1/roadmap_phases?roadmap_id=eq.${roadmap_id}&phase_order=eq.${entry_phase_order}`,
+          {
+            method: 'PATCH',
+            headers: { ...writeHeaders, Prefer: 'return=minimal' },
+            body: JSON.stringify({ populated_at: new Date().toISOString() }),
+          },
+        );
+      }
+    } catch (err) {
+      await _deleteOrphanRoadmap(db, roadmap_id, writeHeaders);
+      throw err;
+    }
   }
 
   // 6. Spoken summary
