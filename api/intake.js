@@ -203,7 +203,13 @@ export default async function handler(req, res) {
     // path first, then vendor enrollment. For now 'both' falls through to investor A/B logic below.
     if (rawPath === 'V') return 'V';
     if (rawPath === 'B') return 'B';
-    if (isSet(stage) && ACTIVE_STAGES.includes(stage)) return 'B';
+    // Path C fork: 'C' means the fork question is still pending; 'C2' means it
+    // was already asked and the caller went open-ended. Preserving these across
+    // turns (via the same path_active echo that already carries B/V) is what
+    // guarantees the fork question is asked at most once per call.
+    if (rawPath === 'C2') return 'C2';
+    if (rawPath === 'C') return isSet(specific_need) ? 'C' : 'C2';
+    if (isSet(stage) && ACTIVE_STAGES.includes(stage)) return 'C';
     if (isSet(stage) && NEW_STAGES.includes(stage)) return 'A';
     return rawPath === 'B' ? 'B' : 'A';
   }
@@ -233,6 +239,21 @@ export default async function handler(req, res) {
       desired: [],
       extras: [],
       ceiling: 2
+    },
+    // Path C: experienced-track fork. 'C' asks only the fork question
+    // (specific_need). 'C2' is the open-ended landing spot once the fork is
+    // resolved that way — strategy then blocker, no beginner floor.
+    C: {
+      required: ['specific_need'],
+      desired: [],
+      extras: [],
+      ceiling: 2
+    },
+    C2: {
+      required: ['strategy', 'blocker'],
+      desired: [],
+      extras: [],
+      ceiling: 4
     },
     V: {
       required: ['vendor_service_type', 'vendor_investor_types', 'vendor_market', 'vendor_reia_connection', 'vendor_enrollment_interest', 'vendor_follow_up_preference'],
@@ -285,9 +306,15 @@ export default async function handler(req, res) {
     // ---- Path B fast exit: once the specific need is known, deliver ----
     const fastExitB = path === 'B' && isSet(specific_need);
 
+    // ---- Path C fast exit: same shape as B, only while still on the pre-fork
+    // 'C' state. Once resolved to 'C2', specific_need isn't in that flow's
+    // required list at all, so this never re-fires.
+    const fastExitC = path === 'C' && isSet(specific_need);
+
     // ---- Decide the next question, or null if it is time to route ----
     function pickNext() {
       if (fastExitB) return null;
+      if (fastExitC) return null;
       // Required floor first, in declared order.
       for (const p of flow.required) {
         if (!haveAnswer(p)) {
@@ -319,7 +346,7 @@ export default async function handler(req, res) {
     console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
       '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
       '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
-      '| fastExitB:', fastExitB,
+      '| fastExitB:', fastExitB, '| fastExitC:', fastExitC,
       '|', nextQuestion ? ('asking: ' + paramFor(nextQuestion)) : 'routing: getResourceStack');
 
     if (nextQuestion) {
