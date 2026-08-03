@@ -30,6 +30,23 @@
  * Vapi Assistant ID: 92018c4f-f382-41b9-80e0-c46e8f2b505a
  */
 
+import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
+
+// ---------------------------------------------------------------------------
+// ROADMAP CREATION (post-call, awaited — safe here because this handler runs
+// after the caller has already hung up; nothing here can affect the live call).
+// Cached across warm invocations of this function so a repeat call doesn't
+// re-fetch the archetype/phase/strategy reference tables from Supabase.
+// ---------------------------------------------------------------------------
+let _roadmapRefsPromise = null;
+function ensureRoadmapRefs() {
+  if (!_roadmapRefsPromise) {
+    _roadmapRefsPromise = loadRefs(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+      .catch(err => { _roadmapRefsPromise = null; throw err; });
+  }
+  return _roadmapRefsPromise;
+}
+
 export default async function handler(req, res) {
   // Only accept POST requests — Vapi always POSTs to this endpoint
   if (req.method !== 'POST') return res.status(405).end();
@@ -1390,6 +1407,79 @@ export default async function handler(req, res) {
         console.log('Voice agent call history written for:', callerName);
       } catch(e) {
         console.error('Voice agent call history write error:', e.message);
+      }
+    }
+
+    // --- STEP 8: Create roadmap (post-call, investor calls only) ---
+    // Re-homed here from the (reverted) resources.js live-path attempt — this
+    // handler only reaches here for investors (the vendor fork above already
+    // returned early), runs after the caller hung up, and has a resolved
+    // contact_id, so it is safe to simply await createRoadmap with no
+    // waitUntil/fire-and-forget. A failure here must not affect the rest of
+    // end-of-call sync, which has already completed by this point.
+    if (SUPABASE_URL && SUPABASE_KEY) {
+      try {
+        const primaryStrategy = (strategiesArray[0] || '').toLowerCase().trim() || null;
+
+        if (!primaryStrategy) {
+          console.log('Roadmap creation skipped — no strategy available');
+        } else {
+          const stageShortMap = {
+            'Exploring':            'exploring',
+            'Getting Started':      'getting_started',
+            'Active Investor':      'active',
+            'Experienced Investor': 'experienced',
+            'Veteran':              'veteran'
+          };
+          const roadmapStage = stageShortMap[investorStage] || investorStage || null;
+
+          const roadmapHeaders = {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          };
+
+          // Idempotency: skip if an active roadmap already exists for this
+          // contact (or phone, if contact_id didn't resolve) + strategy.
+          const idFilter = contactId
+            ? `contact_id=eq.${contactId}`
+            : effectivePhone ? `phone=eq.${encodeURIComponent(effectivePhone)}` : null;
+
+          let hasActiveRoadmap = false;
+          if (idFilter) {
+            const existingRoadmaps = await fetch(
+              `${SUPABASE_URL}/rest/v1/caller_roadmaps?${idFilter}&strategy=eq.${encodeURIComponent(primaryStrategy)}&status=eq.active&select=id&limit=1`,
+              { headers: roadmapHeaders }
+            ).then(r => r.json()).catch(() => []);
+            hasActiveRoadmap = Array.isArray(existingRoadmaps) && existingRoadmaps.length > 0;
+          }
+
+          if (hasActiveRoadmap) {
+            console.log('Roadmap creation skipped — active roadmap already exists for this contact/phone + strategy');
+          } else {
+            await ensureRoadmapRefs();
+
+            const diagnosis = {
+              strategy:           primaryStrategy,
+              stage:              roadmapStage,
+              deal_count:         null,               // not captured yet — future intake work
+              stated_stuck_point: blocker || null,     // blocker is a reasonable proxy for now
+              education_history:  null,
+              already_tried:      structured.alreadyTried || null,
+              signals:            {},
+              phone:              effectivePhone || null,
+              contact_id:         contactId || null,
+            };
+
+            const roadmapResult = await createRoadmap(diagnosis, { url: SUPABASE_URL, key: SUPABASE_KEY });
+            console.log('Roadmap created:',
+              roadmapResult.route === 'contributor_handoff'
+                ? 'contributor_handoff route (no roadmap created)'
+                : `roadmap_id ${roadmapResult.roadmap_id} (${roadmapResult.archetype_key}, entry phase ${roadmapResult.entry_phase_order})`);
+          }
+        }
+      } catch (e) {
+        console.error('Roadmap creation error (non-fatal):', e.message);
       }
     }
 
