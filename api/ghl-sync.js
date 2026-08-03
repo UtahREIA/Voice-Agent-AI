@@ -1117,7 +1117,13 @@ export default async function handler(req, res) {
         try {
           const sbContactResp = await fetch(
             `${SUPABASE_URL}/rest/v1/contacts?select=ghl_contact_id,full_name,phone&limit=5000`,
-            { headers: baseHeaders }
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+              }
+            }
           );
           const sbContacts = await sbContactResp.json();
           if (Array.isArray(sbContacts)) {

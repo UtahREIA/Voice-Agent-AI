@@ -209,6 +209,10 @@ export default async function handler(req, res) {
   }
   const path = resolvePath();
 
+  console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
+    '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
+    '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount);
+
   // ---- Goal acts as a pruning switch ----
   // A learning oriented goal means we do not grill on financing or timing;
   // route toward education instead.
@@ -311,6 +315,12 @@ export default async function handler(req, res) {
     }
 
     const nextQuestion = pickNext();
+
+    console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
+      '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
+      '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
+      '| fastExitB:', fastExitB,
+      '|', nextQuestion ? ('asking: ' + paramFor(nextQuestion)) : 'routing: getResourceStack');
 
     if (nextQuestion) {
       return res.status(200).json(vapiResult({
