@@ -145,7 +145,9 @@ export default async function handler(req, res) {
     'help me', 'not certain', 'no specific', 'nothing specific',
     'nothing in particular', 'open to', 'open-ended', 'whatever', 'anything',
     'guidance', 'direction', 'next move', 'next step', 'grow', 'growing',
-    'scale', 'scaling'
+    'scale', 'scaling', 'expand', 'expanding', 'diversify', 'diversifying',
+    'diversification', 'broaden', 'broadening', 'increase',
+    "add to what i'm doing", "build on what i'm doing", "more of what i'm doing"
   ];
   const isConcreteNeed = (v) => {
     if (!isSet(v)) return false;
@@ -225,13 +227,17 @@ export default async function handler(req, res) {
     // path first, then vendor enrollment. For now 'both' falls through to investor A/B logic below.
     if (rawPath === 'V') return 'V';
     if (rawPath === 'B') return 'B';
-    // Path C fork: 'C' means the fork question is still pending; 'C2' means it
-    // was already asked and the caller went open-ended. Preserving these across
-    // turns (via the same path_active echo that already carries B/V) is what
-    // guarantees the fork question is asked at most once per call.
-    if (rawPath === 'C2') return 'C2';
-    if (rawPath === 'C') return isConcreteNeed(specific_need) ? 'C' : 'C2';
-    if (isSet(stage) && ACTIVE_STAGES.includes(stage)) return 'C';
+    // Path C/C2 fork: derived fresh every call from collected data, not from
+    // Vapi's echoed path (it does not reliably round-trip). specific_need
+    // itself is the state signal: unset means the fork question hasn't been
+    // answered yet ('C'); set-and-concrete fast-exits ('C' + fastExitC below);
+    // set-and-open-ended means the fork already resolved to diagnosis ('C2').
+    // Stateless and idempotent: re-running this on the same collected data
+    // always reproduces the same path, so it can never regress C2 -> C.
+    if (isSet(stage) && ACTIVE_STAGES.includes(stage)) {
+      if (!isSet(specific_need)) return 'C';
+      return isConcreteNeed(specific_need) ? 'C' : 'C2';
+    }
     if (isSet(stage) && NEW_STAGES.includes(stage)) return 'A';
     return rawPath === 'B' ? 'B' : 'A';
   }
