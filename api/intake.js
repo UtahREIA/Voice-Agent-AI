@@ -131,6 +131,28 @@ export default async function handler(req, res) {
   const isSet = (v) => typeof v === 'string' && v.trim().length > 0;
   const collectedCount = Object.values(collected).filter(isSet).length;
 
+  // Path C's fork question ("something specific, or help figuring out your
+  // next move") gets a real sentence back either way — Vapi fills specific_need
+  // with whatever the caller said, even when that's an open-ended non-answer
+  // ("not sure, want to look at learning options"). isSet alone can't tell a
+  // concrete need ("hard money lender") from an uncertain one, so the fork
+  // needs its own check. Tunable — add patterns here as new false positives
+  // turn up in call transcripts.
+  const OPEN_ENDED_NEED_PATTERNS = [
+    'not sure', 'unsure', 'no idea', "don't know", 'dont know', "i don't know",
+    'not really', 'just looking', 'just browsing', 'browsing', 'exploring',
+    'explore', 'options', 'learning', 'learn', 'figure out', 'figuring out',
+    'help me', 'not certain', 'no specific', 'nothing specific',
+    'nothing in particular', 'open to', 'open-ended', 'whatever', 'anything',
+    'guidance', 'direction', 'next move', 'next step', 'grow', 'growing',
+    'scale', 'scaling'
+  ];
+  const isConcreteNeed = (v) => {
+    if (!isSet(v)) return false;
+    const t = v.toLowerCase();
+    return !OPEN_ENDED_NEED_PATTERNS.some(pattern => t.includes(pattern));
+  };
+
   // Maps a question_key to the param it fills. Falls back to the row's
   // dimension when a key is not listed (so new table rows still get asked).
   const QKEY_PARAM = {
@@ -208,7 +230,7 @@ export default async function handler(req, res) {
     // turns (via the same path_active echo that already carries B/V) is what
     // guarantees the fork question is asked at most once per call.
     if (rawPath === 'C2') return 'C2';
-    if (rawPath === 'C') return isSet(specific_need) ? 'C' : 'C2';
+    if (rawPath === 'C') return isConcreteNeed(specific_need) ? 'C' : 'C2';
     if (isSet(stage) && ACTIVE_STAGES.includes(stage)) return 'C';
     if (isSet(stage) && NEW_STAGES.includes(stage)) return 'A';
     return rawPath === 'B' ? 'B' : 'A';
@@ -307,9 +329,12 @@ export default async function handler(req, res) {
     const fastExitB = path === 'B' && isSet(specific_need);
 
     // ---- Path C fast exit: same shape as B, only while still on the pre-fork
-    // 'C' state. Once resolved to 'C2', specific_need isn't in that flow's
-    // required list at all, so this never re-fires.
-    const fastExitC = path === 'C' && isSet(specific_need);
+    // 'C' state. Uses isConcreteNeed (not isSet) so an open-ended non-answer
+    // doesn't fast-exit — resolvePath() already sent those callers to 'C2'
+    // before this line runs, so path === 'C' here only when the answer was
+    // judged concrete. Once resolved to 'C2', specific_need isn't in that
+    // flow's required list at all, so this never re-fires.
+    const fastExitC = path === 'C' && isConcreteNeed(specific_need);
 
     // ---- Decide the next question, or null if it is time to route ----
     function pickNext() {
@@ -346,7 +371,7 @@ export default async function handler(req, res) {
     console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
       '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
       '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
-      '| fastExitB:', fastExitB, '| fastExitC:', fastExitC,
+      '| fastExitB:', fastExitB, '| fastExitC:', fastExitC, '| isConcreteNeed:', isConcreteNeed(specific_need),
       '|', nextQuestion ? ('asking: ' + paramFor(nextQuestion)) : 'routing: getResourceStack');
 
     if (nextQuestion) {
