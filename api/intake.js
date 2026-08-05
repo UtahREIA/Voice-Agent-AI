@@ -97,6 +97,7 @@ export default async function handler(req, res) {
     goal = '',
     specific_need = '',
     blocker = '',
+    deal_count = '',
     capital = '',
     time_availability = '',
     credit = '',
@@ -121,7 +122,7 @@ export default async function handler(req, res) {
 
   // Map of collected values, keyed by the param name each question fills.
   const collected = {
-    caller_type, stage, strategy, goal, specific_need, blocker,
+    caller_type, stage, strategy, goal, specific_need, blocker, deal_count,
     capital, time_availability, credit, education_history, knowledge_intent,
     learning_format, support_network, readiness, timeline, already_tried,
     vendor_service_type, vendor_primary_need, vendor_investor_types,
@@ -155,6 +156,36 @@ export default async function handler(req, res) {
     return !OPEN_ENDED_NEED_PATTERNS.some(pattern => t.includes(pattern));
   };
 
+  // deal_count answers arrive as free text ("about 8", "a few", "none yet").
+  // The PARSED NUMBER (or null) is what would feed the roadmap generator's
+  // deal_count signal — never a fabricated guess when nothing is parseable, so
+  // its own null-handling/stage-fallback logic still applies. Presence for the
+  // required-floor check stays on the raw string (see collected.deal_count).
+  const DEAL_COUNT_WORD_NUMBERS = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+  };
+  // Rough estimate by phrase, checked only when no digit or number-word is
+  // found. First match wins. Tunable, same style as OPEN_ENDED_NEED_PATTERNS —
+  // add phrases here as new call transcripts turn up.
+  const DEAL_COUNT_PHRASE_MAP = [
+    { phrases: ['none yet', "haven't done any", 'havent done any', 'no deals', 'zero deals', 'none'], value: 0 },
+    { phrases: ['a few', 'couple', 'some'], value: 2 },
+    { phrases: ['several', 'many', 'a bunch'], value: 6 },
+    { phrases: ['a lot', 'tons', 'dozens'], value: 15 }
+  ];
+  const parseDealCount = (v) => {
+    if (!isSet(v)) return null;
+    const t = v.toLowerCase();
+    const digitMatch = t.match(/\d+/);
+    if (digitMatch) return parseInt(digitMatch[0], 10);
+    const wordMatch = t.match(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    if (wordMatch) return DEAL_COUNT_WORD_NUMBERS[wordMatch[1]];
+    const phraseHit = DEAL_COUNT_PHRASE_MAP.find(row => row.phrases.some(p => t.includes(p)));
+    return phraseHit ? phraseHit.value : null;
+  };
+  const dealCountParsed = parseDealCount(deal_count);
+
   // Maps a question_key to the param it fills. Falls back to the row's
   // dimension when a key is not listed (so new table rows still get asked).
   const QKEY_PARAM = {
@@ -162,6 +193,7 @@ export default async function handler(req, res) {
     ask_stage_new: 'stage',
     ask_strategy_general: 'strategy',
     ask_strategy_active: 'strategy',
+    ask_deal_count: 'deal_count',
     ask_goal_exploring: 'goal',
     ask_goal_active: 'goal',
     ask_specific_need: 'specific_need',
@@ -245,7 +277,8 @@ export default async function handler(req, res) {
 
   console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
     '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
-    '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount);
+    '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
+    '| deal_count:', deal_count, '| deal_count_parsed:', dealCountParsed);
 
   // ---- Goal acts as a pruning switch ----
   // A learning oriented goal means we do not grill on financing or timing;
@@ -278,7 +311,7 @@ export default async function handler(req, res) {
       ceiling: 2
     },
     C2: {
-      required: ['strategy', 'blocker'],
+      required: ['strategy', 'deal_count', 'blocker'],
       desired: [],
       extras: [],
       ceiling: 4
@@ -377,6 +410,7 @@ export default async function handler(req, res) {
     console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
       '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
       '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
+      '| deal_count:', deal_count, '| deal_count_parsed:', dealCountParsed,
       '| fastExitB:', fastExitB, '| fastExitC:', fastExitC, '| isConcreteNeed:', isConcreteNeed(specific_need),
       '|', nextQuestion ? ('asking: ' + paramFor(nextQuestion)) : 'routing: getResourceStack');
 
