@@ -272,7 +272,11 @@ export default async function handler(req, res) {
   console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
     '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
     '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
-    '| deal_count:', deal_count, '| deal_count_parsed:', dealCountParsed);
+    '| deal_count:', deal_count, '| deal_count_parsed:', dealCountParsed,
+    '| credit:', credit, '| capital:', capital, '| time_availability:', time_availability,
+    '| education_history:', education_history, '| already_tried:', already_tried,
+    '| knowledge_intent:', knowledge_intent, '| learning_format:', learning_format,
+    '| support_network:', support_network, '| readiness:', readiness, '| timeline:', timeline);
 
   // ---- Goal acts as a pruning switch ----
   // A learning oriented goal means we do not grill on financing or timing;
@@ -422,6 +426,10 @@ export default async function handler(req, res) {
       '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
       '| caller_type:', caller_type, '| rawPath:', rawPath, '| collectedCount:', collectedCount,
       '| deal_count:', deal_count, '| deal_count_parsed:', dealCountParsed,
+      '| credit:', credit, '| capital:', capital, '| time_availability:', time_availability,
+      '| education_history:', education_history, '| already_tried:', already_tried,
+      '| knowledge_intent:', knowledge_intent, '| learning_format:', learning_format,
+      '| support_network:', support_network, '| readiness:', readiness, '| timeline:', timeline,
       '| fastExitB:', fastExitB, '| fastExitC:', fastExitC, '| isConcreteNeed:', isConcreteNeed(specific_need),
       '|', nextQuestion ? ('asking: ' + paramFor(nextQuestion)) : 'routing: getResourceStack');
 
