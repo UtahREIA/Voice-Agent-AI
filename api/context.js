@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const vendorResp = await fetch(
       // vendor_profiles joins to contacts via contact_id
 // Use ghl_vendor_resources instead which has company_name directly
-`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,funding_financial,business_description,enroll_vendor_match&is_active=eq.true&limit=50`,
+`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,funding_financial,business_description,enroll_vendor_match&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();

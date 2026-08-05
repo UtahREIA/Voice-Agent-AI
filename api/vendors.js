@@ -322,7 +322,7 @@ export default async function handler(req, res) {
     // This replaces vendor_profiles as the source of truth for vendor data
     // ghl_vendor_resources contains company_name, phone, description, and partner categories
     const vendorResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,other_vendor_services,investor_types,enroll_vendor_match,service_areas,service_zip_codes,service_counties,serves_statewide,serves_national,service_radius_miles,primary_zip_code&is_active=eq.true&limit=50`,
+      `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,other_vendor_services,investor_types,enroll_vendor_match,service_areas,service_zip_codes,service_counties,serves_statewide,serves_national,service_radius_miles,primary_zip_code&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();

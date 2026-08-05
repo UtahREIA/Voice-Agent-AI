@@ -335,7 +335,10 @@ export default async function handler(req, res) {
       ].filter(Boolean));
       if (!rows.length) return [];
 
-      const vendors = await get(`ghl_vendor_resources?is_active=eq.true&limit=60&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities`);
+      // enroll_vendor_match=true is the gate: only vendors who opted into being
+      // matched to callers are recommendable. 21 of 112 active vendors are false
+      // and must never surface here.
+      const vendors = await get(`ghl_vendor_resources?is_active=eq.true&enroll_vendor_match=eq.true&limit=60&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities`);
 
       const out = [];
       const seen = new Set();
