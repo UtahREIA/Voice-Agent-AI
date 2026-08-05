@@ -2,9 +2,9 @@ name: Reconcile Contacts (purge GHL-deleted)
 
 # Reconciliation: finds Supabase contacts whose GHL record has been deleted and
 # purges them and their downstream data (calls, surveys, profiles, routing,
-# events). A full run reads every contact once against the GHL API, so this is
-# WEEKLY by default to keep GHL API load reasonable. Change the cron to a daily
-# schedule if you want faster cleanup — it is a one-line change.
+# events). A full run reads every contact once against the GHL API. Runs DAILY
+# (~5,000 throttled reads a night, well within GHL limits). Change the cron to
+# '23 5 * * 0' for weekly if you ever want to lighten the load.
 #
 # SETUP: needs repo secret PURGE_CONFIRM_TOKEN, identical to Vercel's env value
 # (the same secret the retention purge already uses). Until it matches, the
@@ -18,7 +18,7 @@ name: Reconcile Contacts (purge GHL-deleted)
 
 on:
   schedule:
-    - cron: '23 5 * * 0'   # Sundays 05:23 UTC — off-peak, offset from the other crons
+    - cron: '23 5 * * *'   # daily 05:23 UTC — off-peak, offset from the other crons
 
   workflow_dispatch:
     inputs:
