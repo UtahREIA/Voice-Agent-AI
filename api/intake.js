@@ -211,12 +211,16 @@ export default async function handler(req, res) {
   };
   const paramFor = (q) => QKEY_PARAM[q.question_key] || q.dimension;
 
-  // Some dimensions get answered implicitly by another one. A caller who has
-  // just listed the books, courses and mentors they have been through has also
-  // told us what they already tried, so asking both back to back reads as the
-  // same question twice. Whichever lands first satisfies the other.
+  // education_history and already_tried are deliberately KEPT SEPARATE and both
+  // asked — together they reveal the knowledge-vs-execution gap central to the
+  // anti-guru fit-detection mission. One-directional exception: if the caller
+  // volunteers what they've already tried before education_history comes up
+  // (Vapi captures it early), that already covers the near-duplicate
+  // education_history question. The reverse does NOT hold — education_history
+  // being answered does not silently skip already_tried, since education_history
+  // is always evaluated first in desired's array order, this direction is the
+  // only one that ever actually fires in practice.
   const COVERED_BY = {
-    already_tried: ['education_history'],
     education_history: ['already_tried']
   };
   const haveAnswer = (p) =>
@@ -275,15 +279,15 @@ export default async function handler(req, res) {
   // route toward education instead.
   const goalText = (goal || '').toLowerCase();
   const learningGoal = /learn|educat|understand|explore|research|not sure|figuring|figure out|just looking|curious/.test(goalText);
-  const pruneSet = new Set(learningGoal ? ['credit', 'time_availability', 'readiness', 'timeline'] : []);
+  const pruneSet = new Set(learningGoal ? ['credit', 'time_availability', 'readiness'] : []);
 
   // ---- Per path REQUIRED floor, DESIRED set, EXTRAS, and soft ceiling ----
   const FLOW = {
     A: {
       required: ['stage', 'strategy', 'goal', 'blocker'],
       desired: ['capital', 'credit', 'education_history', 'already_tried'],
-      extras: ['time_availability', 'knowledge_intent', 'learning_format', 'support_network', 'readiness', 'timeline'],
-      ceiling: 8
+      extras: ['time_availability', 'knowledge_intent', 'learning_format', 'support_network', 'readiness'],
+      ceiling: 14
     },
     B: {
       required: ['specific_need'],
@@ -301,10 +305,10 @@ export default async function handler(req, res) {
       ceiling: 2
     },
     C2: {
-      required: ['strategy', 'deal_count', 'blocker'],
-      desired: [],
+      required: ['strategy', 'deal_count', 'goal', 'blocker'],
+      desired: ['education_history'],
       extras: [],
-      ceiling: 4
+      ceiling: 7
     },
     V: {
       required: ['vendor_service_type', 'vendor_investor_types', 'vendor_market', 'vendor_reia_connection', 'vendor_enrollment_interest', 'vendor_follow_up_preference'],
