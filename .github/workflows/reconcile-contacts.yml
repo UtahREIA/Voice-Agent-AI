@@ -1,0 +1,95 @@
+name: Reconcile Contacts (purge GHL-deleted)
+
+# Reconciliation: finds Supabase contacts whose GHL record has been deleted and
+# purges them and their downstream data (calls, surveys, profiles, routing,
+# events). A full run reads every contact once against the GHL API, so this is
+# WEEKLY by default to keep GHL API load reasonable. Change the cron to a daily
+# schedule if you want faster cleanup — it is a one-line change.
+#
+# SETUP: needs repo secret PURGE_CONFIRM_TOKEN, identical to Vercel's env value
+# (the same secret the retention purge already uses). Until it matches, the
+# endpoint refuses to delete and this job fails loudly rather than silently
+# doing nothing.
+#
+# The endpoint pages with limit/offset. Because purging DELETES rows, each page
+# shifts the remaining rows left, so we advance the cursor by (checked - purged),
+# not a flat limit, or we would skip contacts. Detect-only runs (dry_run) purge
+# nothing, so purged is 0 and the same formula advances by a flat limit.
+
+on:
+  schedule:
+    - cron: '23 5 * * 0'   # Sundays 05:23 UTC — off-peak, offset from the other crons
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Detect only — find orphans, delete nothing'
+        type: boolean
+        default: false
+
+jobs:
+  reconcile:
+    name: Reconcile and purge deleted-in-GHL contacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Walk reconciliation pages
+        run: |
+          BASE="https://voice-agent-ai-nu.vercel.app/api/reconcile-contacts"
+          LIMIT=40
+          OFFSET=0
+          PAGES=0
+          MAX_PAGES=400
+          GRAND_ORPHANS=0
+          GRAND_PURGED=0
+
+          PURGE="&purge=true"
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            PURGE=""
+            echo "DRY RUN — detecting orphans only, nothing will be deleted."
+          fi
+
+          while [ "$PAGES" -lt "$MAX_PAGES" ]; do
+            RESP=$(curl -s --max-time 90 \
+              -H "Authorization: Bearer ${{ secrets.PURGE_CONFIRM_TOKEN }}" \
+              "${BASE}?limit=${LIMIT}&offset=${OFFSET}${PURGE}")
+
+            OK=$(echo "$RESP" | jq -r '.ok // false')
+            if [ "$OK" != "true" ]; then
+              echo "Non-OK response at offset ${OFFSET}: ${RESP}"
+              exit 1
+            fi
+
+            REFUSED=$(echo "$RESP" | jq -r '.purge_refused // empty')
+            if [ -n "$PURGE" ] && [ -n "$REFUSED" ]; then
+              echo "Purge refused: ${REFUSED}"
+              echo "Ensure repo secret PURGE_CONFIRM_TOKEN matches Vercel's PURGE_CONFIRM_TOKEN env."
+              exit 1
+            fi
+
+            CHECKED=$(echo "$RESP" | jq -r '.checked // 0')
+            ORPH=$(echo "$RESP" | jq -r '.orphan_count // 0')
+            PURGED=$(echo "$RESP" | jq -r '.purged_count // 0')
+
+            GRAND_ORPHANS=$((GRAND_ORPHANS + ORPH))
+            GRAND_PURGED=$((GRAND_PURGED + PURGED))
+            PAGES=$((PAGES + 1))
+            echo "page ${PAGES}: offset=${OFFSET} checked=${CHECKED} orphans=${ORPH} purged=${PURGED}"
+
+            # Last page — fewer rows than a full page means we reached the end.
+            if [ "$CHECKED" -lt "$LIMIT" ]; then
+              break
+            fi
+
+            # Advance past only the rows that REMAIN after purging (see header).
+            OFFSET=$((OFFSET + CHECKED - PURGED))
+            sleep 2
+          done
+
+          echo "-----"
+          echo "Reconcile complete. Pages: ${PAGES}, orphans found: ${GRAND_ORPHANS}, purged: ${GRAND_PURGED}"
+          if [ "$PAGES" -ge "$MAX_PAGES" ]; then
+            echo "WARNING: hit the MAX_PAGES safety cap. Run again to finish the remaining contacts."
+            exit 1
+          fi
