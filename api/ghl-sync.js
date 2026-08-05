@@ -31,6 +31,7 @@
  */
 
 import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
+import { parseDealCount } from './lib/deal-count.js';
 
 // ---------------------------------------------------------------------------
 // ROADMAP CREATION (post-call, awaited — safe here because this handler runs
@@ -538,6 +539,8 @@ export default async function handler(req, res) {
     const investorStage = structured.investorStage || '';
     const strategies    = structured.strategies    || '';
     const blocker       = structured.blocker       || '';
+    const dealCountRaw    = structured.dealCount    || '';
+    const dealCountParsed = parseDealCount(dealCountRaw);
     const goals         = structured.goals         || '';
     const summary       = structured.summary       || '';
     const recommendedNextStep = structured.recommendedNextStep || '';
@@ -1468,7 +1471,7 @@ export default async function handler(req, res) {
             const diagnosis = {
               strategy:           primaryStrategy,
               stage:              roadmapStage,
-              deal_count:         null,               // not captured yet — future intake work
+              deal_count:         dealCountParsed,
               stated_stuck_point: blocker || null,     // blocker is a reasonable proxy for now
               education_history:  null,
               already_tried:      structured.alreadyTried || null,
