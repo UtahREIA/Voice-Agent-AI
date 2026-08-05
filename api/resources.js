@@ -419,7 +419,36 @@ export default async function handler(req, res) {
       }
     }
 
+    // ─── GAP LOGGING ────────────────────────────────────────────────────────
+    // Persist what the matcher could NOT serve, kept as two separate signals for
+    // the problem-taxonomy work (never conflated):
+    //   taxonomy gap = the need mapped to nothing  -> which problem to map next
+    //   service gap  = a category the caller needed came back empty -> a vendor
+    //                  or educator to acquire (demand we are not serving)
+    async function logGaps(rows) {
+      if (!rows.length) return;
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/resource_gaps`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(rows.map(g => ({
+            gap_type: g.gap_type,
+            missing_category: g.missing_category || null,
+            specific_need: String(args.specific_need || args.goal || '').slice(0, 300),
+            stage: rawStage, strategy, blocker,
+            requested_mode: mode,
+            vapi_call_id: vapiCallId
+          })))
+        });
+      } catch (e) { console.error('gap log error:', e.message); }
+    }
+
     if (top.length === 0) {
+      // Asked for one specific category and got nothing = we do not serve it
+      // (service gap). Default mode with nothing at all = unmapped need (taxonomy).
+      await logGaps([ isSpecific
+        ? { gap_type: 'service', missing_category: mode }
+        : { gap_type: 'taxonomy', missing_category: null } ]);
       return vapiResult(
         'NO_MATCH — Say exactly this to the caller: ' +
         '"I was not able to find a specific match for what you are looking for right now. ' +
@@ -509,6 +538,13 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('stack-links cache write error:', e.message);
       }
+    }
+
+    // A stack got delivered, but the caller's blocker routes to a vendor need and
+    // we matched none — a service gap (vendor to acquire) even though other
+    // categories filled the stack.
+    if (!isSpecific && blocker && (buckets.vendor || []).length === 0) {
+      await logGaps([{ gap_type: 'service', missing_category: 'vendor' }]);
     }
 
     const voiceText = `${lead} ${parts.join(' ')}${warmIntro}${closer}`;
