@@ -31,6 +31,11 @@
  */
 
 import { parseDealCount } from './lib/deal-count.js';
+import {
+  DEAL_COUNT_THRESHOLD_STANDARD,
+  DEAL_COUNT_THRESHOLD_COMMERCIAL,
+  EDUCATION_STRATEGY_MAP
+} from './lib/roadmap-generator.js';
 
 export const config = { api: { bodyParser: true } };
 
@@ -162,6 +167,14 @@ export default async function handler(req, res) {
   // Parsing lives in api/lib/deal-count.js, shared with ghl-sync.js's
   // post-call roadmap diagnosis so both paths parse identically.
   const dealCountParsed = parseDealCount(deal_count);
+
+  // Static, strategy-level approximation of roadmap-generator.js's archetype-level
+  // "commercial class" check (COMMERCIAL_ARCHETYPE_IDS, resolved via a Supabase
+  // round trip through strategy_archetype_map that this live-call endpoint does
+  // not perform). Reuses EDUCATION_STRATEGY_MAP, the codebase's existing
+  // strategy-level definition of "this strategy behaves like commercial".
+  const isCommercialClassStrategy = (s) =>
+    s === 'commercial' || Object.prototype.hasOwnProperty.call(EDUCATION_STRATEGY_MAP, s);
 
   // Maps a question_key to the param it fills. Falls back to the row's
   // dimension when a key is not listed (so new table rows still get asked).
@@ -352,12 +365,29 @@ export default async function handler(req, res) {
     // flow's required list at all, so this never re-fires.
     const fastExitC = path === 'C' && isConcreteNeed(specific_need);
 
+    // ---- Path C2 conditional follow-up: once strategy/deal_count/blocker are
+    // all in, decide whether capital + time_availability get added to the
+    // required floor before routing. Deliberately NOT a static FLOW.C2.required
+    // entry (that would make it unconditional) — computed fresh each call, so
+    // it can never re-trigger once capital/time_availability are answered.
+    let effectiveRequired = flow.required;
+    if (path === 'C2' && flow.required.every(p => haveAnswer(p))) {
+      const threshold = isCommercialClassStrategy(strategy)
+        ? DEAL_COUNT_THRESHOLD_COMMERCIAL
+        : DEAL_COUNT_THRESHOLD_STANDARD;
+      const lowDealCount = dealCountParsed === null || dealCountParsed < threshold;
+      const capitalBlocker = blocker === 'capital';
+      if (lowDealCount || capitalBlocker) {
+        effectiveRequired = [...flow.required, 'capital', 'time_availability'];
+      }
+    }
+
     // ---- Decide the next question, or null if it is time to route ----
     function pickNext() {
       if (fastExitB) return null;
       if (fastExitC) return null;
       // Required floor first, in declared order.
-      for (const p of flow.required) {
+      for (const p of effectiveRequired) {
         if (!haveAnswer(p)) {
           const q = byParam(p);
           if (q) return q;

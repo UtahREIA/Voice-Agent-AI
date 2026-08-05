@@ -22,10 +22,10 @@
 // ---------------------------------------------------------------------------
 
 /** Minimum deal count before a caller is considered "past foundational LEARN". */
-const DEAL_COUNT_THRESHOLD_STANDARD = 5;
+export const DEAL_COUNT_THRESHOLD_STANDARD = 5;
 
 /** Lower threshold for commercial-class archetypes (fewer deals to progress). */
-const DEAL_COUNT_THRESHOLD_COMMERCIAL = 3;
+export const DEAL_COUNT_THRESHOLD_COMMERCIAL = 3;
 
 /** Archetype IDs that use the lower commercial threshold. */
 const COMMERCIAL_ARCHETYPE_IDS = new Set([2]); // A2 — Commercial / Large Asset
@@ -95,7 +95,7 @@ const LONG_TO_SHORT_STAGE = {
  * Commercial sub-strategies collapse to 'commercial' in education_routing_matrix
  * (confirmed: industrial/retail/multi_family/etc. have no own rows in that table).
  */
-const EDUCATION_STRATEGY_MAP = {
+export const EDUCATION_STRATEGY_MAP = {
   industrial:      'commercial',
   retail:          'commercial',
   multi_family:    'commercial',
