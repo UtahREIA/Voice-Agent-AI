@@ -155,7 +155,10 @@ export default async function handler(req, res) {
                   business_description: props.business_description || '',
                   company_tagline:     props.company_tagline || '',
                   company_logo:        Array.isArray(props.company_logo) ? (props.company_logo[0]?.url || '') : (props.company_logo || ''),
-                  contractor_speciality: props.contractor_speciality || '',
+                  // GHL misspells this key as contractor_specility (no second 'a')
+                  // and stores an array; join to the text column.
+                  contractor_speciality: parseArray(props.contractor_specility || props.contractor_speciality).join(', '),
+                  other_vendor_services: props.other_vendor_services || '',
                   // Category fields -- GHL appends _partner to the key
                   deals_opportunities:  parseArray(props.deals__opportunities_partner || props.deals_opportunities),
                   funding_financial:    parseArray(props.funding__financial_partner   || props.funding_financial),
@@ -169,6 +172,8 @@ export default async function handler(req, res) {
                   social_instagram: props.social_profile_links_instagram || props.social_instagram || '',
                   social_youtube:   props.social_profile_links_youtube   || props.social_youtube   || '',
                   social_linkedin:  props.social_profile_links_linkedin  || props.social_linkedin  || '',
+                  promotion_graphics: Array.isArray(props.promotion_graphics) ? (props.promotion_graphics[0]?.url || '') : (props.promotion_graphics || ''),
+                  member_promotions:  props.member_promotions || '',
                   // Boolean fields return as arrays ["true"] -- parseBool extracts correctly
                   enroll_vendor_match: parseBool(Array.isArray(props.enroll_vendor_match) ? props.enroll_vendor_match[0] : props.enroll_vendor_match),
                   affiliate_partner:   parseBool(Array.isArray(props.affiliate_partner)   ? props.affiliate_partner[0]   : props.affiliate_partner),
@@ -396,7 +401,7 @@ export default async function handler(req, res) {
         company_state:          body.company_state || '',
         company_postal_code:    body.company_postal_code || '',
         company_logo:           body.company_logo || '',
-        contractor_speciality:  body.contractor_speciality || '',
+        contractor_speciality:  parseArray(body.contractor_specility || body.contractor_speciality).join(', '),
         other_vendor_services:  body.other_vendor_services || '',
         // GHL appends _partner to multi-select category field keys in webhook payloads too
         deals_opportunities:    parseArray(body.deals__opportunities_partner || body.deals_opportunities),
