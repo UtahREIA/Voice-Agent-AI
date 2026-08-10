@@ -321,7 +321,7 @@ export default async function handler(req, res) {
     if (Object.keys(structured).length === 0 && payload.message?.artifact) {
       const art = payload.message.artifact;
       const knownFields = ['callerName','callerEmail','callerPhone','profileType','investorStage',
-        'strategies','blocker','goals','summary','recommendedNextStep','tier','vendorMatches',
+        'strategies','blocker','goals','specificNeed','summary','recommendedNextStep','tier','vendorMatches',
         'toolMatches','educatorMatch','bookingRequired','alreadyTried','handoffChannel',
         'stackSummary','commercialAssetTypes','wantsMentorConnection',
         'wantsProfessionalConnections','wantsOffMarketDeals'];
@@ -542,6 +542,7 @@ export default async function handler(req, res) {
     const dealCountRaw    = structured.dealCount    || '';
     const dealCountParsed = parseDealCount(dealCountRaw);
     const goals         = structured.goals         || '';
+    const specificNeed  = structured.specificNeed  || '';
     const summary       = structured.summary       || '';
     const recommendedNextStep = structured.recommendedNextStep || '';
 
@@ -884,7 +885,7 @@ export default async function handler(req, res) {
         { id: 'hf9VEhcVwgyNXP3qbzsA', field_value: strategiesArray },             // Strategies (multi)
         { id: 't150aKjUz1KvU183CtJw', field_value: goals ? [goals] : [] },        // Goals (multi)
         { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },                 // Profile Type (text)
-        { id: 'TCCSXzunxUqJme5YtGSr', field_value: summary + (recommendedNextStep ? '\n\nNext step: ' + recommendedNextStep : '') }, // Summary
+        { id: 'TCCSXzunxUqJme5YtGSr', field_value: (specificNeed ? 'Looking for: ' + specificNeed + '\n\n' : '') + summary + (recommendedNextStep ? '\n\nNext step: ' + recommendedNextStep : '') }, // Summary — leads with the caller's request so no-match follow-ups know what they wanted
 
         // New voice agent routing fields (created May 26 2026)
         { id: 'pqEFatxBgBKsS8dvY37S', field_value: structured.alreadyTried  || '' },  // Already Tried
