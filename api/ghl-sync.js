@@ -887,6 +887,14 @@ export default async function handler(req, res) {
         { id: 'mTmRVbyZKGqVXqHvhsX6', field_value: profileType },                 // Profile Type (text)
         { id: 'TCCSXzunxUqJme5YtGSr', field_value: (specificNeed ? 'Looking for: ' + specificNeed + '\n\n' : '') + summary + (recommendedNextStep ? '\n\nNext step: ' + recommendedNextStep : '') }, // Summary — leads with the caller's request so no-match follow-ups know what they wanted
 
+        // Voice Agent TEXT mirrors of stage/strategy/blocker/goals (created 2026-08-10).
+        // The OPTIONS fields above do not reliably receive webhook payloads (see CLAUDE.md),
+        // so notifications and the no-match email read these plain-TEXT copies instead.
+        { id: 'aDVV6scvxwgNpVfxZBdF', field_value: investorStage || '' },                   // Voice Agent Stage
+        { id: 'k70F9VKKJgAomVmH9UtK', field_value: strategiesArray.join(', ') },            // Voice Agent Strategy
+        { id: 'z3J5CK0u9nF7b3RJhNjt', field_value: blocker || '' },                         // Voice Agent Blocker
+        { id: 'IW31RqB9Q2nc8IoXIpyM', field_value: goals || '' },                           // Voice Agent Goals
+
         // New voice agent routing fields (created May 26 2026)
         { id: 'pqEFatxBgBKsS8dvY37S', field_value: structured.alreadyTried  || '' },  // Already Tried
         { id: 'QKOAN0pyMa2IkeGVAF9f', field_value: structured.stackSummary  || summary || '' }, // Stack Summary
