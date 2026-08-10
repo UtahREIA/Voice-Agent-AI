@@ -345,22 +345,32 @@ export default async function handler(req, res) {
       for (const row of rows) {
         if (out.length >= depth) break;
         const cats = (row.vendor_categories || []).map(c => String(c).toLowerCase());
-        for (const v of vendors) {
+        // Walk the row's lender types IN PRIORITY ORDER so the correct service for
+        // this investor/asset type surfaces first: hard money before DSCR for a
+        // flip, DSCR mortgage before hard money for a hold, SDIRA/advisor for
+        // passive, commercial bridge for commercial assets. Matching by vendor
+        // order (the old behavior) ignored this ordering entirely. An empty cats
+        // list (no differentiation) still matches every vendor via the '' sentinel.
+        const ordered = cats.length ? cats : [''];
+        for (const c of ordered) {
           if (out.length >= depth) break;
-          const name = v.company_name || '';
-          if (!name || seen.has(name)) continue;
-          const services = [...(v.funding_financial || []), ...(v.deals_opportunities || [])].map(s => String(s).toLowerCase());
-          const hit = cats.length === 0 || cats.some(c => services.some(s => s.includes(c) || c.includes(s)));
-          if (!hit) continue;
-          seen.add(name);
-          out.push({
-            type: 'vendor',
-            name,
-            description: v.business_description || cats.slice(0, 2).join(', '),
-            contact: v.company_website || v.company_phone || '',
-            connection_method: (row.connection_methods || [])[0] || 'ai_recommendation',
-            priority: row.priority || 5
-          });
+          for (const v of vendors) {
+            if (out.length >= depth) break;
+            const name = v.company_name || '';
+            if (!name || seen.has(name)) continue;
+            const services = [...(v.funding_financial || []), ...(v.deals_opportunities || [])].map(s => String(s).toLowerCase());
+            const hit = c === '' || services.some(s => s.includes(c) || c.includes(s));
+            if (!hit) continue;
+            seen.add(name);
+            out.push({
+              type: 'vendor',
+              name,
+              description: v.business_description || cats.slice(0, 2).join(', '),
+              contact: v.company_website || v.company_phone || '',
+              connection_method: (row.connection_methods || [])[0] || 'ai_recommendation',
+              priority: row.priority || 5
+            });
+          }
         }
       }
       return out;
