@@ -112,6 +112,20 @@ export default async function handler(req, res) {
 
           console.log(`${obj.type}: fetched ${allRecords.length} records`);
 
+          // Diagnostic: log the UNION of real GHL property keys across the first
+          // records (each record is sparse, so one is not enough). This surfaces
+          // renamed or mangled keys — e.g. contractor_specility, or a _partner
+          // multi-select whose underscores differ — so a field never silently
+          // misses its column again. Compare these against the props.* keys mapped
+          // below.
+          const seenPropKeys = new Set();
+          for (const r of allRecords.slice(0, 25)) {
+            for (const k of Object.keys(r.properties || {})) seenPropKeys.add(k);
+          }
+          if (seenPropKeys.size) {
+            console.log('SYNC PROPKEYS —', obj.type, ':', [...seenPropKeys].sort().join(', '));
+          }
+
           // Process each record through the same upsert logic used by the POST handler
           let upserted = 0;
           for (const record of allRecords) {
