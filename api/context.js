@@ -24,17 +24,24 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 1. ACTIVE VENDORS from Supabase — with service_types populated
+    // 1. ACTIVE VENDORS from Supabase.
+    // NOTE: ghl_vendor_resources has no `service_types` column — the old filter
+    // tested `v.service_types?.length`, which was always undefined, so this whole
+    // section was silently hidden behind its fallback forever. A vendor's services
+    // live across the category arrays below; pull them and filter on a real signal.
     const vendorResp = await fetch(
-      // vendor_profiles joins to contacts via contact_id
-// Use ghl_vendor_resources instead which has company_name directly
-`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,funding_financial,business_description,enroll_vendor_match&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
+`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,operations,development_land,contractor_speciality,other_vendor_services,enroll_vendor_match&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
-    const activeVendors = vendors.filter(v =>
-      v.company_name &&
-      v.service_types?.length > 0
+    const VENDOR_SERVICE_ARRAYS = ['funding_financial','deals_opportunities','team_vendors','operations','development_land'];
+    const vendorServices = (v) => {
+      const arr = VENDOR_SERVICE_ARRAYS.flatMap(k => Array.isArray(v[k]) ? v[k] : []);
+      const txt = [v.contractor_speciality, v.other_vendor_services].filter(Boolean);
+      return [...arr, ...txt].map(s => String(s).replace(/_/g, ' ').trim()).filter(Boolean);
+    };
+    const activeVendors = (Array.isArray(vendors) ? vendors : []).filter(v =>
+      v.company_name && (vendorServices(v).length > 0 || v.business_description)
     ).slice(0, 20);
 
     // 3. UPCOMING EVENTS from ghl_upcoming_events Supabase table
@@ -124,7 +131,7 @@ export default async function handler(req, res) {
       activeVendors.forEach(v => {
         const name = v.company_name || '';
         const contact = null;
-        const services = (v.funding_financial || []).slice(0, 2).join(', ') || v.business_description?.slice(0,50) || '';
+        const services = vendorServices(v).slice(0, 2).join(', ') || v.business_description?.slice(0,50) || '';
         const contactStr = '';
         lines.push(`- ${name}${contactStr}: ${services}`);
       });
