@@ -91,6 +91,11 @@ const MATRIX_STRATEGY = {
   notes_lending: ['notes_and_lending'],
   not_sure: ['not_sure_yet'],
   wholesale: ['wholesale', 'wholesaling'],
+  // brrrr has its own vendor row (matched first via stratEq) but NO education
+  // track and no fallback, so brrrr callers got a thin/empty LEARN stack. Fall
+  // education back to buy_and_hold (BRRRR's defining end-state is a refinanced
+  // rental hold). Interim mapping — Chris can refine or author a dedicated track.
+  brrrr: ['buy_and_hold'],
   syndication: ['raising_capital'],
   passive_investing: ['buy_and_hold'],
   house_hacking: ['buy_and_hold'],
