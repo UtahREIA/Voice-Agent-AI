@@ -315,7 +315,7 @@ export default async function handler(req, res) {
       ceiling: 7
     },
     V: {
-      required: ['vendor_service_type', 'vendor_primary_need', 'vendor_investor_types', 'vendor_market', 'vendor_reia_connection', 'vendor_enrollment_interest', 'vendor_follow_up_preference'],
+      required: ['vendor_service_type', 'vendor_investor_types', 'vendor_market', 'vendor_reia_connection', 'vendor_enrollment_interest', 'vendor_follow_up_preference'],
       desired: [],
       extras: [],
       ceiling: 8
