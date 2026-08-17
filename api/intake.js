@@ -95,6 +95,59 @@ export default async function handler(req, res) {
     return res.status(200).json(vapiResult('Intake routing unavailable. Continue with default flow.'));
   }
 
+  // ---- Intake state cache: survive Vapi's real-time state-passing drops ----
+  // On longer calls Vapi sometimes re-invokes getIntakeRouting with a partial or
+  // empty argument set (a known Vapi-side failure, not ours). Because this endpoint
+  // is stateless, an empty payload would otherwise restart the flow and re-ask
+  // questions the caller already answered — the "let me try again with all the
+  // info" loop callers hear. So we persist the accumulated dimensions per Vapi call
+  // id and, each turn, fill any BLANK incoming field from the cache. Incoming
+  // non-empty values always win, so a caller correcting an answer still applies.
+  const CACHE_DIMS = [
+    'caller_type','stage','strategy','goal','specific_need','blocker','deal_count',
+    'capital','time_availability','credit','education_history','knowledge_intent',
+    'learning_format','support_network','readiness','timeline','already_tried',
+    'vendor_service_type','vendor_primary_need','vendor_investor_types','vendor_market',
+    'vendor_reia_connection','vendor_enrollment_interest','vendor_follow_up_preference'
+  ];
+  const cacheHasValue = (v) => typeof v === 'string'
+    ? v.trim().length > 0
+    : (v !== undefined && v !== null && v !== '');
+  const stateCallId = req.body?.message?.call?.id || req.body?.call?.id || null;
+  const cacheHeaders = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`
+  };
+  if (stateCallId) {
+    let cachedState = {};
+    try {
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/intake_state?vapi_call_id=eq.${encodeURIComponent(stateCallId)}&select=state&limit=1`,
+        { headers: cacheHeaders }
+      );
+      const rows = await cr.json();
+      if (Array.isArray(rows) && rows[0]?.state && typeof rows[0].state === 'object') cachedState = rows[0].state;
+    } catch (e) { console.error('intake_state read error:', e.message); }
+
+    let recovered = 0;
+    for (const k of CACHE_DIMS) {
+      if (!cacheHasValue(vapiArgs[k]) && cacheHasValue(cachedState[k])) { vapiArgs[k] = cachedState[k]; recovered++; }
+    }
+    if (recovered > 0) console.log(`INTAKE STATE — recovered ${recovered} dropped dimension(s) from cache for call ${stateCallId}`);
+
+    // Persist the merged accumulated state for the next turn.
+    const toStore = {};
+    for (const k of CACHE_DIMS) if (cacheHasValue(vapiArgs[k])) toStore[k] = vapiArgs[k];
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/intake_state?on_conflict=vapi_call_id`, {
+        method: 'POST',
+        headers: { ...cacheHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ vapi_call_id: stateCallId, state: toStore, updated_at: new Date().toISOString() })
+      });
+    } catch (e) { console.error('intake_state write error:', e.message); }
+  }
+
   // ---- Pull the full dimension set the agent may have collected so far ----
   const {
     path: rawPath = 'A',
