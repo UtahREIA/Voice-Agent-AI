@@ -23,6 +23,18 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
 
+  // Vapi custom tools require the result wrapped as { results: [{ toolCallId, result }] }.
+  // Returning a bare { result } is what made GetUtahREIAContext show "No result returned"
+  // on every call, so Lani never received this pre-call context. Non-Vapi callers (no
+  // toolCallId, e.g. a plain GET) still get the bare { result } shape.
+  const toolCallId =
+    req.body?.message?.toolCallList?.[0]?.id ||
+    req.body?.message?.toolCalls?.[0]?.id ||
+    req.body?.toolCallList?.[0]?.id || null;
+  const sendResult = (result) => toolCallId
+    ? res.status(200).json({ results: [{ toolCallId, result: String(result) }] })
+    : res.status(200).json({ result: String(result) });
+
   try {
     // 1. ACTIVE VENDORS from Supabase.
     // NOTE: ghl_vendor_resources has no `service_types` column — the old filter
@@ -216,14 +228,11 @@ export default async function handler(req, res) {
 
     const result = lines.join('\n');
     console.log(`Context built — vendors: ${activeVendors.length} events: ${events.length}`);
-    return res.status(200).json({ result });
+    return sendResult(result);
 
   } catch(e) {
     console.error('Context error:', e.message);
     console.error('Context error stack:', e.stack);
-    return res.status(200).json({
-      result: 'Live community data temporarily unavailable. Use the knowledge in your system prompt.',
-      error: e.message
-    });
+    return sendResult('Live community data temporarily unavailable. Use the knowledge in your system prompt.');
   }
 }
