@@ -119,6 +119,12 @@ export default async function handler(req, res) {
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
+  // Ask-count cap: how many times each NON-required question has been asked so
+  // far. An answer Vapi cannot extract (e.g. a multi-part education reply) or a
+  // caller who keeps deflecting must not trap the call in an endless re-ask, so
+  // a non-required question that hits the cap is skipped and the flow routes.
+  // Persisted alongside the dimensions.
+  let cacheAskCounts = {};
   if (stateCallId) {
     let cachedState = {};
     try {
@@ -130,14 +136,19 @@ export default async function handler(req, res) {
       if (Array.isArray(rows) && rows[0]?.state && typeof rows[0].state === 'object') cachedState = rows[0].state;
     } catch (e) { console.error('intake_state read error:', e.message); }
 
+    if (cachedState._asks && typeof cachedState._asks === 'object') cacheAskCounts = cachedState._asks;
     let recovered = 0;
     for (const k of CACHE_DIMS) {
       if (!cacheHasValue(vapiArgs[k]) && cacheHasValue(cachedState[k])) { vapiArgs[k] = cachedState[k]; recovered++; }
     }
     if (recovered > 0) console.log(`INTAKE STATE — recovered ${recovered} dropped dimension(s) from cache for call ${stateCallId}`);
+  }
 
-    // Persist the merged accumulated state for the next turn.
-    const toStore = {};
+  // Persist the merged dimensions + ask-counts. Called after the next question is
+  // chosen so the count reflects this turn. Awaited (~5ms, off the voice path).
+  const persistIntakeState = async () => {
+    if (!stateCallId) return;
+    const toStore = { _asks: cacheAskCounts };
     for (const k of CACHE_DIMS) if (cacheHasValue(vapiArgs[k])) toStore[k] = vapiArgs[k];
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/intake_state?on_conflict=vapi_call_id`, {
@@ -146,7 +157,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({ vapi_call_id: stateCallId, state: toStore, updated_at: new Date().toISOString() })
       });
     } catch (e) { console.error('intake_state write error:', e.message); }
-  }
+  };
 
   // ---- Pull the full dimension set the agent may have collected so far ----
   const {
@@ -443,6 +454,13 @@ export default async function handler(req, res) {
       }
     }
 
+    // A non-required question already asked MAX_NONREQUIRED_ASKS times without an
+    // answer coming back (Vapi failed to extract it, or the caller keeps
+    // deflecting) is skipped so it can never trap the call in an endless re-ask.
+    // Required questions are never capped — they must be collected to route safely.
+    const MAX_NONREQUIRED_ASKS = 2;
+    const askedTooMuch = (p) => (cacheAskCounts[p] || 0) >= MAX_NONREQUIRED_ASKS;
+
     // ---- Decide the next question, or null if it is time to route ----
     function pickNext() {
       if (fastExitB) return null;
@@ -454,9 +472,10 @@ export default async function handler(req, res) {
           if (q) return q;
         }
       }
-      // Desired next (skipped silently if pruned, covered, or has no row for this stage).
+      // Desired next (skipped silently if pruned, covered, over the ask cap, or
+      // if it has no row for this stage).
       for (const p of flow.desired) {
-        if (!haveAnswer(p)) {
+        if (!haveAnswer(p) && !askedTooMuch(p)) {
           const q = byParam(p);
           if (q) return q;
         }
@@ -464,7 +483,7 @@ export default async function handler(req, res) {
       // Extras only while under the soft ceiling.
       if (collectedCount < flow.ceiling) {
         for (const p of flow.extras) {
-          if (!haveAnswer(p)) {
+          if (!haveAnswer(p) && !askedTooMuch(p)) {
             const q = byParam(p);
             if (q) return q;
           }
@@ -474,6 +493,16 @@ export default async function handler(req, res) {
     }
 
     const nextQuestion = pickNext();
+
+    // Record that we asked this non-required question (cap tracking), then persist
+    // the merged state + counts so the next turn sees them even if Vapi drops args.
+    if (nextQuestion) {
+      const nextParam = paramFor(nextQuestion);
+      if (!effectiveRequired.includes(nextParam)) {
+        cacheAskCounts[nextParam] = (cacheAskCounts[nextParam] || 0) + 1;
+      }
+    }
+    await persistIntakeState();
 
     console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
       '| specific_need:', specific_need, '| blocker:', blocker, '| goal:', goal,
