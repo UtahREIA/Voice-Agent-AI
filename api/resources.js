@@ -167,15 +167,27 @@ export default async function handler(req, res) {
   const credit   = (args.credit   || '').toLowerCase().trim();
   const capital  = (args.capital  || '').toLowerCase().trim();
   const alreadyTried = (args.already_tried || '').toLowerCase().trim();
+  const educationHistory = (args.education_history || '').toLowerCase().trim();
+  const readiness = (args.readiness || '').toLowerCase().trim();
+  const dealCountNum = parseInt(String(args.deal_count || '').replace(/[^0-9]/g, ''), 10);
 
-  // ---- Phase 1a signal-based soft re-rank (ROUTING_SCORING_DESIGN.md) ----
-  // credit/capital/already_tried already arrive in tool_args but never shaped the
-  // order. Nudge (never hard-exclude — soft deltas on priority) so the best-fit
-  // floats up: weak credit or low capital surfaces creative & private/hard money
-  // and sinks conventional financing; already_tried pushes down what they've done.
+  // ---- Signal-based soft re-rank (ROUTING_SCORING_DESIGN.md, Phase 1a + 1b) ----
+  // These signals already arrive in tool_args but never shaped the order. Nudge
+  // (never hard-exclude — soft deltas on priority) so the best-fit floats up.
+  //  1a: weak credit or low capital surfaces creative & private/hard money and sinks
+  //      conventional financing; already_tried pushes down what they have done.
+  //  1b: the knowledge-execution gap (anti-guru core) — a caller with lots of
+  //      learning but explicit low action gets execution/accountability surfaced and
+  //      more-theory sunk (they do not need another intro course).
   const weakCredit = /\b(bad|poor|weak|low|rough|rebuild|thin|bruised|no credit|not (very )?(strong|good|great)|challeng)/.test(credit);
   const lowCapital = /\b(little|no money|none|low|tight|limited|not much|nothing|zero|starting with)/.test(capital);
   const triedWords = alreadyTried.split(/[^a-z0-9]+/).filter(w => w.length >= 5);
+  const highKnowledge = /(book|course|mentor|event|podcast|youtube|\bread\b|studi|seminar|bootcamp|program|bigger ?pockets|webinar|\bclass)/.test(educationHistory);
+  const explicitLowAction =
+    (Number.isFinite(dealCountNum) && dealCountNum === 0) ||
+    /(nothing|haven'?t|not yet|no offer|just look|just research|only read|no deal|none so far|not (yet )?done|zero deal)/.test(alreadyTried) ||
+    /\b(still|mostly) learning\b/.test(readiness);
+  const knowledgeExecutionGap = highKnowledge && explicitLowAction;
   const reRank = (r) => {
     let d = 0;
     const hay = `${r.name || ''} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase().replace(/_/g, ' ');
@@ -183,6 +195,10 @@ export default async function handler(req, res) {
     if (weakCredit || lowCapital) {
       if (/(creative|private money|hard money|seller financ|subject.?to|lease option|owner financ|gap fund|no money|low money)/.test(hay)) d -= 4;
       if (/(conventional|traditional bank|bank loan)/.test(hay)) d += 3;
+    }
+    if (knowledgeExecutionGap) {
+      if (/(execution|deal analy|analyz|accountab|mastermind|coach|action|find (a |your )?(first )?deal|wholesal|bird dog|estimat|calculator|underwrit)/.test(hay)) d -= 4;
+      if (/(101|intro|fundamental|basics|beginner|what is|getting started|foundation)/.test(hay)) d += 3;
     }
     return d;
   };

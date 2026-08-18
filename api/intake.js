@@ -610,7 +610,8 @@ export default async function handler(req, res) {
       credit: credit || '',
       education_history: education_history || '',
       already_tried: already_tried || '',
-      readiness: readiness || ''
+      readiness: readiness || '',
+      deal_count: deal_count || ''   // action signal for the knowledge-execution re-rank
     };
 
     // Every caller gets the combined stack, which returns 5-6 resources across
