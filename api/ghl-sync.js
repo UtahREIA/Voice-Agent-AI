@@ -1071,6 +1071,7 @@ export default async function handler(req, res) {
           {
             headers: {
               'Content-Type': 'application/json',
+              
               'apikey': SUPABASE_KEY,
               'Authorization': `Bearer ${SUPABASE_KEY}`
             }
