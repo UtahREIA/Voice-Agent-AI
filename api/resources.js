@@ -164,6 +164,28 @@ export default async function handler(req, res) {
   const strategy = (args.strategy || '').toLowerCase().trim();
   const blocker  = (args.blocker  || '').toLowerCase().trim();
   const goal     = (args.goal     || '').toLowerCase().trim();
+  const credit   = (args.credit   || '').toLowerCase().trim();
+  const capital  = (args.capital  || '').toLowerCase().trim();
+  const alreadyTried = (args.already_tried || '').toLowerCase().trim();
+
+  // ---- Phase 1a signal-based soft re-rank (ROUTING_SCORING_DESIGN.md) ----
+  // credit/capital/already_tried already arrive in tool_args but never shaped the
+  // order. Nudge (never hard-exclude — soft deltas on priority) so the best-fit
+  // floats up: weak credit or low capital surfaces creative & private/hard money
+  // and sinks conventional financing; already_tried pushes down what they've done.
+  const weakCredit = /\b(bad|poor|weak|low|rough|rebuild|thin|bruised|no credit|not (very )?(strong|good|great)|challeng)/.test(credit);
+  const lowCapital = /\b(little|no money|none|low|tight|limited|not much|nothing|zero|starting with)/.test(capital);
+  const triedWords = alreadyTried.split(/[^a-z0-9]+/).filter(w => w.length >= 5);
+  const reRank = (r) => {
+    let d = 0;
+    const hay = `${r.name || ''} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase().replace(/_/g, ' ');
+    if (triedWords.length && triedWords.some(w => hay.includes(w))) d += 3; // already did this
+    if (weakCredit || lowCapital) {
+      if (/(creative|private money|hard money|seller financ|subject.?to|lease option|owner financ|gap fund|no money|low money)/.test(hay)) d -= 4;
+      if (/(conventional|traditional bank|bank loan)/.test(hay)) d += 3;
+    }
+    return d;
+  };
 
   const rawMode = (args.mode || args.resource_request || 'all').toLowerCase().trim().replace(/\s+/g, '_');
   const mode = MODE_ALIASES[rawMode] || 'all';
@@ -373,7 +395,8 @@ export default async function handler(req, res) {
               description: v.business_description || cats.slice(0, 2).join(', '),
               contact: v.company_website || v.company_phone || '',
               connection_method: (row.connection_methods || [])[0] || 'ai_recommendation',
-              priority: row.priority || 5
+              priority: row.priority || 5,
+              tags: services  // funding_financial/deals tokens, so the signal re-rank can read lender type
             });
           }
         }
@@ -414,7 +437,10 @@ export default async function handler(req, res) {
 
     const buckets = { education, vendor: vendors, tool: tools, educator: educators, event: events };
     for (const k of Object.keys(buckets)) {
-      buckets[k].sort((a, b) => (a.priority || 5) - (b.priority || 5));
+      // Effective rank = base priority + the caller-signal re-rank delta (soft, never
+      // hard-excludes). Lower ranks first, so a negative delta floats a resource up.
+      for (const r of buckets[k]) r._rank = (r.priority || 5) + reRank(r);
+      buckets[k].sort((a, b) => a._rank - b._rank);
     }
 
     // Round-robin across categories so the default stack is genuinely mixed
