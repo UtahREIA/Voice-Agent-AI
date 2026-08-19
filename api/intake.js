@@ -342,12 +342,23 @@ export default async function handler(req, res) {
     '| knowledge_intent:', knowledge_intent, '| learning_format:', learning_format,
     '| support_network:', support_network, '| readiness:', readiness, '| timeline:', timeline);
 
-  // ---- Goal acts as a pruning switch ----
-  // A learning oriented goal means we do not grill on financing or timing;
-  // route toward education instead.
+  // ---- Goal + what we already know act as pruning switches ----
+  // What the caller reveals early should REMOVE later low-value questions instead of
+  // everyone marching through the full set — the source of the recurring "why so many
+  // questions?" complaint. (goal-based-pruning design.)
   const goalText = (goal || '').toLowerCase();
   const learningGoal = /learn|educat|understand|explore|research|not sure|figuring|figure out|just looking|curious/.test(goalText);
-  const pruneSet = new Set(learningGoal ? ['credit', 'time_availability', 'readiness'] : []);
+  const actionGoal = /\b(first|next) (flip|deal|property|rental|unit|home|house|move)\b|\b(close|acquir|buy|purchase|scale|grow|complete|land|do|get|make|start)\b/.test(goalText);
+  const pruneSet = new Set();
+  // Learning-oriented goal: do not grill on financing/timing/readiness; route to education.
+  if (learningGoal) { pruneSet.add('credit'); pruneSet.add('time_availability'); pruneSet.add('readiness'); }
+  // Once we know what they have LEARNED, the learning-preference extras are redundant:
+  // knowledge_intent / learning_format are not even used in resource selection (not in
+  // mergedArgs), and the education-history signal plus the execution re-rank already
+  // cover "how do you want to learn". Removing them is the biggest call-length win.
+  if (isSet(education_history)) { pruneSet.add('knowledge_intent'); pruneSet.add('learning_format'); }
+  // An action-oriented goal caller is, by definition, ready — do not re-ask readiness.
+  if (actionGoal) { pruneSet.add('readiness'); }
 
   // ---- Per path REQUIRED floor, DESIRED set, EXTRAS, and soft ceiling ----
   const FLOW = {
