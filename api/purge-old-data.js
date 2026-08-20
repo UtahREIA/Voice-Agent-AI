@@ -32,14 +32,21 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 const PURGE_CONFIRM_TOKEN = process.env.PURGE_CONFIRM_TOKEN || '';
 const DEFAULT_DAYS = parseInt(process.env.RETENTION_DAYS, 10) || 90;
 
-// Call-activity tables purged on the retention window. Each is filtered by
-// created_at. voice_agent_calls carries the recall tradeoff noted above.
+// Call-activity tables purged on the retention window. Most are aged by created_at;
+// voice_agent_calls carries the recall tradeoff noted above. intake_state is the
+// transient per-call routing cache (see intake.js) — one row per call, only useful
+// during the call, and it only has updated_at.
 const RETENTION_TABLES = [
   'voice_agent_stack_links',
   'routing_results',
   'readiness_surveys',
-  'voice_agent_calls'
+  'voice_agent_calls',
+  'intake_state'
 ];
+
+// Timestamp column each table is aged on (default created_at; exceptions here).
+const TS_COLUMN = { intake_state: 'updated_at' };
+const tsCol = (table) => TS_COLUMN[table] || 'created_at';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -77,13 +84,13 @@ export default async function handler(req, res) {
     return n && n !== '*' ? parseInt(n, 10) : 0;
   };
 
-  const filter = (table) => `${SUPABASE_URL}/rest/v1/${table}?created_at=lt.${encodeURIComponent(cutoff)}`;
+  const filter = (table) => `${SUPABASE_URL}/rest/v1/${table}?${tsCol(table)}=lt.${encodeURIComponent(cutoff)}`;
 
   try {
     const result = {};
     for (const table of RETENTION_TABLES) {
       // Always measure first.
-      const measure = await fetch(`${filter(table)}&select=created_at&limit=1`, {
+      const measure = await fetch(`${filter(table)}&select=${tsCol(table)}&limit=1`, {
         headers: { ...sbHeaders, 'Prefer': 'count=exact' }
       });
       const eligible = countFrom(measure);
