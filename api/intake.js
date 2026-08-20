@@ -356,7 +356,7 @@ export default async function handler(req, res) {
   // knowledge_intent / learning_format are not even used in resource selection (not in
   // mergedArgs), and the education-history signal plus the execution re-rank already
   // cover "how do you want to learn". Removing them is the biggest call-length win.
-  if (isSet(education_history)) { pruneSet.add('knowledge_intent'); pruneSet.add('learning_format'); }
+  if (isSet(education_history)) { pruneSet.add('knowledge_intent'); pruneSet.add('learning_format'); pruneSet.add('support_network'); }
   // An action-oriented goal caller is, by definition, ready — do not re-ask readiness.
   if (actionGoal) { pruneSet.add('readiness'); }
 
