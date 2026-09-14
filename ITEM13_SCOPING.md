@@ -1,8 +1,9 @@
 # Item 13 — Resource Stack Hierarchy & Sequenced Delivery — Scoping
 
-Status: scoping for confirmation before build (2026-09-14). The Asana card explicitly
-says "confirm before estimating the build in detail" because it overlaps the roadmap
-engine. This document is that confirmation step.
+Status: **Layers 1-2 SHIPPED 2026-09-14** (commit 7a5fc6e); layers 3-4 gated on decisions.
+The Asana card said "confirm before estimating the build in detail" because it overlaps
+the roadmap engine. This document is that confirmation step; the hard-exclude rule was
+confirmed with David and layers 1-2 built.
 
 ## Origin (what the card is about)
 
@@ -34,7 +35,7 @@ So Failure 1's *ordering* symptom is largely covered. **What is NOT yet covered:
 
 ## Remaining scope (the real work)
 
-### 1. Stage gate — hard exclusion (resources.js)
+### 1. Stage gate — hard exclusion (resources.js) — ✅ SHIPPED (7a5fc6e)
 Hard-exclude resources that are wrong for the caller's stage, not just rank them low.
 Concretely: a foundational-stage / strategy_clarity caller with no deal should not be
 handed a transactional vendor (lender) unless funding is their explicit blocker.
@@ -43,7 +44,9 @@ handed a transactional vendor (lender) unless funding is their explicit blocker.
 - Risk: over-exclusion → empty stack. Mitigate with the existing widen fallbacks and a
   guaranteed floor of at least the top education/tool resource.
 
-### 2. Strategy respect (resources.js + matrices)
+### 2. Strategy respect (resources.js + matrices) — ✅ SHIPPED (7a5fc6e)
+Implemented as: skip the education-track stage-only fallback for a definite-strategy
+caller (the actual leak vector), while strategy-clarity/no-strategy callers still get it.
 Don't surface resources tied to strategies the caller didn't select. A strategy_clarity
 caller is the exception — they get strategy **education/direction**, never off-strategy
 vendors.
@@ -72,8 +75,10 @@ invite back ("when you're ready to go deeper, call back") instead of dumping 5-6
 
 ## Proposed sequencing (lowest-risk first)
 
-1. **Stage gate + strategy respect** (layers 1-2) — pure `resources.js`, no roadmap
-   coupling, addresses the relevance failure hard. ~0.5-1 day.
+1. ~~**Stage gate + strategy respect** (layers 1-2)~~ — ✅ **DONE (7a5fc6e).** Pure
+   `resources.js`, no roadmap coupling. Needs a live test to confirm the origin scenario
+   (Path A, getting_started, buy_and_hold, blocker strategy_clarity) no longer gets
+   lenders or an off-strategy track.
 2. **Delivery cap + framing** (layer 4) — needs the UX sign-off but is self-contained. ~0.5 day + sign-off.
 3. **Tier ordering** (layer 3) — LAST, and only after confirming whether to reuse the
    roadmap engine's `phase_intent_precedence` vs build a standalone tier label. This is
@@ -86,7 +91,7 @@ invite back ("when you're ready to go deeper, call back") instead of dumping 5-6
   foundational/strategy_clarity caller unless funding is the explicit blocker" — matches intent.
 
 ## Revised effort estimate
-Layers 1-2 (the safe, high-value relevance fix): **~1 day, buildable now.**
+Layers 1-2 (the safe, high-value relevance fix): **✅ shipped** (7a5fc6e) — needs a live test.
 Layers 3-4: gated on the decisions above; ~1.5 days once decided.
-So the original ~37 hr estimate is high — the re-rank already absorbed the soft-ordering
-work, and layers 1-2 can ship independently of the roadmap-engine coupling.
+So the original ~37 hr estimate was high — the re-rank absorbed the soft-ordering work,
+layers 1-2 shipped in well under a day, and only layers 3-4 remain (both decision-gated).
