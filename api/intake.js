@@ -461,7 +461,10 @@ export default async function handler(req, res) {
       const lowDealCount = dealCountParsed === null || dealCountParsed < threshold;
       const capitalBlocker = blocker === 'capital';
       if (lowDealCount || capitalBlocker) {
-        effectiveRequired = [...flow.required, 'capital', 'time_availability'];
+        // credit joins capital/time here so active (C2) investors get the credit
+        // question too, but only when funding is actually relevant (low deal count
+        // or a capital blocker) — and it feeds the credit-aware resource re-rank.
+        effectiveRequired = [...flow.required, 'capital', 'time_availability', 'credit'];
       }
     }
 
