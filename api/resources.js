@@ -203,6 +203,18 @@ export default async function handler(req, res) {
     return d;
   };
 
+  // ---- Item 13: readiness + strategy gates (stage gate & strategy respect) ----
+  // Layer 1: a foundational-stage or strategy-clarity caller with no deal yet is not
+  // ready for a transactional vendor (a lender), so lenders are hard-excluded from the
+  // vendor bucket UNLESS funding is their explicit blocker (confirmed rule 2026-09-14).
+  // Layer 2: a caller with a definite strategy should not be shown off-strategy
+  // education — the stage-only education fallback is skipped for them (see educationP).
+  const foundationalCaller = ['exploring__new', 'exploring', 'getting_started'].includes(rawStage);
+  const strategyClarityCaller = /strateg|clarity|not.?sure|direction|figure|which/.test(blocker);
+  const fundingBlocker = /fund|capital|money|financ|lend/.test(blocker);
+  const notReadyForTransactional = (foundationalCaller || strategyClarityCaller) && !(dealCountNum > 0) && !fundingBlocker;
+  const hasDefiniteStrategy = Boolean(strategy) && !strategyClarityCaller;
+
   const rawMode = (args.mode || args.resource_request || 'all').toLowerCase().trim().replace(/\s+/g, '_');
   const mode = MODE_ALIASES[rawMode] || 'all';
   const categories = MODE_CATEGORIES[mode] || MODE_CATEGORIES.all;
@@ -274,7 +286,10 @@ export default async function handler(req, res) {
         stageEq && stratAlt ? `${base}${stageEq}${stratAlt}` : null,
         stratEq  ? `${base}${stratEq}`  : null,
         stratAlt ? `${base}${stratAlt}` : null,
-        stageEq  ? `${base}${stageEq}`  : null
+        // Item 13 L2 (strategy respect): the stage-only fallback pulls an off-strategy
+        // track, so skip it for a caller who has a definite strategy. Strategy-clarity
+        // and no-strategy callers still get it — they need the broad direction.
+        (!hasDefiniteStrategy && stageEq) ? `${base}${stageEq}` : null
       ].filter(Boolean));
 
       const out = rows.map(r => ({
@@ -452,6 +467,16 @@ export default async function handler(req, res) {
       await Promise.all([educationP, educatorP, toolP, vendorP, eventP]);
 
     const buckets = { education, vendor: vendors, tool: tools, educator: educators, event: events };
+
+    // Item 13 Layer 1 (stage gate): withhold transactional vendors (lenders) from a
+    // caller who is not yet ready for one — a foundational/strategy-clarity caller with
+    // no deal and no funding blocker. Hard exclusion, not just a low rank.
+    if (!isSpecific && notReadyForTransactional && Array.isArray(buckets.vendor)) {
+      const hayOf = (r) => `${r.name || ''} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase().replace(/_/g, ' ');
+      const isLender = (r) => /(lender|mortgage|money lender|private money|hard money|dscr|loan servic|conventional loan|creative financ|selfdirected ira|investment advisor|\bfinancing\b)/.test(hayOf(r));
+      buckets.vendor = buckets.vendor.filter(r => !isLender(r));
+    }
+
     for (const k of Object.keys(buckets)) {
       // Effective rank = base priority + the caller-signal re-rank delta (soft, never
       // hard-excludes). Lower ranks first, so a negative delta floats a resource up.
