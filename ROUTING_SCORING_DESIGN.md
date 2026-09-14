@@ -1,6 +1,45 @@
 # Routing Scoring Redesign — Design
 
-Status: proposed (2026-08-18). Author: David + Claude. For review before build.
+Status: **Phase 1a + 1b SHIPPED** (2026-08-18). Phase 2 optional/pending. Author: David + Claude.
+
+## How it works — as built, plain English (Phase 1a + 1b)
+
+*(For explaining to Chris. The design detail is below; this is the mechanism as it now runs.)*
+
+**Where it runs:** inside the `/api/resources` endpoint — the one Lani calls as
+`getResourceStack` to build a recommendation. It's a small scoring function named
+`reRank`.
+
+**The inputs were already there.** When Lani calls `getResourceStack`, the arguments Vapi
+sends include everything the intake collected — the caller's `credit`, `capital`,
+`already_tried`, `education_history`, `deal_count`, `readiness`. Before this work those
+just sat unused; now `reRank` reads them.
+
+**The mechanism (soft re-order, never delete):**
+1. `/api/resources` gathers matching resources into five buckets (vendors, education,
+   tools, educators, events), each with a priority number (lower sorts higher).
+2. `reRank` runs over every resource and computes a small +/- adjustment to its priority
+   from the caller's signals.
+3. The buckets are re-sorted by the adjusted number, then the final stack is picked.
+   Because it only nudges the order and never removes anything, the stack can't come out
+   empty.
+
+**Phase 1a (credit / capital):** if the caller's credit reads weak or capital reads low,
+any resource whose name/description/tags mention creative or private/hard money is nudged
+**up**; anything mentioning conventional or bank loans is nudged **down**. Result: a
+no-money-down, rough-credit caller sees creative and private-money financing first.
+
+**Phase 1b (knowledge-execution gap):** if `education_history` shows lots of learning
+(books/courses/mentors/BiggerPockets) **and** an action signal shows little done (0 deals,
+"haven't made an offer", "still learning"), then execution/accountability resources (deal
+analysis, calculators, coaches, deal-finding) are nudged **up** and beginner "intro/101"
+theory is nudged **down**. Result: the perpetual student stops getting handed another
+course.
+
+That's the whole thing — signals that were already collected now tilt the ordering, in
+one function, in one file, with **no database or plumbing changes**.
+
+---
 
 ## The problem
 

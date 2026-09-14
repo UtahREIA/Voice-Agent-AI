@@ -5,6 +5,38 @@ The Asana card said "confirm before estimating the build in detail" because it o
 the roadmap engine. This document is that confirmation step; the hard-exclude rule was
 confirmed with David and layers 1-2 built.
 
+## How layers 1-2 work — as built, plain English
+
+*(For explaining to Chris. Both run inside the `/api/resources` endpoint — the one Lani
+calls as `getResourceStack` — after the resource buckets are built, right alongside the
+re-rank.)*
+
+**Layer 1 — stage gate (withhold lenders from a caller who isn't ready):**
+- The endpoint first works out whether the caller is "not ready for a lender": they are
+  foundational-stage (new / getting-started) **or** their blocker is strategy-clarity
+  (they haven't even picked a strategy), **and** they have done no deals, **and** funding
+  is not their stated blocker.
+- If so — and only in the default mixed recommendation, not when they explicitly asked for
+  vendors — the endpoint filters every lender-type vendor out of the vendor bucket before
+  the final pick. It recognizes lenders by their name/description/tags (mortgage, hard
+  money, private money, DSCR, etc.). The other four categories (education, tools,
+  educators, events) still fill the stack, so it is never left empty.
+- **Effect:** a beginner who doesn't even have a strategy yet stops being handed two
+  mortgage brokers (the original bug).
+
+**Layer 2 — strategy respect (no off-strategy learning track):**
+- To find a learning track, the endpoint tries progressively looser Supabase queries until
+  one returns something: first stage + strategy, then strategy alone, and as a last resort
+  stage alone. That last "stage alone" step is what pulled an off-strategy track (a
+  short-term-rental track handed to a buy-and-hold caller).
+- Now, if the caller has a **definite** strategy, the endpoint skips that stage-only
+  fallback — so they only ever get on-strategy education. Undecided / strategy-clarity
+  callers still get it, because they need the broad options.
+- **Effect:** a buy-and-hold caller stops seeing a short-term-rental learning track.
+
+Both are hard filters (they remove clearly-wrong items) but fail-safe: they only ever
+**remove**, the other categories backfill, and an explicit vendor request bypasses Layer 1.
+
 ## Origin (what the card is about)
 
 A test call (Path A, Getting Started, buy_and_hold, blocker strategy_clarity) returned
