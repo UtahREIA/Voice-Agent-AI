@@ -78,11 +78,10 @@ same output via direct curl to `/api/resources`.
    need live connectors:**
    - Confirm the real GHL key. GHL mangles multi-select keys (double underscore
      + `_partner`, e.g. `deals__opportunities_partner`), so the plain
-     `commercial_asset_types` may be wrong. Read **Blair Testing**'s educator
-     object via the GHL MCP (custom object endpoints 403 from external IPs, so
-     GHL MCP is the only way) and check the actual property key. Or trigger the
-     cron (`/api/sync-ghl-objects`) and read the `SYNC DIAG — educator ... prop
-     keys:` line in the Vercel log, which dumps every key.
+       `commercial_asset_types` may be wrong. Read **Blair Testing**'s educator
+       object via the GHL MCP (custom object endpoints 403 from external IPs, so
+       GHL MCP is the only way) and check the actual property key. Or trigger the
+       cron (`/api/sync-ghl-objects`) and read the `SYNC DIAG — educator ... prop keys:` line in the Vercel log, which dumps every key.
    - Backfill existing rows once the key is confirmed, then re-verify the
      resource stack, since `resources.js` can match educators/courses on
      `commercial_asset_types` (CLAUDE.md currently says that column is empty and
@@ -110,7 +109,9 @@ NOT ask what you already tried after the education question.
 vendors?" Expect vendors only, then an offer to widen rather than padding.
 
 **Call 2 — Path B, fresh caller.** "I am already active, I have four rentals" /
-"I need a property manager". Should fast-exit to a recommendation. If she asks
+"I need a property manage
+
+r". Should fast-exit to a recommendation. If she asks
 "what specifically do you need right now" twice, that is the old infinite loop.
 
 ## Key facts / coordinates
