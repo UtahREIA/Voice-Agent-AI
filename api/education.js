@@ -343,22 +343,35 @@ export default async function handler(req, res) {
       const educators = await educatorResp.json();
 
       if (Array.isArray(educators) && educators.length > 0) {
-        // Score educators by how well they match the caller's stage and strategy
+        // educational_level stores the LONG stage (active_investor, exploring__new);
+        // stageKey is the short matrix key (active, exploring). Translate, then
+        // compare exactly. veteran has no educator level, so it matches nothing.
+        const LONG_STAGE = {
+          exploring:       'exploring__new',
+          getting_started: 'getting_started',
+          active:          'active_investor',
+          experienced:     'experienced_investor'
+        };
+        const longStage = stageKey ? String(LONG_STAGE[stageKey] || stageKey).toLowerCase() : '';
+
+        // Score educators: teaching the caller's strategy (10) outweighs matching
+        // their stage (5). A flipping expert who teaches beginners still knows flipping.
         const scoredEducators = educators
           .filter(e => e.educators_name && e.educators_url)
           .map(e => {
             let score = 0;
             const levels = (e.educational_level || []).map(l => l.toLowerCase());
             const topics = (e.educational_topics || []).map(t => t.toLowerCase());
-            if (stageKey && levels.some(l => l.includes(stageKey.replace('_', ' ')))) score += 10;
+            const stageMatch = longStage && levels.includes(longStage);
+            if (stageMatch) score += 5;
             const matchedTopic = ghlTopic && topics.includes(ghlTopic) ? ghlTopic : null;
-            if (matchedTopic) score += 5;
+            if (matchedTopic) score += 10;
             return { ...e, score, matchedTopic };
           })
           .sort((a, b) => b.score - a.score || String(a.educators_name).localeCompare(String(b.educators_name)));
 
         // No track: only an educator who actually covers the caller's strategy will
-        // do. Stage alone outscores topic, so the top scorer may not know this strategy.
+        // do. The top scorer can be a stage-only match when no one teaches it.
         const topicEducator = parts.length === 0 ? scoredEducators.find(e => e.matchedTopic) : null;
         if (topicEducator) {
           educatorName = topicEducator.educators_name;
