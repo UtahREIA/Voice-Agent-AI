@@ -308,9 +308,20 @@ export default async function handler(req, res) {
 
     try {
       // Build filter to match educator specialties against caller's stage and strategy
+      // Translate the strategy to its stored GHL topic value (e.g. fix_and_flip -> fix__flip)
+      let ghlTopic = null;
+      if (strategyKey) {
+        const xwResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/strategy_crosswalk?select=ghl_value&dimension=eq.strategy&canonical_key=eq.${encodeURIComponent(strategyKey)}&limit=1`,
+          { headers: baseHeaders }
+        );
+        const xw = await xwResp.json();
+        if (Array.isArray(xw) && xw[0]) ghlTopic = String(xw[0].ghl_value).toLowerCase();
+      }
+
       // Query ghl_educators_mentors (synced from GHL custom objects) — source of truth for educators
       const educatorResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=10`,
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=100`,
         { headers: baseHeaders }
       );
       const educators = await educatorResp.json();
@@ -324,16 +335,17 @@ export default async function handler(req, res) {
             const levels = (e.educational_level || []).map(l => l.toLowerCase());
             const topics = (e.educational_topics || []).map(t => t.toLowerCase());
             if (stageKey && levels.some(l => l.includes(stageKey.replace('_', ' ')))) score += 10;
-            if (strategyKey && topics.some(t => t.includes(strategyKey.replace('_', ' ')))) score += 5;
-            return { ...e, score };
+            const matchedTopic = ghlTopic && topics.includes(ghlTopic) ? ghlTopic : null;
+            if (matchedTopic) score += 5;
+            return { ...e, score, matchedTopic };
           })
-          .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score || String(a.educators_name).localeCompare(String(b.educators_name)));
 
         const bestEducator = scoredEducators[0];
         if (bestEducator && bestEducator.score > 0) {
           educatorName = bestEducator.educators_name;
           bookingUrl = bestEducator.educators_url;
-          const specialty = (bestEducator.educational_topics || []).slice(0, 2).join(' and ');
+          const specialty = (bestEducator.matchedTopic || (bestEducator.educational_topics || [])[0] || 'real estate investing').replace(/__/g, ' ').replace(/_/g, ' ');
           educatorResult = ' I would also connect you with ' + educatorName + ' who specializes in ' + (specialty || 'real estate investing') + '. You can book a session at ' + bookingUrl + '.';
         }
       }
