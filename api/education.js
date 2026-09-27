@@ -301,13 +301,12 @@ export default async function handler(req, res) {
       }
     });
 
-    // Fallback if nothing matched
-    if (parts.length === 0) {
-      return res.status(200).json(vapiResult('The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'));
-    }
-
+    // No track and no resources: do not return yet. The educator lookup below may
+    // still find someone who covers this strategy; the generic line is the last resort.
     let result = '';
-    if (parts.length === 1) {
+    if (parts.length === 0) {
+      // result stays empty; filled by a topic-matched educator or the generic fallback
+    } else if (parts.length === 1) {
       result = parts[0];
     } else if (parts.length === 2) {
       result = `Two things for you. First, ${parts[0]}. Second, ${parts[1]}.`;
@@ -358,7 +357,17 @@ export default async function handler(req, res) {
           })
           .sort((a, b) => b.score - a.score || String(a.educators_name).localeCompare(String(b.educators_name)));
 
-        const bestEducator = scoredEducators[0];
+        // No track: only an educator who actually covers the caller's strategy will
+        // do. Stage alone outscores topic, so the top scorer may not know this strategy.
+        const topicEducator = parts.length === 0 ? scoredEducators.find(e => e.matchedTopic) : null;
+        if (topicEducator) {
+          educatorName = topicEducator.educators_name;
+          bookingUrl = topicEducator.educators_url;
+          const topicLabel = topicEducator.matchedTopic.replace(/__/g, ' ').replace(/_/g, ' ');
+          result = 'I do not have a structured track for that yet, but ' + educatorName + ' works with investors on ' + topicLabel + '.' + (bookingUrl ? ' You can book a session at ' + bookingUrl + '.' : '');
+        }
+
+        const bestEducator = parts.length === 0 ? null : scoredEducators[0];
         if (bestEducator && bestEducator.score > 0) {
           educatorName = bestEducator.educators_name;
           bookingUrl = bestEducator.educators_url;
@@ -368,6 +377,11 @@ export default async function handler(req, res) {
       }
     } catch(e) {
       console.error('Educator lookup error:', e.message);
+    }
+
+    // No track, no resources, no educator for this strategy: generic line.
+    if (!result) {
+      return res.status(200).json(vapiResult('The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'));
     }
 
     // Append educator recommendation to result if found
