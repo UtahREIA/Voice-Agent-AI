@@ -381,22 +381,22 @@ export default async function handler(req, res) {
     const vendorP = !want('vendor') ? [] : (async () => {
       // investor_need carries the same vocabulary as blocker (deals, funding,
       // team, legal, ...), so the caller's blocker picks the right vendor kind.
-      const base = `vendor_routing_matrix?is_active=eq.true&order=priority.asc&limit=10&select=investor_need,strategy,vendor_categories,connection_methods,priority`;
+      const base = `vendor_routing_matrix?is_active=eq.true&order=priority.asc&limit=10&select=investor_need,strategy,vendor_categories,vendor_subtypes,connection_methods,priority`;
       const needEq = blocker ? `&investor_need=eq.${encodeURIComponent(blocker)}` : '';
       const rows = await widen([
         stratEq && needEq  ? `${base}${stratEq}${needEq}`  : null,
         stratAlt && needEq ? `${base}${stratAlt}${needEq}` : null,
         stratEq  ? `${base}${stratEq}`  : null,
         stratAlt ? `${base}${stratAlt}` : null,
-        needEq   ? `${base}${needEq}`   : null,
-        base
+        (!hasDefiniteStrategy && needEq) ? `${base}${needEq}` : null,
+        !hasDefiniteStrategy ? base : null
       ].filter(Boolean));
       if (!rows.length) return [];
 
       // enroll_vendor_match=true is the gate: only vendors who opted into being
       // matched to callers are recommendable. 21 of 112 active vendors are false
       // and must never surface here.
-      const vendors = await get(`ghl_vendor_resources?is_active=eq.true&enroll_vendor_match=eq.true&limit=60&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities`);
+      const vendors = await get(`ghl_vendor_resources?is_active=eq.true&enroll_vendor_match=eq.true&limit=60&select=company_name,business_description,company_phone,company_website,funding_financial,deals_opportunities,team_vendors,attorney_subclass,operations,development_land,education_tech_tools,contractor_speciality`);
 
       const out = [];
       const seen = new Set();
@@ -409,15 +409,29 @@ export default async function handler(req, res) {
         // passive, commercial bridge for commercial assets. Matching by vendor
         // order (the old behavior) ignored this ordering entirely. An empty cats
         // list (no differentiation) still matches every vendor via the '' sentinel.
-        const ordered = cats.length ? cats : [''];
-        for (const c of ordered) {
+        const subs = (row.vendor_subtypes || []).map(c => String(c).toLowerCase());
+        const walk = [];
+        const seenVal = new Set();
+        for (const v of subs) if (!seenVal.has(v)) { seenVal.add(v); walk.push({ v, exact: true }); }
+        for (const v of cats) if (!seenVal.has(v)) { seenVal.add(v); walk.push({ v, exact: false }); }
+        const ordered = walk.length ? walk : [{ v: '', exact: false }];
+        for (const step of ordered) {
+          const c = step.v;
           if (out.length >= depth) break;
           for (const v of vendors) {
             if (out.length >= depth) break;
             const name = v.company_name || '';
             if (!name || seen.has(name)) continue;
-            const services = [...(v.funding_financial || []), ...(v.deals_opportunities || [])].map(s => String(s).toLowerCase());
-            const hit = c === '' || services.some(s => s.includes(c) || c.includes(s));
+            const services = [
+              ...(v.funding_financial || []), ...(v.deals_opportunities || []),
+              ...(v.team_vendors || []), ...(v.attorney_subclass || []),
+              ...(v.operations || []), ...(v.development_land || []),
+              ...(v.education_tech_tools || []),
+              ...(v.contractor_speciality ? [v.contractor_speciality] : [])
+            ].filter(Boolean).map(s => String(s).toLowerCase());
+            const hit = c === '' || (step.exact
+              ? services.includes(c)
+              : services.some(s => s.includes(c) || c.includes(s)));
             if (!hit) continue;
             seen.add(name);
             out.push({

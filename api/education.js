@@ -86,7 +86,10 @@ export default async function handler(req, res) {
     const stageKey = stageMapping[rawStage] || rawStage;
 
     // --- STRATEGY NORMALIZATION ---
-    // Map all possible caller strategy inputs to education_routing_matrix strategy keys
+    // True aliases only: spelling variants of the same strategy, mapped to the
+    // education_routing_matrix key. Never map one strategy onto a different one
+    // because the target has a track. Commercial asset rollups live in
+    // strategy_crosswalk.parent_strategy, not here.
     const strategyMapping = {
       'fix_and_flip':         'fix_and_flip',
       'fix__flip':            'fix_and_flip',
@@ -99,7 +102,6 @@ export default async function handler(req, res) {
       'rental':               'buy_and_hold',
       'wholesale':            'wholesale',
       'wholesaling':          'wholesale',
-      'wholesaling':          'wholesaling',
       'brrrr':                'brrrr',
       'buy_rehab_rent_refinance_repeat': 'brrrr',
       'short_term_rental':    'short_term_rental',
@@ -113,88 +115,101 @@ export default async function handler(req, res) {
       'development':          'development',
       'land_development':     'development',
       'new_construction':     'development',
-      'notes_lending':        'notes_and_lending',
-      'notes_and_lending':    'notes_and_lending',
-      'note_investing':       'notes_and_lending',
-      'lending':              'notes_and_lending',
+      'notes_lending':        'notes_lending',
+      'notes_and_lending':    'notes_lending',
+      'note_investing':       'notes_lending',
+      'lending':              'notes_lending',
       'raising_capital':      'raising_capital',
       'private_money':        'raising_capital',
       'capital_raising':      'raising_capital',
       'commercial':           'commercial',
-      'multi_family':         'commercial',
-      'multifamily':          'commercial',
-      'syndication':          'raising_capital',
-      'not_sure':             'not_sure_yet',
-      'not_sure_yet':         'not_sure_yet',
-      'unsure':               'not_sure_yet',
+      'multifamily':          'multi_family',
+      'not_sure':             'not_sure',
+      'not_sure_yet':         'not_sure',
+      'unsure':               'not_sure',
       'tax_optimization':     'tax_optimization',
       'tax_strategy':         'tax_optimization',
-      'tax_deeds':            'tax_deeds',
-      'tax_deeds_liens':      'tax_deeds',
+      'tax_deeds':            'tax_deeds_liens',
+      'tax_deeds_liens':      'tax_deeds_liens',
       'out_of_state':         'out_of_state',
       'remote_investing':     'out_of_state',
       'mentoring_others':     'mentoring_others',
-      'house_hacking':        'buy_and_hold',
-      'mid_term_coliving':    'short_term_rental',
-      'passive_investing':    'raising_capital',
-      'assisted_living':      'commercial',
-      'self_storage':         'commercial',
-      'mobile_home':          'commercial',
-      'hotel':                'commercial',
-      'retail':               'commercial',
-      'industrial':           'commercial',
-      'rv_parks':             'commercial',
-      'farm_land':            'development',
       'land_entitlement':     'development',
     };
     const rawStrategy = (strategy || '').toLowerCase().replace(/ /g, '_');
     const strategyKey = strategyMapping[rawStrategy] || rawStrategy;
 
-    // --- STEP 1: Three-tier matrix lookup ---
-    // Tier 1: exact stage + strategy match
-    // Tier 2: same stage, any strategy (stage-level track)
-    // Tier 3: any stage, same strategy (strategy foundation)
+    // --- STEP 1: Matrix lookup, no cross-strategy substitution ---
+    // With a strategy: the strategy itself (this stage, then any stage), then its
+    // strategy_crosswalk.parent_strategy (a close fit, said as such), then nothing
+    // plus a resource_gaps row. A stage-only track is a different strategy's
+    // track, so it is only used when the caller gave no strategy at all.
     let matrixRow = null;
+    let trackIsClosestFit = false;
+    const trackSelect = 'select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1';
 
-    if (stageKey && strategyKey) {
-      // Try exact match first (also try wholesaling variant)
-      const exactResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
-        { headers: baseHeaders }
-      );
-      const exactData = await exactResp.json();
-      if (Array.isArray(exactData) && exactData.length > 0) matrixRow = exactData[0];
-
-      // Try wholesaling as alternate key if wholesale didn't match
-      if (!matrixRow && (strategyKey === 'wholesale' || strategyKey === 'wholesaling')) {
-        const altKey = strategyKey === 'wholesale' ? 'wholesaling' : 'wholesale';
-        const altResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(altKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
+    async function findTrack(stratKey) {
+      const tries = [
+        stageKey ? `stage=eq.${encodeURIComponent(stageKey)}&strategy=eq.${encodeURIComponent(stratKey)}` : null,
+        `strategy=eq.${encodeURIComponent(stratKey)}`
+      ].filter(Boolean);
+      for (const q of tries) {
+        const resp = await fetch(
+          `${SUPABASE_URL}/rest/v1/education_routing_matrix?${q}&is_active=eq.true&${trackSelect}`,
           { headers: baseHeaders }
         );
-        const altData = await altResp.json();
-        if (Array.isArray(altData) && altData.length > 0) matrixRow = altData[0];
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0) return data[0];
       }
+      return null;
     }
 
-    // Tier 2: fall back to stage only
-    if (!matrixRow && stageKey) {
+    if (strategyKey) {
+      matrixRow = await findTrack(strategyKey);
+
+      if (!matrixRow) {
+        // Parent rollups (e.g. self_storage -> commercial) are data. They sit under
+        // dimension=commercial_asset, so do not filter on dimension here.
+        const parentResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/strategy_crosswalk?select=parent_strategy&canonical_key=eq.${encodeURIComponent(strategyKey)}&parent_strategy=not.is.null&limit=1`,
+          { headers: baseHeaders }
+        );
+        const parentData = await parentResp.json();
+        const parentKey = Array.isArray(parentData) && parentData[0] ? parentData[0].parent_strategy : null;
+        if (parentKey && parentKey !== strategyKey) {
+          matrixRow = await findTrack(parentKey);
+          if (matrixRow) trackIsClosestFit = true;
+        }
+      }
+
+      if (!matrixRow) {
+        // No track for this strategy. Say nothing rather than a wrong track, and
+        // record the gap so it shows up in /api/gaps (service, by missing_category).
+        console.log('Education gap — no track for strategy:', strategyKey, 'stage:', stageKey);
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/resource_gaps`, {
+            method: 'POST',
+            headers: { ...baseHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              gap_type: 'service',
+              missing_category: 'education_track',
+              stage: rawStage || null,
+              strategy: strategyKey,
+              blocker: blocker || null,
+              specific_need: String(goal || '').slice(0, 300) || null,
+              requested_mode: 'education',
+              vapi_call_id: req.body?.message?.call?.id || req.body?.call?.id || null
+            })
+          });
+        } catch (e) { console.error('Education gap log error:', e.message); }
+      }
+    } else if (stageKey) {
       const stageResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
+        `${SUPABASE_URL}/rest/v1/education_routing_matrix?stage=eq.${encodeURIComponent(stageKey)}&is_active=eq.true&${trackSelect}`,
         { headers: baseHeaders }
       );
       const stageData = await stageResp.json();
       if (Array.isArray(stageData) && stageData.length > 0) matrixRow = stageData[0];
-    }
-
-    // Tier 3: fall back to strategy only
-    if (!matrixRow && strategyKey) {
-      const stratResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/education_routing_matrix?strategy=eq.${encodeURIComponent(strategyKey)}&is_active=eq.true&select=track_name,description,resource_titles,resource_types,delivery_methods&order=priority.asc&limit=1`,
-        { headers: baseHeaders }
-      );
-      const stratData = await stratResp.json();
-      if (Array.isArray(stratData) && stratData.length > 0) matrixRow = stratData[0];
     }
 
     if (matrixRow) {
@@ -261,7 +276,9 @@ export default async function handler(req, res) {
       const track = results[0];
       const topResources = (track.resource_titles || []).slice(0, 2).join(' and ');
       const deliveryMethods = (track.delivery_methods || []).join(' or ');
-      let trackIntro = `The right track for you is the ${track.track_name}. ${track.description}`;
+      let trackIntro = trackIsClosestFit
+        ? `The closest fit I have is the ${track.track_name}. ${track.description}`
+        : `The right track for you is the ${track.track_name}. ${track.description}`;
       if (topResources) trackIntro += ` Start with: ${topResources}.`;
       if (deliveryMethods) trackIntro += ` Delivered via ${deliveryMethods}.`;
       parts.push(trackIntro);
@@ -284,13 +301,12 @@ export default async function handler(req, res) {
       }
     });
 
-    // Fallback if nothing matched
-    if (parts.length === 0) {
-      return res.status(200).json(vapiResult('The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'));
-    }
-
+    // No track and no resources: do not return yet. The educator lookup below may
+    // still find someone who covers this strategy; the generic line is the last resort.
     let result = '';
-    if (parts.length === 1) {
+    if (parts.length === 0) {
+      // result stays empty; filled by a topic-matched educator or the generic fallback
+    } else if (parts.length === 1) {
       result = parts[0];
     } else if (parts.length === 2) {
       result = `Two things for you. First, ${parts[0]}. Second, ${parts[1]}.`;
@@ -308,37 +324,77 @@ export default async function handler(req, res) {
 
     try {
       // Build filter to match educator specialties against caller's stage and strategy
+      // Translate the strategy to its stored GHL topic value (e.g. fix_and_flip -> fix__flip)
+      let ghlTopic = null;
+      if (strategyKey) {
+        const xwResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/strategy_crosswalk?select=ghl_value&dimension=eq.strategy&canonical_key=eq.${encodeURIComponent(strategyKey)}&limit=1`,
+          { headers: baseHeaders }
+        );
+        const xw = await xwResp.json();
+        if (Array.isArray(xw) && xw[0]) ghlTopic = String(xw[0].ghl_value).toLowerCase();
+      }
+
       // Query ghl_educators_mentors (synced from GHL custom objects) — source of truth for educators
       const educatorResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=10`,
+        `${SUPABASE_URL}/rest/v1/ghl_educators_mentors?select=educators_name,educational_topics,educational_level,educators_url&is_active=eq.true&limit=100`,
         { headers: baseHeaders }
       );
       const educators = await educatorResp.json();
 
       if (Array.isArray(educators) && educators.length > 0) {
-        // Score educators by how well they match the caller's stage and strategy
+        // educational_level stores the LONG stage (active_investor, exploring__new);
+        // stageKey is the short matrix key (active, exploring). Translate, then
+        // compare exactly. veteran has no educator level, so it matches nothing.
+        const LONG_STAGE = {
+          exploring:       'exploring__new',
+          getting_started: 'getting_started',
+          active:          'active_investor',
+          experienced:     'experienced_investor'
+        };
+        const longStage = stageKey ? String(LONG_STAGE[stageKey] || stageKey).toLowerCase() : '';
+
+        // Score educators: teaching the caller's strategy (10) outweighs matching
+        // their stage (5). A flipping expert who teaches beginners still knows flipping.
         const scoredEducators = educators
           .filter(e => e.educators_name && e.educators_url)
           .map(e => {
             let score = 0;
             const levels = (e.educational_level || []).map(l => l.toLowerCase());
             const topics = (e.educational_topics || []).map(t => t.toLowerCase());
-            if (stageKey && levels.some(l => l.includes(stageKey.replace('_', ' ')))) score += 10;
-            if (strategyKey && topics.some(t => t.includes(strategyKey.replace('_', ' ')))) score += 5;
-            return { ...e, score };
+            const stageMatch = longStage && levels.includes(longStage);
+            if (stageMatch) score += 5;
+            const matchedTopic = ghlTopic && topics.includes(ghlTopic) ? ghlTopic : null;
+            if (matchedTopic) score += 10;
+            return { ...e, score, matchedTopic };
           })
-          .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score || String(a.educators_name).localeCompare(String(b.educators_name)));
 
-        const bestEducator = scoredEducators[0];
+        // No track: only an educator who actually covers the caller's strategy will
+        // do. The top scorer can be a stage-only match when no one teaches it.
+        const topicEducator = parts.length === 0 ? scoredEducators.find(e => e.matchedTopic) : null;
+        if (topicEducator) {
+          educatorName = topicEducator.educators_name;
+          bookingUrl = topicEducator.educators_url;
+          const topicLabel = topicEducator.matchedTopic.replace(/__/g, ' ').replace(/_/g, ' ');
+          result = 'I do not have a structured track for that yet, but ' + educatorName + ' works with investors on ' + topicLabel + '.' + (bookingUrl ? ' You can book a session at ' + bookingUrl + '.' : '');
+        }
+
+        const bestEducator = parts.length === 0 ? null : scoredEducators[0];
         if (bestEducator && bestEducator.score > 0) {
           educatorName = bestEducator.educators_name;
           bookingUrl = bestEducator.educators_url;
-          const specialty = (bestEducator.educational_topics || []).slice(0, 2).join(' and ');
+          const specialty = (bestEducator.matchedTopic || (bestEducator.educational_topics || [])[0] || 'real estate investing').replace(/__/g, ' ').replace(/_/g, ' ');
           educatorResult = ' I would also connect you with ' + educatorName + ' who specializes in ' + (specialty || 'real estate investing') + '. You can book a session at ' + bookingUrl + '.';
         }
       }
     } catch(e) {
       console.error('Educator lookup error:', e.message);
+    }
+
+    // No track, no resources, no educator for this strategy: generic line.
+    if (!result) {
+      return res.status(200).json(vapiResult('The Investor Academy has content covering most strategies and stages. Our monthly events are the fastest way to get connected with investors doing what you want to do.'));
     }
 
     // Append educator recommendation to result if found
