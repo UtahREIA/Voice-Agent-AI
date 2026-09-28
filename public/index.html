@@ -379,6 +379,43 @@
     .quiet-banner{ padding:10px 16px; }
     .quiet-banner-text{ font-size:11px; }
   }
+
+  /* ── CONNECTION-TROUBLE PANEL (fast-fail / provider outage) ────────────
+     Shown when a call drops or hangs BEFORE Lani ever speaks. Distinct from
+     the mid-call "reconnect" prompt: this reassures the caller the issue is
+     on our infrastructure side, not Utah REIA / Lani being "broken", which is
+     the misattribution risk when a third-party AI provider has an outage. */
+  .conn-trouble{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    gap:16px;
+    max-width:360px;
+    padding:8px 4px;
+    animation:fadeIn .4s ease;
+  }
+  .conn-trouble-icon{ font-size:34px; line-height:1; opacity:.8; }
+  .conn-trouble-title{
+    font-family:'Cormorant Garamond',serif;
+    font-size:24px;font-weight:300;font-style:italic;
+    color:rgba(40,15,2,.9);letter-spacing:.4px;
+    text-shadow:0 1px 8px rgba(255,240,200,.6);
+  }
+  .conn-trouble-text{
+    font-size:13px;color:rgba(40,15,2,.78);line-height:1.7;font-weight:400;
+  }
+  /* When the call view is in the failed state, hide the live-call chrome and
+     reveal the trouble panel in its place. */
+  #callScreen.conn-failed .orb-stage,
+  #callScreen.conn-failed #statusLabel,
+  #callScreen.conn-failed .transcript-area,
+  #callScreen.conn-failed .call-controls{ display:none !important; }
+  #callScreen.conn-failed .conn-trouble{ display:flex; }
+  @media (max-width:480px){
+    .conn-trouble-title{ font-size:20px; }
+    .conn-trouble-text{ font-size:12px; }
+  }
 </style>
 </head>
 <body>
@@ -436,6 +473,14 @@
       </div>
       <div class="status-label" id="statusLabel">Connecting...</div>
       <div class="transcript-area" id="transcriptArea"></div>
+      <!-- Fast-fail / provider-outage message. WORDING: conservative default,
+           calm house-voice, no hype. Open for Harmonie brand-voice refinement. -->
+      <div class="conn-trouble" id="connTrouble">
+        <span class="conn-trouble-icon">&#127807;</span>
+        <div class="conn-trouble-title">We are having trouble connecting you</div>
+        <div class="conn-trouble-text">This is usually a brief issue on our side, not anything you did. Please give it a few minutes and try again.</div>
+        <button class="start-btn" id="retryBtn">Try Again</button>
+      </div>
     </div>
 
 
@@ -499,6 +544,14 @@ let callStartTime = 0;
 let transcriptVisible = false;
 let vapi = null;
 let _callerType = 'investor';
+// Fast-fail detection: a call is "healthy" once Lani actually speaks. If the
+// connection hangs or drops before that, we treat it as a provider-side fault
+// (e.g. a Vapi<->Anthropic outage) rather than a normal mid-call disconnect.
+let assistantSpoke = false;
+let connectWatchdog = null;
+const CONNECT_TIMEOUT_MS = 20000; // budget: context fetch + member lookup + connect + first speech
+const connTrouble = document.getElementById('connTrouble');
+const retryBtn    = document.getElementById('retryBtn');
 
 function log(msg) {
   debugLog.classList.add('show');
@@ -513,6 +566,27 @@ function showError(msg) {
   errorBanner.textContent = msg;
   errorBanner.classList.add('show');
   setTimeout(() => errorBanner.classList.remove('show'), 8000);
+}
+
+function clearConnectWatchdog() {
+  if (connectWatchdog) { clearTimeout(connectWatchdog); connectWatchdog = null; }
+}
+
+// Show the calm "temporarily unavailable" panel when a call fails to reach the
+// point of Lani speaking. Keeps the caller on the call view (no silent dead
+// call) and offers a retry. Reason is logged only, not shown to the caller.
+function showConnectTrouble(reason) {
+  clearConnectWatchdog();
+  callActive = false;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  callTimer.classList.remove('active');
+  try { if (vapi) vapi.stop(); } catch (e) { /* already stopped */ }
+  const reconnectMsg = document.getElementById('reconnect-msg');
+  if (reconnectMsg) reconnectMsg.style.display = 'none';
+  setupScreen.classList.add('hidden');
+  callScreen.classList.add('active');
+  callScreen.classList.add('conn-failed');
+  log('Fast-fail connect trouble shown (reason: ' + (reason || 'unknown') + ')');
 }
 
 function setStatus(state, text) {
@@ -603,6 +677,17 @@ function initVapi() {
     const wasActive = callActive;
     callActive = false;
 
+    // Fast-fail: the call ended before Lani ever spoke and the caller did not
+    // hang up. That signature is a provider-side connect failure, not a normal
+    // end. Show the reassuring "temporarily unavailable" panel instead of the
+    // generic mid-call reconnect prompt (which reads like Utah REIA is broken).
+    if (!assistantSpoke && !window._normalCallEnd) {
+      showConnectTrouble('call-end-before-speech');
+      window._userEndedCall = false;
+      window._normalCallEnd = false;
+      return;
+    }
+
     // Mark as normal end so the error handler does not show a banner
     // This fires for both assistant-initiated and caller-initiated call ends
     window._userEndedCall = true;
@@ -622,6 +707,8 @@ function initVapi() {
   });
 
   vapi.on('speech-start', () => {
+    // First assistant speech = the pipeline is healthy. Cancel the fast-fail watchdog.
+    if (!assistantSpoke) { assistantSpoke = true; clearConnectWatchdog(); }
     setStatus('speaking', 'Speaking');
   });
 
@@ -635,6 +722,8 @@ function initVapi() {
         addMessage('user', msg.transcript);
       }
       if (msg.role === 'assistant' && msg.transcriptType === 'final') {
+        // Belt-and-suspenders: an assistant transcript also proves Lani spoke.
+        if (!assistantSpoke) { assistantSpoke = true; clearConnectWatchdog(); }
         addMessage('assistant', msg.transcript);
       }
     }
@@ -692,6 +781,14 @@ function initVapi() {
     const errStr = JSON.stringify(e).slice(0, 200);
     log('Vapi error: ' + errStr);
     console.error('Vapi error:', e);
+
+    // A genuine error before Lani ever spoke is a connect/provider failure —
+    // show the calm "temporarily unavailable" panel, same as a fast drop.
+    if (!assistantSpoke) {
+      showConnectTrouble('error-before-speech');
+      return;
+    }
+
     showError('Call error — please try again.');
     endCallCleanup();
   });
@@ -699,6 +796,11 @@ function initVapi() {
 
 async function startCall() {
   try {
+    // Reset fast-fail state and clear any prior trouble view before reconnecting.
+    assistantSpoke = false;
+    clearConnectWatchdog();
+    callScreen.classList.remove('conn-failed');
+
     await loadVapiSDK();
     initVapi();
 
@@ -712,6 +814,14 @@ async function startCall() {
 
     setStatus('thinking', 'Connecting...');
     if (statusLabel) statusLabel.textContent = 'Connecting...';
+
+    // Arm the connect watchdog: if Lani has not spoken within the budget
+    // (covers context fetch + member lookup + connect + first speech), assume a
+    // provider-side fault and show the calm "temporarily unavailable" panel.
+    clearConnectWatchdog();
+    connectWatchdog = setTimeout(() => {
+      if (!assistantSpoke) showConnectTrouble('timeout');
+    }, CONNECT_TIMEOUT_MS);
 
     // Fetch live context from Supabase before starting the call
     let contextBlock = '';
@@ -846,9 +956,10 @@ async function startCall() {
     log('Vapi started');
 
   } catch(e) {
+    // SDK load failure or connect throw — same class of "cannot reach the
+    // service" problem from the caller's point of view. Show the retry panel.
     log('Start error: ' + e.message);
-    showError('Could not start call: ' + e.message);
-    endCallCleanup();
+    showConnectTrouble('start-exception');
   }
 }
 
@@ -862,9 +973,11 @@ function endCall() {
 
 function endCallCleanup() {
   callActive = false;
+  clearConnectWatchdog();
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   callTimer.classList.remove('active');
   callScreen.classList.remove('active');
+  callScreen.classList.remove('conn-failed');
   setupScreen.classList.remove('hidden');
   transcriptArea.innerHTML = '';
   callerName = ''; callerEmail = ''; callerPhone = '';
@@ -933,6 +1046,11 @@ endBtn.addEventListener('click', () => {
   window._normalCallEnd = true;
   endCall();
 });
+
+// Retry from the connection-trouble panel — startCall() clears the failed view.
+if (retryBtn) {
+  retryBtn.addEventListener('click', () => { startCall(); });
+}
 
 toggleBtn.addEventListener('click', () => {
   transcriptVisible = !transcriptVisible;
