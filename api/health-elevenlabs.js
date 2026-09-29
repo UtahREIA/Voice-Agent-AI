@@ -26,9 +26,17 @@
  * required, so the probe can't be triggered anonymously (which would burn quota
  * and leak the subscription tier). If unset, the endpoint is open.
  *
+ * TWO-STAGE CHECK: (1) the key is valid (/v1/user), then (2) the key's account can
+ * actually use Lani's voice (/v1/voices/{id}). Stage 2 was added after 2026-09-29,
+ * when a valid key from the WRONG ElevenLabs account passed stage 1 (probe green)
+ * but every call still died with "voice not fine-tuned and cannot be used." The
+ * key check alone can't see that; the voice check can.
+ *
  * Responses (always HTTP 200; the workflow reads the JSON, not the status code):
- *   { ok:true,  configured:true,  provider, tier, character_limit }
+ *   { ok:true,  configured:true,  provider, tier, voice_id, voice_name }
  *   { ok:false, configured:true,  provider, error, http_status }   <- real outage
+ *       error is one of: auth_failed_key_invalid_or_disabled, elevenlabs_error,
+ *       voice_unavailable_under_key (wrong account), voice_not_fine_tuned, timeout
  *   { ok:false, configured:false, provider, error:'not_configured' } <- setup pending
  */
 
@@ -38,6 +46,9 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const HEALTHCHECK_TOKEN = process.env.HEALTHCHECK_TOKEN || '';
 const PROVIDER = 'elevenlabs';
 const PROBE_URL = 'https://api.elevenlabs.io/v1/user';
+// Lani's voice clone. A valid key from the WRONG account passes /v1/user but
+// cannot use this voice — so we probe it too. Override via env if the voice changes.
+const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '7W2QbODUCE6OSVq7YEBU';
 const TIMEOUT_MS = 10000;
 
 export default async function handler(req, res) {
@@ -99,6 +110,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Stage 1 passed: the key is valid. Parse account info.
     let tier = null, characterLimit = null;
     try {
       const data = await resp.json();
@@ -106,12 +118,63 @@ export default async function handler(req, res) {
       characterLimit = data?.subscription?.character_limit ?? null;
     } catch (_) { /* body parse is best-effort */ }
 
+    // Stage 2: verify the key's account can actually use Lani's voice. A valid key
+    // from the wrong account passes stage 1 but 404s here — the 2026-09-29 failure.
+    if (VOICE_ID) {
+      const vController = new AbortController();
+      const vTimer = setTimeout(() => vController.abort(), TIMEOUT_MS);
+      try {
+        const vResp = await fetch(`https://api.elevenlabs.io/v1/voices/${VOICE_ID}`, {
+          method: 'GET',
+          headers: { 'xi-api-key': ELEVENLABS_API_KEY, accept: 'application/json' },
+          signal: vController.signal
+        });
+        if (!vResp.ok) {
+          // Non-200 (usually 404) = this key's account cannot see the voice.
+          let vdetail = '';
+          try { vdetail = (await vResp.text()).slice(0, 200); } catch (_) {}
+          return res.status(200).json({
+            ok: false, configured: true, provider: PROVIDER,
+            error: 'voice_unavailable_under_key', http_status: vResp.status,
+            voice_id: VOICE_ID, tier, detail: vdetail
+          });
+        }
+        // Voice is present. Best-effort, schema-tolerant fine-tune check: only flag
+        // when we can positively see it is NOT fine-tuned for any model.
+        let voiceName = null, notFineTuned = false;
+        try {
+          const vdata = await vResp.json();
+          voiceName = vdata?.name ?? null;
+          const ft = vdata?.fine_tuning;
+          const states = ft && ft.state && typeof ft.state === 'object' ? Object.values(ft.state) : [];
+          if (states.length && !states.includes('fine_tuned')) notFineTuned = true;
+        } catch (_) {}
+        if (notFineTuned) {
+          return res.status(200).json({
+            ok: false, configured: true, provider: PROVIDER,
+            error: 'voice_not_fine_tuned', voice_id: VOICE_ID, tier
+          });
+        }
+        return res.status(200).json({
+          ok: true, configured: true, provider: PROVIDER,
+          tier, character_limit: characterLimit, voice_id: VOICE_ID, voice_name: voiceName
+        });
+      } catch (e) {
+        const aborted = e?.name === 'AbortError';
+        return res.status(200).json({
+          ok: false, configured: true, provider: PROVIDER,
+          error: aborted ? 'voice_check_timeout' : 'voice_check_exception',
+          voice_id: VOICE_ID, tier, detail: String(e?.message || e).slice(0, 200)
+        });
+      } finally {
+        clearTimeout(vTimer);
+      }
+    }
+
+    // No voice id configured — key-only health.
     return res.status(200).json({
-      ok: true,
-      configured: true,
-      provider: PROVIDER,
-      tier,
-      character_limit: characterLimit
+      ok: true, configured: true, provider: PROVIDER,
+      tier, character_limit: characterLimit, voice_checked: false
     });
   } catch (e) {
     const aborted = e?.name === 'AbortError';
