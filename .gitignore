@@ -1,1 +1,9 @@
 node_modules/
+
+# Secrets — this repo is PUBLIC (Vercel Hobby requirement). Never commit keys.
+# Env values live in Vercel project settings / GitHub repo secrets, not in git.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
