@@ -75,16 +75,26 @@ export default async function handler(req, res) {
     });
 
     if (!resp.ok) {
-      // 401 here is the exact 2026-08-06 signature: key invalid, disabled, or
-      // auto-revoked. Surface the status and any error text (never the key).
+      // Auth failures are the 2026-08-06 signature: key invalid, disabled, auto-
+      // revoked, or (as we saw) a key ID used instead of the sk_ secret. ElevenLabs
+      // returns these as 401 OR 400 with an authentication_error body, so detect on
+      // the body code too, not just the status. Surface detail (never the key).
       let detail = '';
-      try { detail = (await resp.text()).slice(0, 300); } catch (_) {}
+      let isAuth = resp.status === 401 || resp.status === 403;
+      try {
+        detail = (await resp.text()).slice(0, 300);
+        const lc = detail.toLowerCase();
+        if (lc.includes('authentication_error') || lc.includes('invalid_api_key') ||
+            lc.includes('api_key_id_used') || lc.includes("start with 'sk_")) {
+          isAuth = true;
+        }
+      } catch (_) {}
       return res.status(200).json({
         ok: false,
         configured: true,
         provider: PROVIDER,
         http_status: resp.status,
-        error: resp.status === 401 ? 'auth_failed_key_invalid_or_disabled' : 'elevenlabs_error',
+        error: isAuth ? 'auth_failed_key_invalid_or_disabled' : 'elevenlabs_error',
         detail
       });
     }
