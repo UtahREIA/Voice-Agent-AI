@@ -34,10 +34,80 @@ import { parseDealCount } from './lib/deal-count.js';
 import {
   DEAL_COUNT_THRESHOLD_STANDARD,
   DEAL_COUNT_THRESHOLD_COMMERCIAL,
-  EDUCATION_STRATEGY_MAP
+  EDUCATION_STRATEGY_MAP,
+  loadRefs,
+  resolveArchetype,
+  detectEntryPhase
 } from './lib/roadmap-generator.js';
 
 export const config = { api: { bodyParser: true } };
+
+// ---------------------------------------------------------------------------
+// IN-CALL ASSESSMENT (observe only). Runs the roadmap engine's archetype and
+// entry-phase logic on routing turns so the assessment is stored and logged
+// during the call. It never changes questions, rule matching, or resources.
+// Reference tables are cached across warm invocations, same pattern as
+// ensureRoadmapRefs in ghl-sync.js: the promise resets on failure so the next
+// turn retries instead of caching the error.
+// ---------------------------------------------------------------------------
+let _assessmentRefsPromise = null;
+function ensureAssessmentRefs() {
+  if (!_assessmentRefsPromise) {
+    _assessmentRefsPromise = loadRefs(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+      .catch(err => { _assessmentRefsPromise = null; throw err; });
+  }
+  return _assessmentRefsPromise;
+}
+
+// The engine's reason strings contain em dashes; keep them out of logs and state.
+const EM_DASH_RE = new RegExp('\\s*' + String.fromCharCode(0x2014) + '\\s*', 'g');
+const stripEmDash = (v) => (v === null || v === undefined) ? v : String(v).replace(EM_DASH_RE, ' - ');
+const blankToNull = (v) => (typeof v === 'string' ? (v.trim() ? v : null) : (v === undefined || v === '' ? null : v));
+
+/**
+ * Pure assessment builder. Needs refs loaded (loadRefs or setRefs) first.
+ * deal_count must be the PARSED number or null, never the raw string:
+ * Number('') is 0, which would wrongly force the LEARN phase.
+ */
+export function buildAssessment({ strategy, stage, dealCountParsed, education_history, already_tried, specific_need, blocker }) {
+  const computed_at = new Date().toISOString();
+  const archetype = resolveArchetype({ strategy: strategy || '', stage, signals: {} });
+
+  if (archetype.route === 'contributor_handoff') {
+    return {
+      route: 'contributor_handoff',
+      archetype_id: null, archetype_key: null, was_promoted: false,
+      archetype_reason: 'contributor_handoff',
+      entry_phase_order: null, canonical_intent: null, phase_reason: null, signal_used: null,
+      computed_at
+    };
+  }
+
+  const base = {
+    stage: stage || '',
+    deal_count: dealCountParsed === undefined ? null : dealCountParsed,
+    education_history: blankToNull(education_history),
+    already_tried: blankToNull(already_tried)
+  };
+  let phase = detectEntryPhase(archetype.archetype_id, { ...base, stated_stuck_point: blankToNull(specific_need) || '' });
+  if (phase.signal_used !== 'stated_stuck_point' && blankToNull(blocker)) {
+    const retry = detectEntryPhase(archetype.archetype_id, { ...base, stated_stuck_point: blocker });
+    if (retry.signal_used === 'stated_stuck_point') phase = retry;
+  }
+
+  return {
+    route: null,
+    archetype_id: archetype.archetype_id,
+    archetype_key: archetype.archetype_key,
+    was_promoted: archetype.was_promoted,
+    archetype_reason: stripEmDash(archetype.reason),
+    entry_phase_order: phase.entry_phase_order,
+    canonical_intent: phase.canonical_intent,
+    phase_reason: stripEmDash(phase.reason),
+    signal_used: phase.signal_used,
+    computed_at
+  };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -125,6 +195,10 @@ export default async function handler(req, res) {
   // a non-required question that hits the cap is skipped and the flow routes.
   // Persisted alongside the dimensions.
   let cacheAskCounts = {};
+  // This turn's in-call assessment. Set only on routing turns; stored as
+  // _assessment in toStore and deliberately NOT in CACHE_DIMS, so it is never
+  // restored into vapiArgs on the next turn.
+  let currentAssessment = null;
   if (stateCallId) {
     let cachedState = {};
     try {
@@ -150,6 +224,7 @@ export default async function handler(req, res) {
     if (!stateCallId) return;
     const toStore = { _asks: cacheAskCounts };
     for (const k of CACHE_DIMS) if (cacheHasValue(vapiArgs[k])) toStore[k] = vapiArgs[k];
+    if (currentAssessment) toStore._assessment = currentAssessment;
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/intake_state?on_conflict=vapi_call_id`, {
         method: 'POST',
@@ -516,6 +591,39 @@ export default async function handler(req, res) {
         cacheAskCounts[nextParam] = (cacheAskCounts[nextParam] || 0) + 1;
       }
     }
+
+    // Routing turn (no next question, not the vendor walk): every such turn
+    // returns either the matched-rule response or the absolute fallback below,
+    // so compute the assessment here, before persistIntakeState stores it.
+    // Recomputed fresh each routing turn. Any failure leaves it null and the
+    // response is built exactly as before.
+    if (!nextQuestion && path !== 'V') {
+      try {
+        await ensureAssessmentRefs();
+        currentAssessment = buildAssessment({
+          strategy, stage, dealCountParsed, education_history, already_tried, specific_need, blocker
+        });
+        const a = currentAssessment;
+        console.log('ASSESSMENT | call ' + (stateCallId || 'none') + ' | ' +
+          (a.route === 'contributor_handoff'
+            ? 'contributor_handoff | no phase'
+            : a.archetype_key + ' | intent ' + a.canonical_intent + ' | phase ' + a.entry_phase_order +
+              ' | signal ' + a.signal_used + ' | ' + a.phase_reason));
+      } catch (e) {
+        currentAssessment = null;
+        console.error('ASSESSMENT error | call ' + (stateCallId || 'none') + ' | ' + e.message);
+      }
+    }
+    // Three fields exposed on tool_args when an assessment exists; empty otherwise
+    // so a failed assessment leaves tool_args exactly as before.
+    const assessmentToolArgs = currentAssessment
+      ? {
+          archetype_key: currentAssessment.archetype_key,
+          entry_phase_order: currentAssessment.entry_phase_order,
+          canonical_intent: currentAssessment.canonical_intent
+        }
+      : {};
+
     await persistIntakeState();
 
     console.log('INTAKE PATH DIAG — path:', path, '| stage:', stage, '| strategy:', strategy,
@@ -603,7 +711,7 @@ export default async function handler(req, res) {
         result: 'Now call getResourceStack with these args: ' + JSON.stringify({ stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' }) + '. Say this first: Based on what you have shared, here is where I would start.',
         action: 'getResourceStack',
         tier: '1_info',
-        tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all' },
+        tool_args: { stage, strategy, blocker, goal, specific_need, already_tried, mode: resource_request || 'all', ...assessmentToolArgs },
         voice_bridge: 'Based on what you have shared, here is where I would start.',
         stage_context: stageContext,
         next_question: null,
@@ -665,7 +773,7 @@ export default async function handler(req, res) {
       result: routingInstruction,
       action: finalAction,
       tier: matchedRule.tier,
-      tool_args: finalArgs,
+      tool_args: { ...finalArgs, ...assessmentToolArgs },
       voice_bridge: matchedRule.voice_bridge,
       stage_context: stageContext,
       next_question: null,
