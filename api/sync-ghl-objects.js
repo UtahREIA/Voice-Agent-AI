@@ -190,6 +190,22 @@ export default async function handler(req, res) {
                   member_promotions:  props.member_promotions || '',
                   // Boolean fields return as arrays ["true"] -- parseBool extracts correctly
                   enroll_vendor_match: parseBool(Array.isArray(props.enroll_vendor_match) ? props.enroll_vendor_match[0] : props.enroll_vendor_match),
+                  // Approval Status (single-select) gates whether Lani may recommend this vendor
+                  // (matching requires approval_status=Approved AND enroll_vendor_match=true).
+                  // GHL option-field keys can carry a _partner suffix / double underscores (see
+                  // fields above), so try the likely variants. CONFIRM the real key against the
+                  // sync's logged GHL field names before trusting this in production.
+                  approval_status: (() => {
+                    const raw = props.approval_status_partner ?? props.approval__status_partner ?? props.approval_status;
+                    const val = Array.isArray(raw) ? (raw[0] || null) : (raw || null);
+                    if (val) return val;
+                    // Transition default: a pre-migration vetted vendor (enroll_vendor_match=true)
+                    // with no Approval Status set in GHL is treated as Approved, so the daily cron
+                    // never nulls-out an existing live vendor. New records always carry a status from
+                    // the workflow, so this only applies to records created before this change.
+                    const em = parseBool(Array.isArray(props.enroll_vendor_match) ? props.enroll_vendor_match[0] : props.enroll_vendor_match);
+                    return em ? 'Approved' : null;
+                  })(),
                   affiliate_partner:   parseBool(Array.isArray(props.affiliate_partner)   ? props.affiliate_partner[0]   : props.affiliate_partner),
                   investor_types:      parseArray(props.investor_types || props.which_types_of_investors),
                   is_active: true,
@@ -433,6 +449,15 @@ export default async function handler(req, res) {
         promotion_graphics:     body.promotion_graphics || '',
         member_promotions:      body.member_promotions || '',
         enroll_vendor_match:    parseBool(Array.isArray(body.enroll_vendor_match) ? body.enroll_vendor_match[0] : body.enroll_vendor_match),
+        // Approval Status gate — see note in the daily-sync mapper. Confirm the real GHL key.
+        approval_status:        (() => {
+          const raw = body.approval_status_partner ?? body.approval__status_partner ?? body.approval_status;
+          const val = Array.isArray(raw) ? (raw[0] || null) : (raw || null);
+          if (val) return val;
+          // Transition default — see note in the daily-sync mapper above.
+          const em = parseBool(Array.isArray(body.enroll_vendor_match) ? body.enroll_vendor_match[0] : body.enroll_vendor_match);
+          return em ? 'Approved' : null;
+        })(),
         investor_types:         parseArray(body.investor_types || body.which_types_of_investors),
         affiliate_partner:      parseBool(Array.isArray(body.affiliate_partner) ? body.affiliate_partner[0] : body.affiliate_partner),
         is_active:              true,

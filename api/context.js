@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     // section was silently hidden behind its fallback forever. A vendor's services
     // live across the category arrays below; pull them and filter on a real signal.
     const vendorResp = await fetch(
-`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,operations,development_land,contractor_speciality,other_vendor_services,enroll_vendor_match&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
+`${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,operations,development_land,contractor_speciality,other_vendor_services,enroll_vendor_match&is_active=eq.true&enroll_vendor_match=eq.true&approval_status=eq.Approved&limit=50`,
       { headers: baseHeaders }
     );
     const vendors = await vendorResp.json();
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     let ghlVendors = [];
     try {
       const vendResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,investor_types&is_active=eq.true&enroll_vendor_match=eq.true&limit=50`,
+        `${SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone,business_description,funding_financial,deals_opportunities,team_vendors,investor_types&is_active=eq.true&enroll_vendor_match=eq.true&approval_status=eq.Approved&limit=50`,
         { headers: baseHeaders }
       );
       const vendData = await vendResp.json();
