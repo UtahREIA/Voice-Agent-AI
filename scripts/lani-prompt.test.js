@@ -7,7 +7,7 @@
  * because files under api/ become public functions.
  */
 
-import { buildCatalog } from '../api/lib/lani-catalog.js';
+import { buildCatalog, HEADERS, NO_TOPIC } from '../api/lib/lani-catalog.js';
 import {
   assemblePrompt, rebuildLaniPrompt, LIVE_ASSISTANT_ID, CATALOG_MARKER, catalogDiff
 } from '../api/lib/lani-prompt.js';
@@ -38,17 +38,22 @@ const FIXTURE = {
   ],
   events: [],
   tools: [
-    { resource_title: 'Rental Property Calculator', paid_resource: false, membership_required: false, resource_url_nonmember: '' },
-    { resource_title: 'Purchase Agreement Pack', paid_resource: true, membership_required: true, resource_url_nonmember: '' },
-    { resource_title: 'Member Calc With Public Link', paid_resource: false, membership_required: true, resource_url_nonmember: 'https://example.com/x' },
+    { resource_title: 'Rental Property Calculator', educational_topics: ['buy__hold__rentals'], educational_level: ['exploring__new', 'getting_started'], paid_resource: false, membership_required: false, resource_url_nonmember: '' },
+    { resource_title: 'Purchase Agreement Pack', educational_topics: ['fix__flip', 'brrrr'], educational_level: ['active_investor'], paid_resource: true, membership_required: true, resource_url_nonmember: '' },
+    { resource_title: 'Member Calc With Public Link', educational_topics: ['wholesaling'], educational_level: ['getting_started'], paid_resource: false, membership_required: true, resource_url_nonmember: 'https://example.com/x' },
+    { resource_title: 'Topicless Tool', educational_topics: [], educational_level: ['active_investor'], paid_resource: false, membership_required: false, resource_url_nonmember: '' },
   ],
   courses: [
-    { course_name: 'Raising Private Money', paid_education: false, membership_required: false },
-    { course_name: 'Members Class', paid_education: false, membership_required: true },
-    { course_name: 'Paid Class', paid_education: true, membership_required: false },
+    { course_name: 'Raising Private Money', educational_topics: ['raising_capital'], educational_level: ['exploring__new', 'getting_started'], paid_education: false, membership_required: false },
+    { course_name: 'Members Class', educational_topics: ['notes__lending'], educational_level: ['active_investor'], paid_education: false, membership_required: true },
+    { course_name: 'Paid Class', educational_topics: ['creative_financing'], educational_level: ['experienced_investor'], paid_education: true, membership_required: false },
+    { course_name: 'Topicless Class', educational_topics: null, educational_level: ['veteran__operator'], paid_education: false, membership_required: false },
   ],
   educators: [
-    { educators_name: 'Amy Majhoory', educational_topics: ['fix__flip', 'brand_new_topic'], educational_level: ['exploring__new'], commercial_asset_types: ['self_storage'] },
+    { educators_name: 'Amy Majhoory', educational_topics: ['fix__flip', 'brand_new_topic'], educational_level: ['exploring__new'], commercial_asset_types: [] },
+    { educators_name: 'Blair Testing', educational_topics: ['commercial'], educational_level: [], commercial_asset_types: ['farm_land'] },
+    { educators_name: 'Mixed Commercial', educational_topics: ['commercial', 'development'], educational_level: ['active_investor'], commercial_asset_types: ['self_storage'] },
+    { educators_name: 'Plain Commercial', educational_topics: ['commercial'], educational_level: ['getting_started'], commercial_asset_types: [] },
   ],
   vendors: [
     vendor({ company_name: 'CamaPlan', funding_financial: ['selfdirected_ira__401k_custodian'] }),
@@ -97,29 +102,63 @@ console.log('\na) vendor gate');
 
 // ---------------------------------------------------------------------------
 const cat = buildCatalog(FIXTURE);
-const section = (name) => {
+// Lines under an exact header, up to the next blank line.
+const section = (header) => {
   const lines = cat.text.split('\n');
-  const i = lines.indexOf(name);
+  const i = lines.indexOf(header);
+  if (i < 0) return null;
   const out = [];
-  for (const l of lines.slice(i + 1)) { if (!l.trim() || /^[A-Z][A-Z &]+$/.test(l)) break; out.push(l); }
+  for (const l of lines.slice(i + 1)) { if (!l.trim()) break; out.push(l); }
   return out;
 };
 
 console.log('\nb) paid tool placement');
-check('b: paid tool is under PAID TOOLS AND FORMS', section('PAID TOOLS AND FORMS'), s => s.some(l => l.startsWith('Purchase Agreement Pack')));
-check('b: paid tool is not under FREE CALCULATORS', section('FREE CALCULATORS'), s => !s.some(l => l.startsWith('Purchase Agreement Pack')));
-check('b: members only when required AND no nonmember URL', section('PAID TOOLS AND FORMS'), s => s.includes('Purchase Agreement Pack | members only'));
-check('b: no members only when a nonmember URL exists', section('FREE CALCULATORS'), s => s.includes('Member Calc With Public Link'));
+check('b: paid tool is under PAID TOOLS AND FORMS', section(HEADERS.paid), s => s.some(l => l.startsWith('Purchase Agreement Pack')));
+check('b: paid tool is not under FREE CALCULATORS', section(HEADERS.free), s => !s.some(l => l.startsWith('Purchase Agreement Pack')));
 
-console.log('\nc) class access labels');
-check('c: neither flag -> Free', section('CLASSES'), s => s.includes('Raising Private Money | Free'));
-check('c: membership_required -> Free for members', section('CLASSES'), s => s.includes('Members Class | Free for members'));
-check('c: paid_education -> Paid', section('CLASSES'), s => s.includes('Paid Class | Paid'));
+console.log('\n1) tools render title | topics | levels [| members only]');
+check('1: free tool line', section(HEADERS.free), s => s.includes('Rental Property Calculator | buy and hold rentals | new and exploring, getting started'));
+check('1: paid tool line, members only is the last field', section(HEADERS.paid), s => s.includes('Purchase Agreement Pack | fix and flip, BRRRR | active investor | members only'));
+check('1: no members only when a nonmember URL exists', section(HEADERS.free), s => s.includes('Member Calc With Public Link | wholesaling | getting started'));
+
+console.log('\nc + 2) classes render title | topics | levels | access');
+check('c: neither flag -> Free', section(HEADERS.classes), s => s.includes('Raising Private Money | raising capital | new and exploring, getting started | Free'));
+check('c: membership_required -> Free for members', section(HEADERS.classes), s => s.includes('Members Class | notes and lending | active investor | Free for members'));
+check('c: paid_education -> Paid', section(HEADERS.classes), s => s.includes('Paid Class | creative financing | experienced investor | Paid'));
+
+console.log('\n3) missing topic');
+check('3: tool with no topics renders "no topic set"', section(HEADERS.free), s => s.includes(`Topicless Tool | ${NO_TOPIC} | active investor`));
+check('3: class with no topics renders "no topic set"', section(HEADERS.classes), s => s.includes(`Topicless Class | ${NO_TOPIC} | veteran operator | Free`));
+check('3: counted as missing_topic', cat.counts.missing_topic, n => n === 2);
+check('3: missing_topic records named', cat.counts.missing_topic_records, r => JSON.stringify(r) === '["Topicless Class","Topicless Tool"]');
+check('3: neither record dropped', [cat.counts.free_tools, cat.counts.courses], v => v[0] === 3 && v[1] === 4);
+
+console.log('\n4) headers carry their guidance, exactly');
+{
+  const lines = cat.text.split('\n');
+  for (const h of [
+    'UTAH REIA RESOURCES (free, these lead)',
+    'PAID TOOLS AND FORMS (offer after free options, and say they are paid)',
+    'CLASSES (name | topics | levels | access)',
+    'EDUCATORS AND MENTORS (name | topics | levels they serve)',
+    'VENDORS (name | service)',
+  ]) check(`4: header line "${h}"`, lines, l => l.includes(h));
+  check('4: no bare old header lines left', lines,
+    l => !['UTAH REIA RESOURCES', 'PAID TOOLS AND FORMS', 'CLASSES', 'EDUCATORS AND MENTORS', 'VENDORS'].some(h => l.includes(h)));
+}
+
+console.log('\n5) educator commercial asset and levels');
+check('5: "commercial: farm land" once, no bare commercial', section(HEADERS.educators), s => s.includes('Blair Testing | commercial: farm land'));
+check('5: no line says "commercial, commercial:"', cat.text, t => !t.includes('commercial, commercial:'));
+check('5: other topics kept beside the asset', section(HEADERS.educators), s => s.includes('Mixed Commercial | development, commercial: self storage | active investor'));
+check('5: plain commercial with no asset type stays', section(HEADERS.educators), s => s.includes('Plain Commercial | commercial | getting started'));
+check('5: no levels in data -> no levels field, nothing invented', [section(HEADERS.educators), cat.text],
+  v => v[0].find(x => x.startsWith('Blair Testing')) === 'Blair Testing | commercial: farm land' && !/all levels/i.test(v[1]));
 
 console.log('\nd) unmapped topic');
-check('d: unmapped topic passes through', section('EDUCATORS AND MENTORS'), s => s[0] === 'Amy Majhoory | fix and flip, brand_new_topic, commercial: self storage | new and exploring');
+check('d: unmapped topic passes through', section(HEADERS.educators), s => s.includes('Amy Majhoory | fix and flip, brand_new_topic | new and exploring'));
 check('d: counted as unmapped', cat.counts.unmapped, u => JSON.stringify(u) === '["brand_new_topic"]');
-check('d: record not dropped', cat.counts.educators, n => n === 1);
+check('d: record not dropped', cat.counts.educators, n => n === 4);
 
 console.log('\ne) missing [[Name]] fails the build');
 {
@@ -157,10 +196,10 @@ console.log('\nf) markers stripped');
 }
 
 console.log('\ng) em dash in vendor text');
-check('g: vendor name em dash becomes " - "', section('VENDORS'), s => s.some(l => l.startsWith('Dash - Lending | ')));
+check('g: vendor name em dash becomes " - "', section(HEADERS.vendors), s => s.some(l => l.startsWith('Dash - Lending | ')));
 check('g: no em dash anywhere in the catalog', cat.text, t => !t.includes(EM));
 check('g: business_description is not rendered (spec line is name | categories)', cat.text, t => !t.includes('Fast'));
-check('g: contractor_speciality text is split into labels', section('VENDORS'), s => s.includes('Plumbing TESTING | plumbing, rough_in'));
+check('g: contractor_speciality text is split into labels', section(HEADERS.vendors), s => s.includes('Plumbing TESTING | plumbing, rough_in'));
 
 console.log('\nh) identical input, identical hash');
 {
@@ -266,6 +305,12 @@ console.log('\nextra) Vapi write path: full model, confirm, restore');
   check('extra: dry run diff reports added and removed records', dryWrite.r.diff, d => d.removed.includes('Gone Vendor') && d.added.includes('True Wealth Joint Venture Club') && !d.added.includes('Deal Center'));
   const dryParam = await run({ dry: true });
   check('extra: ?dry=1 forces dry_run even with LANI_PROMPT_WRITE=true', dryParam.r.status, s => s === 'dry_run');
+}
+
+console.log('\nextra) diff parser skips headers that carry guidance');
+{
+  const d = catalogDiff('Part A\n' + cat.text, cat);
+  check('diff: regenerating against itself adds and removes nothing', d, x => x.added.length === 0 && x.removed.length === 0);
 }
 
 console.log('\nextra) seed extraction');

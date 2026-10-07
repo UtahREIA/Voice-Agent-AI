@@ -65,6 +65,18 @@ export const VENDOR_CATEGORY_COLUMNS = [
 export const VENDOR_SPECIALTY_COLUMN = 'contractor_speciality';
 
 export const CATALOG_INTRO = 'This is everything you may recommend. Use exact names. Service labels after each vendor are internal. Describe the service in plain words when you speak.';
+// Section headers, guidance included. Exact text; the prompt relies on it.
+export const HEADERS = {
+  reia: 'UTAH REIA RESOURCES (free, these lead)',
+  free: 'FREE CALCULATORS',
+  paid: 'PAID TOOLS AND FORMS (offer after free options, and say they are paid)',
+  classes: 'CLASSES (name | topics | levels | access)',
+  educators: 'EDUCATORS AND MENTORS (name | topics | levels they serve)',
+  vendors: 'VENDORS (name | service)'
+};
+export const NO_TOPIC = 'no topic set';
+export const NO_LEVEL = 'no level set';
+
 export const NO_EVENTS_LINE = 'Upcoming events: none are loaded right now. If a caller wants an event, tell them their first event is free and that the team will follow up with the next date.';
 
 const EM_DASH_RE = new RegExp('\\s*' + String.fromCharCode(0x2014) + '\\s*', 'g');
@@ -97,11 +109,26 @@ export function buildCatalog(data) {
     return cleanText(key);
   };
   const names = [];
+  const missingTopic = [];
   const lines = ['CATALOG', CATALOG_INTRO, ''];
+
+  // Tools and classes keep fixed field positions, so an empty topic or level
+  // list renders a placeholder instead of dropping the field. A missing topic
+  // is also counted (counts.missing_topic); the record is never dropped.
+  const topicsField = (row, title) => {
+    const t = asArray(row.educational_topics).map(plain).filter(Boolean);
+    if (t.length) return t.join(', ');
+    missingTopic.push(title);
+    return NO_TOPIC;
+  };
+  const levelsField = (row) => {
+    const l = asArray(row.educational_level).map(plain).filter(Boolean);
+    return l.length ? l.join(', ') : NO_LEVEL;
+  };
 
   // UTAH REIA RESOURCES, then upcoming events
   const reia = [...(data.reia || [])].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0) || byText('title')(a, b));
-  lines.push('UTAH REIA RESOURCES');
+  lines.push(HEADERS.reia);
   for (const r of reia) {
     const title = cleanText(r.title);
     names.push(title);
@@ -130,50 +157,55 @@ export function buildCatalog(data) {
     names.push(title);
     // Raw check: cleanText strips URLs, so it would make every link look empty.
     const membersOnly = t.membership_required === true && !String(t.resource_url_nonmember || '').trim();
-    return membersOnly ? `${title} | members only` : title;
+    const fields = [title, topicsField(t, title), levelsField(t)];
+    if (membersOnly) fields.push('members only');
+    return fields.join(' | ');
   };
   const freeTools = tools.filter(t => t.paid_resource !== true);
   const paidTools = tools.filter(t => t.paid_resource === true);
-  lines.push('FREE CALCULATORS');
+  lines.push(HEADERS.free);
   for (const t of freeTools) lines.push(toolLine(t));
   lines.push('');
-  lines.push('PAID TOOLS AND FORMS');
+  lines.push(HEADERS.paid);
   for (const t of paidTools) lines.push(toolLine(t));
   lines.push('');
 
   // CLASSES
   const courses = [...(data.courses || [])].sort(byText('course_name'));
-  lines.push('CLASSES');
+  lines.push(HEADERS.classes);
   for (const c of courses) {
     const title = cleanText(c.course_name);
     names.push(title);
     const access = c.paid_education === true ? 'Paid'
       : c.membership_required === true ? 'Free for members'
       : 'Free';
-    lines.push(`${title} | ${access}`);
+    lines.push([title, topicsField(c, title), levelsField(c), access].join(' | '));
   }
   lines.push('');
 
   // EDUCATORS AND MENTORS: name | topics | levels
   const educators = [...(data.educators || [])].sort(byText('educators_name'));
-  lines.push('EDUCATORS AND MENTORS');
+  lines.push(HEADERS.educators);
   for (const e of educators) {
     const name = cleanText(e.educators_name);
     names.push(name);
-    const topics = asArray(e.educational_topics).map(plain).filter(Boolean);
-    for (const a of asArray(e.commercial_asset_types)) {
-      const p = plain(a);
-      if (p) topics.push(`commercial: ${p}`);
-    }
+    const assets = asArray(e.commercial_asset_types).map(plain).filter(Boolean);
+    // With an asset type, "commercial: <asset>" replaces the bare commercial
+    // topic so it is said once, not "commercial, commercial: <asset>".
+    const topicKeys = asArray(e.educational_topics)
+      .filter(k => !(assets.length && String(k).trim() === 'commercial'));
+    const topics = topicKeys.map(plain).filter(Boolean);
+    for (const a of assets) topics.push(`commercial: ${a}`);
     const levels = asArray(e.educational_level).map(plain).filter(Boolean);
-    // An educator with no level gets no trailing empty segment.
+    // An educator with no level in the data shows no levels: no trailing
+    // empty segment, and nothing invented.
     lines.push([name, topics.join(', '), levels.join(', ')].filter(Boolean).join(' | '));
   }
   lines.push('');
 
   // VENDORS: company_name | all category values (internal labels, not mapped)
   const vendors = [...(data.vendors || [])].sort(byText('company_name'));
-  lines.push('VENDORS');
+  lines.push(HEADERS.vendors);
   for (const v of vendors) {
     const name = cleanText(v.company_name);
     names.push(name);
@@ -197,7 +229,9 @@ export function buildCatalog(data) {
       courses: courses.length,
       educators: educators.length,
       vendors: vendors.length,
-      unmapped: [...unmapped].sort()
+      unmapped: [...unmapped].sort(),
+      missing_topic: missingTopic.length,
+      missing_topic_records: [...missingTopic].sort()
     }
   };
 }
@@ -217,11 +251,13 @@ export async function loadCatalogData(supabaseUrl, supabaseKey, fetchImpl = fetc
     return rows;
   };
   const vendorCols = ['company_name', ...VENDOR_CATEGORY_COLUMNS, VENDOR_SPECIALTY_COLUMN].join(',');
+  // Column names checked against information_schema: educational_topics and
+  // educational_level exist on both ghl_tools_resources and ghl_educational_courses.
   const [reia, events, tools, courses, educators, vendors] = await Promise.all([
     get('reia_resources?is_active=eq.true&select=title,voice_description,priority&order=priority.asc'),
     get(`ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&select=event_title,event_date,event_time,event_location&order=event_date.asc`),
-    get('ghl_tools_resources?is_active=eq.true&select=resource_title,paid_resource,membership_required,resource_url_nonmember'),
-    get('ghl_educational_courses?is_active=eq.true&select=course_name,paid_education,membership_required'),
+    get('ghl_tools_resources?is_active=eq.true&select=resource_title,educational_topics,educational_level,paid_resource,membership_required,resource_url_nonmember'),
+    get('ghl_educational_courses?is_active=eq.true&select=course_name,educational_topics,educational_level,paid_education,membership_required'),
     get('ghl_educators_mentors?is_active=eq.true&select=educators_name,educational_topics,educational_level,commercial_asset_types'),
     get(`ghl_vendor_resources?is_active=eq.true&enroll_vendor_match=eq.true&approval_status=eq.Approved&select=${vendorCols}`)
   ]);

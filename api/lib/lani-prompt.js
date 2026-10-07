@@ -91,7 +91,7 @@ export function namesInCatalogText(text) {
   if (idx < 0) return out;
   for (const raw of text.slice(idx).split('\n').slice(1)) {
     const line = raw.replace(/^[-*•]\s*/, '').trim();
-    if (!line || /^[A-Z][A-Z &]+$/.test(line)) continue;           // section headers
+    if (!line || /^[A-Z][A-Z &]+( \(.*\))?$/.test(line)) continue; // section headers, optional (guidance)
     if (line.startsWith('This is everything') || line.startsWith('Upcoming events')) continue;
     // "name | ..." lines split on the pipe only (names can contain ": ");
     // "title: description" lines split on the first ": ".
