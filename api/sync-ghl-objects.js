@@ -271,8 +271,12 @@ export default async function handler(req, res) {
                   educational_level: parseArray(props.educational_level),
                   resource_url: props.resource_url || '',
                   resource_url_nonmember: props.resource_url_nonmember || '',
-                  membership_required: parseBool(props.membership_required),
-                  paid_resource: parseBool(props.paid_resource),
+                  // GHL returns checkbox/boolean fields array-wrapped (e.g. ["true"]), same as
+                  // the educators block above. Tools was reading them raw, so parseBool always
+                  // saw an array and returned false -- every tool synced as neither paid nor
+                  // membership-required (Chris, item 49). Unwrap the array like educators does.
+                  membership_required: parseBool(Array.isArray(props.membership_required) ? props.membership_required[0] : props.membership_required),
+                  paid_resource: parseBool(Array.isArray(props.paid_resource) ? props.paid_resource[0] : props.paid_resource),
                   is_active: true,
                   synced_at: now2
                 };

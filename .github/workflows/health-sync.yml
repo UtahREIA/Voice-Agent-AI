@@ -1,0 +1,55 @@
+name: Health — nightly GHL sync freshness
+
+# Staleness watchdog for the nightly GHL -> Supabase sync. Born from item 62: the
+# sync died 2026-08-14 on an invalid GHL token and nobody noticed for ~7 weeks.
+# Pings /api/health-sync, which reads how long ago each ghl_* mirror table last
+# updated. Runs after the nightly sync window (sync is ~03:00 UTC).
+#
+# ALERTING: a failed run of this workflow emails the repo admins by default. Add an
+# optional repo secret SLACK_WEBHOOK_URL to also post to Slack.
+#
+# SETUP: optional repo secret HEALTHCHECK_TOKEN, identical to the Vercel env of the
+# same name, only if you gate the endpoint. Leave both unset to run it open.
+
+on:
+  schedule:
+    - cron: '0 9,21 * * *'   # 09:00 and 21:00 UTC — a few hours after the 03:00 sync
+  workflow_dispatch: {}
+
+jobs:
+  freshness:
+    name: Check ghl_* table freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping freshness endpoint
+        env:
+          HEALTHCHECK_TOKEN: ${{ secrets.HEALTHCHECK_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          URL="https://voice-agent-ai-nu.vercel.app/api/health-sync"
+          AUTH=()
+          if [ -n "$HEALTHCHECK_TOKEN" ]; then
+            AUTH=(-H "Authorization: Bearer ${HEALTHCHECK_TOKEN}")
+          fi
+
+          RESP=$(curl -s --max-time 25 "${AUTH[@]}" "$URL")
+          echo "Response: ${RESP}"
+
+          OK=$(echo "$RESP" | jq -r '.ok // false')
+          if [ "$OK" = "true" ]; then
+            AGE=$(echo "$RESP" | jq -r '.newest_age_hours // "?"')
+            echo "Sync is fresh (newest table updated ${AGE}h ago)."
+            exit 0
+          fi
+
+          ERR=$(echo "$RESP" | jq -r '.error // "unknown"')
+          echo "::error::Nightly GHL sync looks unhealthy (error=${ERR}). Data may be stale — check the GHL Private Integration token in Vercel and run a sync. Details: ${RESP}"
+
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -s --max-time 15 -X POST -H 'Content-Type: application/json' \
+              -d "{\"text\":\":warning: Utah REIA nightly GHL sync is unhealthy (error=${ERR}). Data may be stale. Check the GHL token in Vercel and run a sync.\"}" \
+              "$SLACK_WEBHOOK_URL" >/dev/null || echo "Slack notify failed (non-fatal)."
+          fi
+
+          exit 1
