@@ -18,6 +18,16 @@
  *   { ok:true,  newest_age_hours, threshold_hours, tables:[...] }
  *   { ok:false, error:'stale', stale:[{table, age_hours}], threshold_hours, tables:[...] }
  *   { ok:false, error:'query_failed'|'not_configured', ... }
+ *
+ * LANI V2 PROMPT FRESHNESS: every response also carries a `lani` block.
+ *   lani.configured:false while VAPI_API_KEY is unset (never alerts then).
+ * Once configured, the check fails (ok:false) with error:
+ *   'lani_prompt_failed'   the latest lani_prompt_builds row is failed
+ *   'lani_prompt_missing'  no build at all
+ *   'lani_prompt_stale'    the latest ok/unchanged build is more than
+ *                          LANI_STALE_HOURS (2) older than the newest ghl_* synced_at
+ *                          (dry_run also counts while LANI_PROMPT_WRITE is not "true")
+ * Table staleness keeps its own error and is reported first.
  */
 
 export const config = { maxDuration: 15 };
@@ -35,6 +45,44 @@ const TABLES = [
   'ghl_tools_resources'
 ];
 const TIMEOUT_MS = 10000;
+const VAPI_CONFIGURED = Boolean(process.env.VAPI_API_KEY);
+const LANI_STALE_HOURS = 2;
+// While writes are off every build is a dry_run, so a recent dry_run counts as
+// fresh; once LANI_PROMPT_WRITE is "true" only ok/unchanged count.
+const LANI_GOOD_STATUSES = process.env.LANI_PROMPT_WRITE === 'true' ? 'ok,unchanged' : 'ok,unchanged,dry_run';
+
+// Lani V2 prompt freshness. newestSyncIso is the newest synced_at across the
+// ghl_* tables read above. Returns { configured, ok, error?, ... }.
+async function checkLaniPrompt(newestSyncIso) {
+  if (!VAPI_CONFIGURED) return { configured: false, ok: true };
+  const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+  const read = async (q) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/lani_prompt_builds?${q}`, { headers, signal: controller.signal });
+      if (!r.ok) throw new Error(`http_${r.status}`);
+      return await r.json();
+    } finally { clearTimeout(timer); }
+  };
+  try {
+    const latest = (await read('select=status,built_at,error&order=built_at.desc&limit=1'))[0] || null;
+    if (!latest) return { configured: true, ok: false, error: 'lani_prompt_missing' };
+    if (latest.status === 'failed') {
+      return { configured: true, ok: false, error: 'lani_prompt_failed', latest_status: latest.status, latest_at: latest.built_at, latest_error: latest.error };
+    }
+    const good = (await read(`status=in.(${LANI_GOOD_STATUSES})&select=status,built_at&order=built_at.desc&limit=1`))[0] || null;
+    const goodTs = good ? new Date(good.built_at).getTime() : null;
+    const syncTs = newestSyncIso ? new Date(newestSyncIso).getTime() : null;
+    const lagHours = goodTs && syncTs ? +(((syncTs - goodTs) / 3600000).toFixed(1)) : null;
+    if (!good || (lagHours != null && lagHours > LANI_STALE_HOURS)) {
+      return { configured: true, ok: false, error: 'lani_prompt_stale', latest_status: latest.status, last_good_at: good?.built_at || null, newest_sync_at: newestSyncIso, lag_hours: lagHours };
+    }
+    return { configured: true, ok: true, latest_status: latest.status, last_good_at: good.built_at, newest_sync_at: newestSyncIso, lag_hours: lagHours };
+  } catch (e) {
+    return { configured: true, ok: false, error: 'lani_query_failed', detail: String(e?.message || e).slice(0, 120) };
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -82,15 +130,22 @@ export default async function handler(req, res) {
     .filter(r => !r.error && (r.age_hours == null || r.age_hours > THRESHOLD_HOURS))
     .map(r => ({ table: r.table, age_hours: r.age_hours }));
 
+  const syncIsos = results.map(r => r.synced_at).filter(Boolean).sort();
+  const lani = await checkLaniPrompt(syncIsos.length ? syncIsos[syncIsos.length - 1] : null);
+
   if (stale.length) {
-    return res.status(200).json({ ok: false, error: 'stale', threshold_hours: THRESHOLD_HOURS, stale, tables: results });
+    return res.status(200).json({ ok: false, error: 'stale', threshold_hours: THRESHOLD_HOURS, stale, tables: results, lani });
   }
 
   const ages = results.filter(r => r.age_hours != null).map(r => r.age_hours);
+  if (!lani.ok) {
+    return res.status(200).json({ ok: false, error: lani.error, threshold_hours: THRESHOLD_HOURS, tables: results, lani });
+  }
   return res.status(200).json({
     ok: true,
     threshold_hours: THRESHOLD_HOURS,
     newest_age_hours: ages.length ? Math.min(...ages) : null,
-    tables: results
+    tables: results,
+    lani
   });
 }
