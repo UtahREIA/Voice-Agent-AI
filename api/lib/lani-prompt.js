@@ -24,7 +24,19 @@ export const CATALOG_MARKER = '<<CATALOG>>';
 export const MAX_PROMPT_CHARS = 60000;
 const VAPI_BASE = 'https://api.vapi.ai';
 
+// [[Record Name]] or [[Record Name|spoken text]]. Record Name is what is
+// validated against the catalog; the final prompt prints the spoken text when
+// given, otherwise the record name.
 const NAME_MARK_RE = /\[\[([^\[\]]+?)\]\]/g;
+
+/** Split a marker body into the record it names and the text it prints. */
+export function parseNameMark(body) {
+  const i = body.indexOf('|');
+  if (i < 0) return { record: body.trim(), spoken: body.trim() };
+  const record = body.slice(0, i).trim();
+  const spoken = body.slice(i + 1).trim();
+  return { record, spoken: spoken || record };
+}
 
 export const sha256 = (s) => createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -37,14 +49,16 @@ export function assemblePrompt(partA, catalog) {
     return { ok: false, error: `Part A has no ${CATALOG_MARKER} marker` };
   }
   const nameSet = new Set(catalog.names);
-  const wanted = [...new Set([...partA.matchAll(NAME_MARK_RE)].map(m => m[1]))];
+  const wanted = [...new Set([...partA.matchAll(NAME_MARK_RE)].map(m => parseNameMark(m[1]).record))];
   const missing = wanted.filter(n => !nameSet.has(n));
   if (missing.length) {
     return { ok: false, error: 'Part A names records missing from the catalog: ' + missing.join(', '), missing };
   }
+  // Strip markers in Part A first, then insert the catalog, so marker
+  // handling can never touch catalog text.
   const text = partA
-    .split(CATALOG_MARKER).join(catalog.text)
-    .replace(NAME_MARK_RE, '$1');
+    .replace(NAME_MARK_RE, (m, body) => parseNameMark(body).spoken)
+    .split(CATALOG_MARKER).join(catalog.text);
   if (text.length > MAX_PROMPT_CHARS) return { ok: false, error: `Prompt is ${text.length} chars, over ${MAX_PROMPT_CHARS}` };
   if (text.includes('<<')) return { ok: false, error: 'Prompt still contains "<<"' };
   if (text.includes('[[')) return { ok: false, error: 'Prompt still contains "[["' };

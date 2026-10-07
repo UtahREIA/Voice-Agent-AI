@@ -13,7 +13,9 @@
  *   2. GETs the V2 assistant, reads the system message.
  *   3. Part A = everything before the line that is exactly "CATALOG", then the
  *      <<CATALOG>> marker where that section began.
- *   4. Wraps the known record names in [[ ]] wherever they appear.
+ *   4. Wraps the known record names in [[ ]] wherever they appear (SEED_WRAPS).
+ *      A short form that is not the exact record name becomes
+ *      [[Record Name|short form]], e.g. [[True Wealth Joint Venture Club|True Wealth]].
  *   5. Replaces em dashes with " - ".
  *   6. Checks every [[name]] against the live catalog (same builder the rebuild
  *      uses) and refuses to insert if any would fail the build. The table is
@@ -24,33 +26,58 @@
 import { LIVE_ASSISTANT_ID, CATALOG_MARKER, getSystemContent, assemblePrompt } from '../api/lib/lani-prompt.js';
 import { buildCatalog, loadCatalogData } from '../api/lib/lani-catalog.js';
 
-export const SEED_NAMES = [
-  'CamaPlan', 'Amy Majhoory', 'Raising Private Money', 'Sec Securities Attorney TESTING',
-  'Loan Servicing Company TESTING', 'The Fix& Flip Calculator', 'Short-Term Rental Calculator',
-  'Rental Property Calculator', 'Deal Center', 'True Wealth'
+// Text to find in Part A -> catalog record it names. When the text is not the
+// record's exact name, it is wrapped as [[Record|text]] so validation checks
+// the record and the prompt still says the text.
+export const SEED_WRAPS = [
+  { text: 'CamaPlan',                        record: 'CamaPlan' },
+  { text: 'Amy Majhoory',                    record: 'Amy Majhoory' },
+  { text: 'Raising Private Money',           record: 'Raising Private Money' },
+  { text: 'Sec Securities Attorney TESTING', record: 'Sec Securities Attorney TESTING' },
+  { text: 'Loan Servicing Company TESTING',  record: 'Loan Servicing Company TESTING' },
+  { text: 'The Fix& Flip Calculator',        record: 'The Fix& Flip Calculator' },
+  { text: 'Short-Term Rental Calculator',    record: 'Short-Term Rental Calculator' },
+  { text: 'Rental Property Calculator',      record: 'Rental Property Calculator' },
+  { text: 'Deal Center',                     record: 'Deal Center' },
+  { text: 'True Wealth Joint Venture Club',  record: 'True Wealth Joint Venture Club' },
+  { text: 'True Wealth',                     record: 'True Wealth Joint Venture Club' },
 ];
+export const markerFor = ({ text, record }) => text === record ? `[[${record}]]` : `[[${record}|${text}]]`;
 
 const EM_DASH_RE = new RegExp('\\s*' + String.fromCharCode(0x2014) + '\\s*', 'g');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Pure: system prompt -> { partA, found } or throws. */
-export function extractPartA(systemPrompt, names = SEED_NAMES) {
+/**
+ * Pure: system prompt -> { partA, wraps, found, notFound } or throws.
+ * One pass over the text, so nothing is wrapped twice: existing [[...]] is
+ * skipped, and the longest text wins at each position (the full True Wealth
+ * name is taken before the short form can match inside it). Word boundaries
+ * keep a name from matching inside a longer word.
+ */
+export function extractPartA(systemPrompt, wraps = SEED_WRAPS) {
   const lines = String(systemPrompt).split('\n');
   const idx = lines.findIndex(l => l.replace(/\r$/, '') === 'CATALOG');
   if (idx < 0) throw new Error('No line that is exactly "CATALOG" in the system prompt');
   let partA = lines.slice(0, idx).join('\n').replace(EM_DASH_RE, ' - ');
-  // Longest names first so a shorter name never splits a longer one; skip text
-  // already inside [[ ]].
-  const ordered = [...names].sort((a, b) => b.length - a.length);
-  const re = new RegExp('\\[\\[[^\\]]*\\]\\]|(' + ordered.map(escapeRe).join('|') + ')', 'g');
-  const found = new Set();
-  partA = partA.replace(re, (m, name) => {
-    if (!name) return m;
-    found.add(name);
-    return `[[${name}]]`;
+  const byText = new Map(wraps.map(w => [w.text, w]));
+  const ordered = [...wraps].map(w => w.text).sort((a, b) => b.length - a.length);
+  const re = new RegExp('\\[\\[[^\\]]*\\]\\]|(?<![A-Za-z0-9])(' + ordered.map(escapeRe).join('|') + ')(?![A-Za-z0-9])', 'g');
+  const counts = new Map();
+  partA = partA.replace(re, (m, text) => {
+    if (!text) return m;
+    const marker = markerFor(byText.get(text));
+    counts.set(marker, (counts.get(marker) || 0) + 1);
+    return marker;
   });
   partA = partA.replace(/\s*$/, '') + '\n\n' + CATALOG_MARKER;
-  return { partA, found: names.filter(n => found.has(n)), notFound: names.filter(n => !found.has(n)) };
+  const produced = wraps.map(markerFor).filter((m, i, a) => a.indexOf(m) === i && counts.has(m))
+    .map(marker => ({ marker, count: counts.get(marker) }));
+  return {
+    partA,
+    wraps: produced,
+    found: wraps.filter(w => counts.has(markerFor(w))).map(w => w.text),
+    notFound: wraps.filter(w => !counts.has(markerFor(w))).map(w => w.text)
+  };
 }
 
 async function main() {
@@ -72,9 +99,10 @@ async function main() {
   const system = getSystemContent((await g.json()).model);
   if (system === null) throw new Error('Assistant has no system message');
 
-  const { partA, found, notFound } = extractPartA(system);
+  const { partA, wraps, notFound } = extractPartA(system);
   console.log(`Part A: ${partA.length} chars`);
-  console.log(`[[names]] found (${found.length}): ${found.join(', ')}`);
+  console.log(`[[ ]] wraps produced (${wraps.length}):`);
+  for (const w of wraps) console.log(`  ${w.marker}  x${w.count}`);
   if (notFound.length) console.log(`Not present in Part A (not wrapped): ${notFound.join(', ')}`);
 
   const catalog = buildCatalog(await loadCatalogData(SUPABASE_URL, SUPABASE_KEY));

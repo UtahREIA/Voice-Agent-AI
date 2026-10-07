@@ -11,7 +11,7 @@ import { buildCatalog, HEADERS, NO_TOPIC } from '../api/lib/lani-catalog.js';
 import {
   assemblePrompt, rebuildLaniPrompt, LIVE_ASSISTANT_ID, CATALOG_MARKER, catalogDiff
 } from '../api/lib/lani-prompt.js';
-import { extractPartA } from './seed-lani-part-a.js';
+import { extractPartA, SEED_WRAPS, markerFor } from './seed-lani-part-a.js';
 
 let passed = 0;
 let failed = 0;
@@ -313,15 +313,50 @@ console.log('\nextra) diff parser skips headers that carry guidance');
   check('diff: regenerating against itself adds and removes nothing', d, x => x.added.length === 0 && x.removed.length === 0);
 }
 
+console.log('\nalias) [[Record Name|spoken text]]');
+{
+  const partA = 'Offer [[True Wealth Joint Venture Club|True Wealth]] or [[Deal Center]].\n\n' + CATALOG_MARKER;
+  const r = assemblePrompt(partA, cat);
+  check('alias: validates against the full record name', r.ok, v => v === true);
+  check('alias: prints only the spoken text', r.text, t => t.startsWith('Offer True Wealth or Deal Center.'));
+  check('alias: no marker or pipe syntax left in Part A text', r.text.split('\n\nCATALOG')[0], t => !t.includes('[[') && !t.includes('|'));
+  check('alias: plain [[Record Name]] still prints the name', r.text, t => t.includes('or Deal Center.'));
+
+  const noRecord = buildCatalog({ ...FIXTURE, reia: FIXTURE.reia.filter(x => !x.title.startsWith('True Wealth')) });
+  const bad = assemblePrompt(partA, noRecord);
+  check('alias: fails when the full name is missing from the catalog', bad.ok, v => v === false);
+  check('alias: failure names the full record, not the spoken text', bad.missing, m => JSON.stringify(m) === '["True Wealth Joint Venture Club"]');
+
+  const shortAsRecord = assemblePrompt('Offer [[True Wealth]].\n\n' + CATALOG_MARKER, cat);
+  check('alias: plain [[True Wealth]] still fails (no such record)', shortAsRecord.missing, m => JSON.stringify(m) === '["True Wealth"]');
+}
+
 console.log('\nextra) seed extraction');
 {
-  const sys = 'You are Lani ' + EM + ' be kind.\nOffer the Deal Center, CamaPlan, and True Wealth Joint Venture Club.\nCATALOG\nDeal Center: x';
-  const { partA, found } = extractPartA(sys);
+  const sys = 'You are Lani ' + EM + ' be kind.\n'
+    + 'Offer the Deal Center, CamaPlan, and True Wealth Joint Venture Club.\n'
+    + 'If they have capital, True Wealth fits. True Wealthy is not a record.\n'
+    + 'Already wrapped: [[Deal Center]].\n'
+    + 'CATALOG\nDeal Center: x';
+  const { partA, wraps, notFound } = extractPartA(sys);
   check('seed: cut at CATALOG and marker appended', partA, p => p.endsWith('\n\n' + CATALOG_MARKER) && !p.includes('Deal Center: x'));
-  check('seed: names wrapped', partA, p => p.includes('[[Deal Center]]') && p.includes('[[CamaPlan]]'));
+  check('seed: names wrapped', partA, p => p.includes('Offer the [[Deal Center]], [[CamaPlan]]'));
   check('seed: em dash replaced', partA, p => !p.includes(EM) && p.includes('Lani - be kind'));
-  check('seed: "True Wealth" inside the longer name gets wrapped as written in the spec list', [partA, found], v => v[0].includes('[[True Wealth]] Joint Venture Club') && v[1].includes('True Wealth'));
-  check('seed: that wrap fails validation against the real record name', assemblePrompt(partA, buildCatalog(FIXTURE)), r => r.ok === false && r.missing.includes('True Wealth'));
+  check('seed: full name wrapped plainly', partA, p => p.includes('and [[True Wealth Joint Venture Club]].'));
+  check('seed: standalone "True Wealth" wrapped as alias', partA, p => p.includes('capital, [[True Wealth Joint Venture Club|True Wealth]] fits.'));
+  check('seed: "True Wealthy" not wrapped (word boundary)', partA, p => p.includes('True Wealthy is not a record'));
+  check('seed: nothing wrapped twice', partA, p => !p.includes('[[[[') && !/\[\[[^\]]*\[\[/.test(p) && p.includes('Already wrapped: [[Deal Center]].'));
+  check('seed: wraps report', wraps, w => JSON.stringify(w) === JSON.stringify([
+    { marker: '[[CamaPlan]]', count: 1 },
+    { marker: '[[Deal Center]]', count: 1 },
+    { marker: '[[True Wealth Joint Venture Club]]', count: 1 },
+    { marker: '[[True Wealth Joint Venture Club|True Wealth]]', count: 1 },
+  ]));
+  check('seed: absent names reported', notFound, n => n.includes('Amy Majhoory') && !n.includes('True Wealth'));
+  const built = assemblePrompt(partA, buildCatalog(FIXTURE));
+  check('seed: seeded Part A now validates', built.ok, v => v === true);
+  check('seed: spoken text survives assembly', built.text, t => t.includes('and True Wealth Joint Venture Club.') && t.includes('capital, True Wealth fits.'));
+  check('seed: every SEED_WRAPS marker names a record as written', SEED_WRAPS.map(markerFor), m => m.includes('[[True Wealth Joint Venture Club|True Wealth]]') && !m.includes('[[True Wealth]]'));
   let threw = false; try { extractPartA('no marker here'); } catch { threw = true; }
   check('seed: refuses when there is no exact CATALOG line', threw, t => t === true);
 }
