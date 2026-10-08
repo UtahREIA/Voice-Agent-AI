@@ -1,0 +1,21 @@
+{
+  "$doc": "CENTRAL SERVICE CATALOG — the single place to add a vendor service type. Add a service block here once, then run `node scripts/apply-services.js` to push its routing into Supabase (vendor_routing_matrix) and print the GHL picklist step. Additive only: the apply script inserts missing rows and never edits or deletes. See services/README.md for the field meanings and the rules each value must follow.",
+  "services": [
+    {
+      "token": "example_service",
+      "display_name": "Example Service (TEMPLATE — copy this block, set active:true)",
+      "ghl_field": "team__vendors",
+      "active": false,
+      "routing": [
+        {
+          "investor_need": "team",
+          "strategy": null,
+          "priority": 5,
+          "connection_methods": ["vendor_directory", "ai_recommendation"],
+          "vendor_subtypes": [],
+          "notes": "Template routing row. One block per rule: which caller need (and optional strategy) this service answers, and at what priority."
+        }
+      ]
+    }
+  ]
+}
