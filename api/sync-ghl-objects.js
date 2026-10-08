@@ -21,7 +21,27 @@
  * Environment variables required:
  *   SUPABASE_URL           — Supabase project URL
  *   SUPABASE_SERVICE_KEY   — Supabase service role key
+ *
+ * Lani V2 prompt rebuild (api/lib/lani-prompt.js) lives here as a mode rather
+ * than its own api/ file:
+ *   GET /api/sync-ghl-objects?mode=lani-rebuild[&dry=1]   (same CRON_SECRET gate)
+ * It also runs after a successful nightly GET and after each successful POST
+ * upsert. A rebuild failure is caught and logged; it never fails the sync.
+ * Needs VAPI_API_KEY + LANI_V2_ASSISTANT_ID; writes to Vapi only when
+ * LANI_PROMPT_WRITE is exactly "true".
  */
+
+import { rebuildLaniPrompt } from './lib/lani-prompt.js';
+
+// Never throws: a prompt rebuild problem must not fail a sync.
+async function safeLaniRebuild(trigger, opts = {}) {
+  try {
+    return await rebuildLaniPrompt({ trigger, ...opts });
+  } catch (e) {
+    console.error('LANI PROMPT | rebuild threw | ' + trigger + ' | ' + e.message);
+    return { ok: false, error: e.message };
+  }
+}
 
 export default async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -35,6 +55,13 @@ export default async function handler(req, res) {
     const authHeader = req.headers?.['authorization'] || '';
     if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
       return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+    // Lani V2 prompt rebuild mode. ?dry=1 forces a dry run regardless of
+    // LANI_PROMPT_WRITE.
+    if (req.query?.mode === 'lani-rebuild') {
+      const dry = req.query?.dry === '1' || req.query?.dry === 'true';
+      const result = await safeLaniRebuild('manual', { dry });
+      return res.status(200).json(result);
     }
     if (!SUPABASE_URL || !SUPABASE_KEY || !GHL_API_KEY) {
       return res.status(200).json({ ok: false, error: 'Missing env vars' });
@@ -302,11 +329,15 @@ export default async function handler(req, res) {
         }
       }
 
+      // Nightly run finished: rebuild the Lani V2 prompt from the fresh data.
+      const laniPrompt = await safeLaniRebuild('nightly');
+
       return res.status(200).json({
         ok: true,
         synced_at: new Date().toISOString(),
         events: eventsResult,
-        objects: objectResults
+        objects: objectResults,
+        lani_prompt: { ok: laniPrompt.ok, status: laniPrompt.status || null, error: laniPrompt.error || null }
       });
     } catch (e) {
       console.error('Event sync GET error:', e.message);
@@ -379,6 +410,7 @@ export default async function handler(req, res) {
       });
 
       const status = resp.status;
+      if (resp.ok) await safeLaniRebuild('webhook:' + objectType);
       console.log('Educator upsert status:', status, '| name:', row.educators_name);
       return res.status(200).json({ ok: true, table: 'ghl_educators_mentors', name: row.educators_name, status });
     }
@@ -414,6 +446,7 @@ export default async function handler(req, res) {
       });
 
       const status = resp.status;
+      if (resp.ok) await safeLaniRebuild('webhook:' + objectType);
       console.log('Course upsert status:', status, '| name:', row.course_name);
       return res.status(200).json({ ok: true, table: 'ghl_educational_courses', name: row.course_name, status });
     }
@@ -481,14 +514,53 @@ export default async function handler(req, res) {
       });
 
       const status = resp.status;
+      if (resp.ok) await safeLaniRebuild('webhook:' + objectType);
       console.log('Vendor upsert status:', status, '| name:', row.company_name);
       return res.status(200).json({ ok: true, table: 'ghl_vendor_resources', name: row.company_name, status });
+    }
+
+    // ============================================================
+    // TOOLS & RESOURCES
+    // Mirrors the nightly mapper so a tool change does not wait for the
+    // nightly run. Booleans arrive array-wrapped (["true"]), unwrapped the same
+    // way the courses branch does.
+    // ============================================================
+    if (objectType === 'tools_resources') {
+      const row = {
+        ghl_record_id:          recordId,
+        resource_title:         body.resource_title || body.name || '',
+        educational_topics:     parseArray(body.educational_topics),
+        educational_level:      parseArray(body.educational_level),
+        resource_url:           body.resource_url || '',
+        resource_url_nonmember: body.resource_url_nonmember || '',
+        membership_required:    parseBool(Array.isArray(body.membership_required) ? body.membership_required[0] : body.membership_required),
+        paid_resource:          parseBool(Array.isArray(body.paid_resource) ? body.paid_resource[0] : body.paid_resource),
+        is_active:              true,
+        ghl_created_at:         body.created_at || null,
+        synced_at:              now
+      };
+
+      if (!row.resource_title) {
+        return res.status(200).json({ ok: false, error: 'resource_title is required' });
+      }
+
+      // on_conflict so an update to an existing tool merges instead of 409ing.
+      const resp = await fetch(`${SUPABASE_URL}/rest/v1/ghl_tools_resources?on_conflict=ghl_record_id`, {
+        method: 'POST',
+        headers: supabaseHeaders,
+        body: JSON.stringify(row)
+      });
+
+      const status = resp.status;
+      if (resp.ok) await safeLaniRebuild('webhook:' + objectType);
+      console.log('Tool upsert status:', status, '| name:', row.resource_title);
+      return res.status(200).json({ ok: true, table: 'ghl_tools_resources', name: row.resource_title, status });
     }
 
     // Unknown object type
     return res.status(200).json({
       ok: false,
-      error: `Unknown object_type: ${objectType}. Expected: vendor_resources, educators_mentors, or educational_courses`
+      error: `Unknown object_type: ${objectType}. Expected: vendor_resources, educators_mentors, educational_courses, or tools_resources`
     });
 
   } catch(e) {
