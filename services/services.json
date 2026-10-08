@@ -1,5 +1,16 @@
 {
   "$doc": "CENTRAL SERVICE CATALOG — the single place to add a vendor service type. Add a service block here once, then run `node scripts/apply-services.js` to push its routing into Supabase (vendor_routing_matrix) and print the GHL picklist step. Additive only: the apply script inserts missing rows and never edits or deletes. See services/README.md for the field meanings and the rules each value must follow.",
+  "$ghl_field_ids_doc": "ONE-TIME SETUP for the automated GHL step: paste each category field's ID from the GHL UI (Settings -> Objects -> Vendors & Partners -> open the field; the ID is in the page URL). Claude's GHL MCP (ghl_update_object_field) needs these to add picklist options automatically. Leave an entry blank until captured; a blank one falls back to a printed manual step.",
+  "ghl_field_ids": {
+    "funding__financial": "",
+    "team__vendors": "",
+    "deals__opportunities": "",
+    "operations": "",
+    "development__land": "",
+    "education_technology__tools": "",
+    "attorney_subclass": "",
+    "contractor_speciality": ""
+  },
   "services": [
     {
       "token": "example_service",

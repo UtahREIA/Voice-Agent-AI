@@ -2,26 +2,37 @@
 
 Adding a new vendor service type used to mean editing several places by hand (the GHL
 Vendors & Partners picklist and the Supabase routing tables), which drifts. This folder
-makes the catalog the single source of truth: **edit `services.json` once, run one command,
-and the routing flows into Supabase.** The GHL picklist is a printed one-line step, because
-GHL custom-object endpoints cannot be written from outside GHL (they 403 — see CLAUDE.md).
+makes the catalog the single source of truth: **edit `services.json` once, then one apply
+updates BOTH systems.**
 
 ## How to add a service
-1. Add a block to `services.json` under `services` (copy the template, set `active: true`).
-2. Run the apply command:
-   ```
-   SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/apply-services.js --dry   # preview
-   SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/apply-services.js          # apply
-   ```
-   (Or ask Claude to run it via the Supabase MCP, so you don't handle the key locally.)
-3. Do the one printed **GHL step**: add the `token` as an option on the named GHL field of the
-   Vendors & Partners object. Do this in the GHL UI, or ask Claude to do it via the GHL MCP
-   (`ghl_update_object_field`). This is the only manual-ish part, and it's unavoidable: GHL
-   blocks writes to custom-object fields from Vercel/Supabase/scripts.
 
-That's it. Once the GHL option exists, any vendor tagged with that service syncs into Supabase
-on the nightly run and becomes matchable **once a human sets Approval Status = Approved**
-(the vendor vetting gate still applies).
+**Standard flow — Claude applies both sides (no manual copying):**
+1. Add a block to `services.json` under `services` (copy the template, set `active: true`).
+2. Ask Claude: *"apply the service catalog."* Claude then, in one pass:
+   - inserts the `vendor_routing_matrix` rows in **Supabase** (via the Supabase MCP), and
+   - adds the `token` as an option on the named GHL field of the Vendors & Partners object
+     (via the GHL MCP `ghl_update_object_field`) — using the field IDs in `ghl_field_ids`
+     (see below).
+
+That's the whole thing: one file, one ask, both GHL and Supabase updated, no drift.
+
+**Fallback — no Claude available:**
+Run `node scripts/apply-services.js` (does the Supabase side; needs `SUPABASE_URL` +
+`SUPABASE_SERVICE_KEY` in the env, or ask Claude to run it via MCP). It then PRINTS the GHL
+option to add by hand in the GHL UI. Use this only when Claude can't drive the GHL MCP.
+
+### Why Claude has to do the GHL half
+GHL custom-object fields **cannot be written from Vercel, Supabase, or a local script — they
+403**. Only the GHL UI or Claude's GHL MCP can. So "automated" means Claude-driven: the GHL
+MCP runs in Claude's context, not on our servers. And `ghl_update_object_field` needs the
+field's **ID**, which GHL's API does not return — it comes from the GHL UI once. Capture each
+category field's ID into `ghl_field_ids` in `services.json` (one-time), and after that Claude
+can add options with no manual step.
+
+Once the GHL option exists, any vendor tagged with that service syncs into Supabase on the
+nightly run and becomes matchable **once a human sets Approval Status = Approved** (the vendor
+vetting gate still applies).
 
 ## The schema (each service block)
 | Field | Meaning | Rule |
