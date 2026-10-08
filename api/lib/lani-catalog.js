@@ -37,6 +37,9 @@ export const PLAIN_WORDS = {
   syndications__funds: 'syndications and funds',
   tax_deeds_and_liens: 'tax deeds and liens',
   wholesaling: 'wholesaling',
+  mindset: 'mindset',
+  // Key is the real GHL value, misspelling included. Do not correct it.
+  tax_saving_stratigies: 'tax saving strategies',
   // educational_level
   exploring__new: 'new and exploring',
   getting_started: 'getting started',

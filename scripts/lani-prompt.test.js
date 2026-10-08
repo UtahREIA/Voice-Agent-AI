@@ -160,6 +160,15 @@ check('d: unmapped topic passes through', section(HEADERS.educators), s => s.inc
 check('d: counted as unmapped', cat.counts.unmapped, u => JSON.stringify(u) === '["brand_new_topic"]');
 check('d: record not dropped', cat.counts.educators, n => n === 4);
 
+console.log('\nd2) mindset and tax_saving_stratigies are mapped');
+{
+  const c = buildCatalog({
+    courses: [{ course_name: 'Mindset And Tax Class', educational_topics: ['mindset', 'tax_saving_stratigies'], educational_level: ['getting_started'], paid_education: false, membership_required: false }],
+  });
+  check('d2: both keys render as plain words', c.text, t => t.includes('Mindset And Tax Class | mindset, tax saving strategies | getting started | Free'));
+  check('d2: neither key is in counts.unmapped', c.counts.unmapped, u => !u.includes('mindset') && !u.includes('tax_saving_stratigies') && u.length === 0);
+}
+
 console.log('\ne) missing [[Name]] fails the build');
 {
   const partA = 'Recommend [[Deal Center]] and [[True Wealth]] and [[Ghost Vendor]].\n\n' + CATALOG_MARKER;
