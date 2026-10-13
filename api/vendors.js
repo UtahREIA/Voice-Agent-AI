@@ -50,7 +50,8 @@ export default async function handler(req, res) {
     already_tried,
     zip_code,
     city,
-    state
+    state,
+    county
   } = vapiArgs || {};
 
   console.log('Vendor args — blocker:', blocker, 'strategy:', strategy, 'need:', investor_need, 'stage:', stage);
@@ -374,6 +375,10 @@ export default async function handler(req, res) {
     const callerZip = (zip_code || '').replace(/[^0-9]/g, '').slice(0, 5);
     const callerCity = (city || '').toLowerCase();
     const callerState = (state || 'UT').toUpperCase();
+    // Normalize the caller's county to the GHL "Area Serviced" token form, e.g.
+    // "Salt Lake" / "Salt Lake County" / "salt_lake_county" -> "salt_lake_county".
+    let callerCounty = (county || '').toLowerCase().trim().replace(/\s+/g, '_');
+    if (callerCounty && !callerCounty.endsWith('_county')) callerCounty += '_county';
     let callerLat = null;
     let callerLon = null;
 
@@ -412,6 +417,18 @@ export default async function handler(req, res) {
           geoScore = 5; // national vendor — always included
         } else if (v.serves_statewide && callerState === 'UT') {
           geoScore = 4; // statewide Utah vendor — always included
+        } else if (callerCounty) {
+          // County match from GHL "Area Serviced" (approach A). The vendor is neither
+          // national nor statewide, so it must explicitly serve the caller's county.
+          // TRANSITION-SAFE: a vendor with no county data yet is NOT excluded (still
+          // surfaces at a low score), so matching keeps working until vendors are tagged.
+          if (v.service_counties?.some(c => String(c).toLowerCase() === callerCounty)) {
+            geoScore = 9; // explicit county match
+          } else if (v.service_counties?.length > 0) {
+            return null; // serves specific counties, none is the caller's — exclude
+          } else {
+            geoScore = 3; // no service-area data yet — include with low score
+          }
         } else if (callerLat && callerLon && v.latitude && v.longitude) {
           // Calculate exact distance using Haversine formula
           distanceMiles = haversineDistance(callerLat, callerLon, v.latitude, v.longitude);

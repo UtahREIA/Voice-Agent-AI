@@ -235,6 +235,8 @@ export default async function handler(req, res) {
                   })(),
                   affiliate_partner:   parseBool(Array.isArray(props.affiliate_partner)   ? props.affiliate_partner[0]   : props.affiliate_partner),
                   investor_types:      parseArray(props.investor_types || props.which_types_of_investors),
+                  // Area Serviced -> service_counties[] + serves_statewide/serves_national
+                  ...mapAreaServiced(props.area_serviced_partner || props.area_serviced),
                   is_active: true,
                   synced_at: now2
                 };
@@ -497,6 +499,8 @@ export default async function handler(req, res) {
         })(),
         investor_types:         parseArray(body.investor_types || body.which_types_of_investors),
         affiliate_partner:      parseBool(Array.isArray(body.affiliate_partner) ? body.affiliate_partner[0] : body.affiliate_partner),
+        // Area Serviced -> service_counties[] + serves_statewide/serves_national
+        ...mapAreaServiced(body.area_serviced_partner || body.area_serviced),
         is_active:              true,
         ghl_created_at:         body.created_at || null,
         ghl_updated_at:         body.updated_at || null,
@@ -588,6 +592,21 @@ function parseBool(value) {
     return value.toLowerCase() === 'true';
   }
   return false;
+}
+
+// Helper: map the GHL "Area Serviced" multi-select
+// (custom_objects.vendor_resources.area_serviced) onto the geo columns. Its values are
+// the 29 Utah counties as "<name>_county" plus two sentinels: serves_all_of_utah and
+// serves_nationwide. GHL may append _partner to the key like the other multi-selects, so
+// callers pass whichever variant hit. Returns { service_counties, serves_statewide,
+// serves_national } to spread straight into the vendor row.
+function mapAreaServiced(rawArray) {
+  const vals = parseArray(rawArray).map(v => String(v).trim().toLowerCase()).filter(Boolean);
+  return {
+    service_counties: vals.filter(v => v.endsWith('_county')),
+    serves_statewide: vals.includes('serves_all_of_utah'),
+    serves_national:  vals.includes('serves_nationwide')
+  };
 }
 
 // ============================================================
