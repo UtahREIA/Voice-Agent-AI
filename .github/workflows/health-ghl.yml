@@ -1,0 +1,57 @@
+name: Health — GHL platform drift canary
+
+# Catches GoHighLevel platform changes before they break Utah REIA automations.
+# Pings /api/health-ghl, which probes the GHL API for: (1) a valid Private Integration
+# token, (2) the /contacts response shape, and (3) the contact custom-field keys our
+# automations depend on. Born from the 2026-08-14 token sunset + the contact-lookup
+# endpoint break. See GHL_CHANGE_PROCESS.md for the full process this plugs into.
+#
+# ALERTING: a failed run emails the repo admins by default. Add repo secret
+# SLACK_WEBHOOK_URL to also post to Slack.
+#
+# SETUP: optional repo secret HEALTHCHECK_TOKEN, identical to the Vercel env of the same
+# name, only if you gate the endpoint. Leave both unset to run it open.
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 13:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  ghl-drift:
+    name: Probe GHL token, endpoint shape, and field keys
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping GHL canary endpoint
+        env:
+          HEALTHCHECK_TOKEN: ${{ secrets.HEALTHCHECK_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          URL="https://voice-agent-ai-nu.vercel.app/api/health-ghl"
+          AUTH=()
+          if [ -n "$HEALTHCHECK_TOKEN" ]; then
+            AUTH=(-H "Authorization: Bearer ${HEALTHCHECK_TOKEN}")
+          fi
+
+          RESP=$(curl -s --max-time 25 "${AUTH[@]}" "$URL")
+          echo "Response: ${RESP}"
+
+          OK=$(echo "$RESP" | jq -r '.ok // false')
+          if [ "$OK" = "true" ]; then
+            echo "GHL integration healthy (token valid, endpoint shape intact, critical field keys present)."
+            exit 0
+          fi
+
+          ERR=$(echo "$RESP" | jq -r '.error // "unknown"')
+          DETAIL=$(echo "$RESP" | jq -r '.detail // ""')
+          MISSING=$(echo "$RESP" | jq -r '(.missing_fields // []) | join(", ")')
+          echo "::error::GHL platform drift detected (error=${ERR}). ${DETAIL} Missing fields: ${MISSING}. Full: ${RESP}"
+
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -s --max-time 15 -X POST -H 'Content-Type: application/json' \
+              -d "{\"text\":\":warning: Utah REIA GHL drift canary failed (error=${ERR}). ${DETAIL} Missing: ${MISSING}\"}" \
+              "$SLACK_WEBHOOK_URL" >/dev/null || echo "Slack notify failed (non-fatal)."
+          fi
+
+          exit 1
