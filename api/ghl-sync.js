@@ -33,6 +33,12 @@
 import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
 import { parseDealCount } from './lib/deal-count.js';
 
+// This end-of-call handler intentionally waits ~8s for the GHL workflow to create the
+// contact (STEP 6) and then does the GHL v2 updates + Supabase writes (STEP 7 call-history
+// save, STEP 8 roadmap). On Vercel's 10s default that work can be killed before the STEP 7
+// save runs, silently dropping call records. Give it real headroom like purge/reconcile do.
+export const config = { maxDuration: 60 };
+
 // ---------------------------------------------------------------------------
 // ROADMAP CREATION (post-call, awaited — safe here because this handler runs
 // after the caller has already hung up; nothing here can affect the live call).
