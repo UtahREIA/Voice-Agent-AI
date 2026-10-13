@@ -341,6 +341,32 @@ export default async function handler(req, res) {
     console.log('Artifact keys:', JSON.stringify(Object.keys(payload.message?.artifact || payload.artifact || {})));
     console.log('Structured data extracted:', JSON.stringify(structured));
 
+    // --- CALL-COMPLETENESS FILTER ---
+    // Abrupt, errored, and no-answer calls should NOT fire the GHL workflow (which runs
+    // paid steps and sends the follow-up SMS). Only completed, real conversations go
+    // through. Gate on a minimum duration AND a clean endedReason. Unknown duration is
+    // allowed (do not drop a call just because the timestamp was missing); a too-short
+    // call or a bad endedReason is dropped. Threshold is configurable via VOICE_MIN_CALL_SECS.
+    const endedReason = String(payload.message?.endedReason || payload.message?.call?.endedReason || '').toLowerCase();
+    const _dSecs = Number(payload.message?.durationSeconds);
+    const _dMs   = Number(payload.message?.durationMs);
+    let _callSecs = null;
+    if (Number.isFinite(_dSecs) && _dSecs > 0) _callSecs = _dSecs;
+    else if (Number.isFinite(_dMs) && _dMs > 0) _callSecs = _dMs / 1000;
+    else {
+      const _s = payload.message?.startedAt, _e = payload.message?.endedAt;
+      if (_s && _e) { const _d = (new Date(_e) - new Date(_s)) / 1000; if (Number.isFinite(_d)) _callSecs = _d; }
+    }
+    const MIN_CALL_SECS = parseInt(process.env.VOICE_MIN_CALL_SECS, 10) || 20;
+    // endedReasons that mean the call never became a usable conversation (no-answer,
+    // voicemail, silence timeout, pipeline errors, forwarded to a human, dropped socket).
+    const BAD_ENDED = ['no-answer','did-not-answer','customer-busy','voicemail','silence','error','failed','forwarded','closed-websocket','twilio'];
+    const endedBad = BAD_ENDED.some(r => endedReason.includes(r));
+    const callComplete = (_callSecs == null || _callSecs >= MIN_CALL_SECS) && !endedBad;
+    if (!callComplete) {
+      console.log(`CALL FILTER — call not complete (durationSecs=${_callSecs}, endedReason="${endedReason}", min=${MIN_CALL_SECS}); GHL webhook will be skipped`);
+    }
+
     // =========================================================
     // VENDOR ENROLLMENT FORK (Path V)
     // =========================================================
@@ -430,7 +456,7 @@ export default async function handler(req, res) {
       // the internal team notification. va-vendor-enroll is a stable machine tag.
       let ghlRespV;
       try {
-        if (GHL_WEBHOOK_URL_V) {
+        if (GHL_WEBHOOK_URL_V && callComplete) {
           ghlRespV = await fetch(GHL_WEBHOOK_URL_V, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -438,6 +464,9 @@ export default async function handler(req, res) {
               firstName: vFirst,
               lastName: vLast,
               phone: vPhone,
+              // Call metadata for the workflow-level completeness filter (backup)
+              endedReason,
+              callDurationSecs: _callSecs,
               // Flat fields for {{inboundWebhookRequest.*}} use in the workflow
               profileType: resolvedVendorProfile,
               vendorServiceType: vService,
@@ -457,7 +486,7 @@ export default async function handler(req, res) {
           });
           console.log('Vendor GHL webhook sent:', ghlRespV.status);
         } else {
-          console.log('Vendor fork — GHL_WEBHOOK_URL not set, skipping webhook');
+          console.log('Vendor fork — skipping webhook', GHL_WEBHOOK_URL_V ? '(incomplete/abrupt call)' : '(GHL_WEBHOOK_URL not set)');
         }
       } catch (e) {
         console.error('Vendor GHL webhook error:', e.message);
@@ -795,6 +824,11 @@ export default async function handler(req, res) {
       email:  callerEmail || '',
       phone:  effectivePhone,   // Formatted as E.164 e.g. +18082190555 — matches GHL storage format
 
+      // Call metadata — lets the Voice Agent Lead workflow re-check call completeness
+      // as a visible backup to the code gate above (webhook only fires for complete calls).
+      endedReason,
+      callDurationSecs: _callSecs,
+
       // Flat fields accessible in GHL workflow as {{inboundWebhookRequest.*}}
       // These must be top-level keys — nested fields like customFields[] are NOT
       // accessible via {{inboundWebhookRequest.*}} variables in GHL workflow steps
@@ -933,6 +967,8 @@ export default async function handler(req, res) {
     const GHL_WEBHOOK = process.env.GHL_WEBHOOK_URL;
     if (!GHL_WEBHOOK) {
       console.log('GHL_WEBHOOK_URL not set — skipping GHL webhook send');
+    } else if (!callComplete) {
+      console.log('CALL FILTER — skipping GHL webhook: incomplete/abrupt call');
     } else {
       ghlResp = await fetch(GHL_WEBHOOK, {
         method: 'POST',
