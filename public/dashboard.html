@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lani Voice Agent — Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222c; --line:#2a2f3a;
+    --text:#e8eaed; --muted:#9aa3b2; --accent:#4f8cff; --accent2:#2bd4a7;
+    --warn:#f5a524; --bar:#3a4252;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.4}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;justify-content:space-between;margin-bottom:8px}
+  h1{font-size:22px;margin:0;font-weight:650}
+  .sub{color:var(--muted);font-size:13px}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  .note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:8px;padding:10px 14px;color:var(--muted);font-size:13px;margin:14px 0}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi .v{font-size:28px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;margin-top:4px}
+  .kpi .l2{color:var(--warn);font-size:11px;margin-top:4px}
+  h2{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:28px 0 12px;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{margin:0 0 12px;font-size:14px;font-weight:600}
+  .row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+  .row .lab{width:46%;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .track{flex:1;background:var(--panel2);border-radius:6px;height:10px;overflow:hidden}
+  .row .fill{height:100%;background:var(--accent);border-radius:6px}
+  .row.alt .fill{background:var(--accent2)}
+  .row .num{width:44px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:120px;margin-top:6px}
+  .bars .b{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+  .bars .b:hover{background:var(--accent2)}
+  .bars .b span{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%) rotate(0deg);
+    font-size:9px;color:var(--muted);white-space:nowrap}
+  .axis{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin-top:22px}
+  footer{color:var(--muted);font-size:12px;margin-top:32px;border-top:1px solid var(--line);padding-top:14px}
+  .err{background:#2a1416;border:1px solid #5a2328;color:#ffb4ba;border-radius:10px;padding:16px;margin:20px 0}
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f6f7f9;--panel:#fff;--panel2:#eef1f5;--line:#e2e6ec;--text:#1a1d23;--muted:#667085;--bar:#dce1e8}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Lani Voice Agent — Dashboard</h1>
+      <div class="sub" id="asof">Loading…</div>
+    </div>
+    <button id="refresh">Refresh</button>
+  </header>
+
+  <div id="content"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = (n) => (n==null?'—':Number(n).toLocaleString());
+const pct = (a,b) => (a+b)>0 ? Math.round(a/(a+b)*100) : 0;
+
+function barRows(items, alt){
+  if(!items || !items.length) return '<div class="sub">No data.</div>';
+  const max = Math.max(...items.map(i=>i.n), 1);
+  return items.map(i=>`<div class="row ${alt?'alt':''}">
+    <div class="lab" title="${esc(i.label)}">${esc(i.label)}</div>
+    <div class="track"><div class="fill" style="width:${Math.max(2, Math.round(i.n/max*100))}%"></div></div>
+    <div class="num">${fmt(i.n)}</div></div>`).join('');
+}
+
+function dailyBars(days){
+  if(!days || !days.length) return '<div class="sub">No data.</div>';
+  const max = Math.max(...days.map(d=>d.n), 1);
+  const bars = days.map(d=>`<div class="b" style="height:${Math.max(2, Math.round(d.n/max*100))}%" title="${esc(d.day)}: ${d.n}"></div>`).join('');
+  const first = days[0]?.day || '', last = days[days.length-1]?.day || '';
+  return `<div class="bars">${bars}</div><div class="axis"><span>${esc(first)}</span><span>${esc(last)}</span></div>`;
+}
+
+function render(d){
+  const r = d.routing || {}, c = d.calls || {};
+  const em = r.educator_match || {matched:0,unmatched:0};
+  const matchRate = pct(em.matched, em.unmatched);
+  $('asof').textContent = 'As of ' + new Date(d.generated_at).toLocaleString() + ' · live from Supabase';
+
+  $('content').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="v">${fmt(r.total)}</div><div class="l">Total routings</div></div>
+      <div class="kpi"><div class="v">${fmt(r.last_7d)}</div><div class="l">Routings, last 7 days</div></div>
+      <div class="kpi"><div class="v">${matchRate}%</div><div class="l">Educator match rate</div></div>
+      <div class="kpi"><div class="v">${fmt(c.total)}</div><div class="l">Voice calls recorded</div>
+        <div class="l2">saving paused since ${c.newest? new Date(c.newest).toLocaleDateString():'—'}</div></div>
+    </div>
+
+    <div class="note">Two data streams. <b>Routing activity</b> below is every routing decision
+      (currently all survey / field-change triggered, not live voice calls). <b>Voice calls</b>
+      is the call-record table, sparse right now because end-of-call saving is paused; it fills
+      in once the Vapi server URL is reconnected.</div>
+
+    <h2>Routing activity</h2>
+    <div class="card" style="margin-bottom:14px">
+      <h3>Routing volume — last 21 days</h3>
+      ${dailyBars(r.daily_21d)}
+    </div>
+    <div class="grid">
+      <div class="card"><h3>By investor stage</h3>${barRows(r.by_stage)}</div>
+      <div class="card"><h3>Routing action</h3>${barRows(r.by_action, true)}</div>
+      <div class="card"><h3>Educator match</h3>${barRows([
+        {label:'Matched to educator', n:em.matched},
+        {label:'No educator match', n:em.unmatched}])}</div>
+      <div class="card"><h3>Top education tracks</h3>${barRows(r.top_tracks, true)}</div>
+      <div class="card"><h3>Top educators matched</h3>${barRows(r.top_educators)}</div>
+    </div>
+
+    <h2>Voice calls</h2>
+    <div class="grid">
+      <div class="card"><h3>By path (A / B / V)</h3>${barRows(c.by_path)}</div>
+      <div class="card"><h3>By caller profile</h3>${barRows(c.by_profile, true)}</div>
+      <div class="card"><h3>Top blockers</h3>${barRows(c.top_blockers)}</div>
+      <div class="card"><h3>Educator bookings</h3>
+        <div class="kpi" style="border:none;padding:4px 0"><div class="v">${fmt(c.educator_bookings)}</div>
+        <div class="l">calls with an educator match</div></div></div>
+    </div>
+
+    <footer>Live feed via /api/dashboard-data (read-only). Routing from routing_results;
+      calls from voice_agent_calls. Numbers include test fixtures until production data accrues.</footer>`;
+}
+
+async function load(){
+  $('content').innerHTML = '<div class="sub">Loading…</div>';
+  try{
+    const res = await fetch('/api/dashboard-data', {cache:'no-store'});
+    const d = await res.json();
+    if(d.error){ $('content').innerHTML = `<div class="err">Could not load metrics: ${esc(d.error)}${d.status?(' (status '+d.status+')'):''}</div>`; return; }
+    render(d);
+  }catch(e){
+    $('content').innerHTML = `<div class="err">Could not reach the metrics feed: ${esc(e.message||e)}</div>`;
+  }
+}
+$('refresh').addEventListener('click', load);
+load();
+</script>
+</body>
+</html>
