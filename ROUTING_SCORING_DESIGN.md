@@ -135,3 +135,72 @@ Lower priority than Phase 1, because framing matters less than which resources s
 
 Phase 1a+1b: ~1-1.5 days (all in `resources.js`, no schema/plumbing changes).
 Phase 2: ~0.5-1 day (additive columns + a few scoring lines).
+
+---
+
+# Phase 3 — Numeric match-confidence score (design, not yet built)
+
+Status: **DESIGN** (2026-10-14). Addresses the Asana task "Scored / numeric confidence
+matching." Distinct from Phase 1: Phase 1 decides the **order** of the stack; Phase 3
+decides **whether to present a specific close match with confidence** in the
+secondary-questioning / problem-to-solution chain.
+
+## The problem
+In the secondary-questioning chain, Lani maps a caller's stated problem to a specific
+resource (an educator, a vendor kind, an education track) and then decides whether the
+match is close enough to deliver with confidence ("I found someone who specializes in
+exactly that"). Today that decision is **Lani's own judgment**, so it is inconsistent
+and un-tunable. Chris's ask: have the matrices emit a **numeric match score** so the
+"deliver if above N" line is **computed**, not judged.
+
+## Design — a 0-100 match score per candidate
+
+Each candidate resource is scored against the caller's resolved dimensions (stage,
+strategy/topic, blocker/need, asset type). Weighted overlap, normalized to 0-100 by the
+max achievable for that resource type:
+
+| Dimension | Signal | Points |
+| --- | --- | --- |
+| Strategy / topic | caller strategy exactly in the resource's `educational_topics` / matrix `strategy` | +50 |
+| Strategy / topic | a related strategy via `strategy_crosswalk.parent_strategy` | +25 |
+| Stage / level | caller stage in the resource's `educational_level` / matrix `stage` | +25 |
+| Need / blocker (vendors) | vendor serves the caller's blocker/need | +20 |
+| Asset type | commercial sub-asset / asset-type match when relevant | +15 |
+| Investor type (vendors) | `investor_types` overlap | +10 |
+
+Score = sum(matched points) / max-achievable-for-that-type * 100. A candidate missing a
+dimension simply can't earn its points, so partial matches score lower — which is the
+desired behavior.
+
+## Confidence bands + the threshold N
+N lives in `app_settings` (e.g. `match_confidence_threshold = 60`) so Chris can tune the
+bar with **no deploy** (same pattern as `vendor_match_radius_miles`).
+
+- **score >= N** → high confidence: deliver with a specific claim ("specializes in exactly that").
+- **N-15 to N** → medium: still deliver, softer language ("a strong option for this").
+- **< N-15** → low: do NOT claim a close match. Ask one more secondary question, or fall
+  back to a broader / foundational resource. Never a silent "no match."
+
+## Where it hooks
+- `resources.js` / `vendors.js` / `education.js` compute `match_score` per returned
+  candidate and include it in the tool response (alongside the existing fields).
+- Lani's prompt/logic reads the band (not the raw number) to choose the confidence line —
+  replacing her judgment with the computed rule.
+- Weights start as **code constants** (simplest). Only if per-dimension tuning is wanted
+  later do they move to a small `scoring_weights` config table.
+
+## Relationship to Phase 1
+Complementary and independent: Phase 1 `reRank` nudges **order**; Phase 3 gates the
+**"I found a close match" claim**. A stack can be well-ordered (Phase 1) yet still contain
+only weak matches, in which case Phase 3 keeps Lani from over-claiming.
+
+## Risks & mitigations
+- **Mis-set threshold** → N is configurable in `app_settings`; start conservative (60), tune on real calls.
+- **Suppressing all matches** → below-threshold always delivers a softer/foundational fallback, never silence.
+- **Missing dimensions** → score only on present dimensions; this correctly lowers confidence rather than erroring.
+
+## Effort
+~1-1.5 days: the scoring function in the three match endpoints + the `app_settings`
+threshold + the prompt/logic change to use the bands. No schema changes if weights stay
+in code. Validate with the Phase 1 test scenarios plus: a dead-center strategy+stage
+match should score high; a stage-only (wrong-strategy) match should fall below N.
