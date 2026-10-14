@@ -86,6 +86,7 @@ const STATE_SCOPED_HINTS = ['lend', 'loan', 'mortgage', 'attorney', 'legal', 'in
 
 const asArray = (v) => Array.isArray(v) ? v : (v === null || v === undefined || v === '' ? [] : [v]);
 const lc = (v) => String(v || '').toLowerCase().trim();
+const isTestRecord = (name) => /testing/i.test(String(name || ''));
 const cleanSentence = (v) => {
   if (!v) return '';
   const s = String(v).replace(/\s*—\s*/g, ' - ').replace(/\b(?:https?:\/\/|www\.)\S+/gi, '').replace(/\s+/g, ' ').trim();
@@ -217,6 +218,9 @@ export default async function handler(req, res) {
     const rows = await get(`${cfg.table}?is_active=eq.true&select=${cfg.select}&limit=200`);
     const scored = [];
     for (const r of rows) {
+      // Spec 4b: exclude test fixtures from live matching (applies to every
+      // record type, not just vendors). Stopgap by name until a real flag exists.
+      if (isTestRecord(r[cfg.name])) continue;
       const topics = asArray(r.educational_topics).map(lc);
       const levels = asArray(r.educational_level).map(lc);
       let s = 0, closest = false;
@@ -294,7 +298,7 @@ export default async function handler(req, res) {
     for (const v of vendors) {
       // Stopgap test exclusion: spec wants a real flag, but no is_test column
       // exists yet (flagged to Chris). Exclude by name until the flag lands.
-      if (/testing/i.test(v.company_name || '')) continue;
+      if (isTestRecord(v.company_name)) continue;
 
       // Specialty-first: subtype columns first, then category columns. Gap fields
       // (other_contractor, other_vendor_services) are NOT matched.
@@ -351,6 +355,7 @@ function accessWord(access) {
   if (!a) return 'free';
   if (a.includes('member')) return 'free for members';
   if (a.includes('paid') || a.includes('$')) return 'paid';
+  if (a.includes('free') || a.includes('public') || a.includes('join')) return 'free';
   return a;
 }
 function costWord(r) {
