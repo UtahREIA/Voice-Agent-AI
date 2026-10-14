@@ -3,6 +3,7 @@
 Status: built 2026-10-13. Re-runnable (SQL below). Owner: David. Priority: HIGH.
 
 ## Why this exists
+
 GHL builds every dropdown VALUE from the label someone typed, so a one-character
 difference (a missing `s`, a typo, a double vs single underscore) silently creates a
 value that **matches nothing** in the Supabase routing tables. The query just returns zero
@@ -11,6 +12,7 @@ checks every shared field/value between GHL and Supabase and lists the mismatche
 can be corrected before they bite.
 
 ## What "shared" means here (the four vocabularies)
+
 The same concept is spelled differently per table. The bridge is `strategy_crosswalk`,
 which maps every GHL dropdown value → a canonical key, per dimension (stage, strategy,
 commercial_asset, goal, discovery). The matching tables then use the canonical/short forms,
@@ -18,22 +20,25 @@ and the code (`api/resources.js` SHORT_STAGE / TOPICS_BY_STRATEGY / MATRIX_STRAT
 `api/intake.js` RULE_STAGE_KEY) translates between them.
 
 Shared dimensions this report checks:
+
 - **Stage** — GHL `Where would you say you are...` (field `swDtahR8SAnG4S34s2a6`) ↔ crosswalk `stage` ↔ intake_routing_rules.stage_key ↔ ghl_* `educational_level`
 - **Strategy** — GHL `What type of investing...` (`hf9VEhcVwgyNXP3qbzsA`) + `Commercial Asset types` (`fSCzPFTuniRg0Lce2CCf`) ↔ crosswalk `strategy`/`commercial_asset` ↔ education_routing_matrix.strategy ↔ ghl_* `educational_topics`
 - **Goal** — GHL `What are you trying to accomplish...` (`t150aKjUz1KvU183CtJw`) ↔ crosswalk `goal`
-- **Vendor categories** — GHL Vendor Partner fields (funding__financial, team__vendors, deals__opportunities, operations, development__land, education_technology__tools, attorney_subclass, contractor_speciality) ↔ vendor_routing_matrix
+- **Vendor categories** — GHL Vendor Partner fields (funding__financial, team__vendors, deals__opportunities, operations, devel
+- opment__land, education_technology__tools, attorney_subclass, contractor_speciality) ↔ vendor_routing_matrix
 
 ## Current findings (2026-10-13)
 
-| Dimension | Direction | Result |
-| --- | --- | --- |
-| Vendor categories | matrix token → GHL value | **CLEAN** (0) — reconciled in the vendor alignment task |
-| Vendor categories | GHL value → routing | **CLEAN** (0) — 22 services routed in the same task |
-| Educator/course **levels** → crosswalk stage | GHL value → crosswalk | **CLEAN** (0) |
-| Stage/strategy canonical → intake_routing_rules | crosswalk → routing | **CLEAN** (0) — every questionnaire option routes |
-| Educator/course **topics** → crosswalk | GHL value → crosswalk | **3 GAPS** (below) |
+| Dimension                                          | Direction                 | Result                                                         |
+| -------------------------------------------------- | ------------------------- | -------------------------------------------------------------- |
+| Vendor categories                                  | matrix token → GHL value | **CLEAN** (0) — reconciled in the vendor alignment task |
+| Vendor categories                                  | GHL value → routing      | **CLEAN** (0) — 22 services routed in the same task     |
+| Educator/course**levels** → crosswalk stage | GHL value → crosswalk    | **CLEAN** (0)                                            |
+| Stage/strategy canonical → intake_routing_rules   | crosswalk → routing      | **CLEAN** (0) — every questionnaire option routes       |
+| Educator/course**topics** → crosswalk       | GHL value → crosswalk    | **3 GAPS** (below)                                       |
 
 ### The 3 open gaps (educator/course topics with no crosswalk match)
+
 1. **`syndication__funds`** — the crosswalk carries the plural `syndications__funds`; a real
    educator is tagged with the singular. That educator will not surface for syndication.
    **Fix:** add an additive crosswalk alias row: `ghl_value='syndication__funds'`,
@@ -48,6 +53,7 @@ Shared dimensions this report checks:
    to a foundational/general track so mindset educators can surface.
 
 ## How to re-run it
+
 Run these in the Supabase SQL editor (or ask Claude to run via the Supabase MCP). Each lists
 mismatches; empty result = clean.
 
@@ -79,6 +85,7 @@ ORDER BY 1,2;
 ```
 
 ## Note on the investor-questionnaire dropdown options
+
 GHL's API returns custom-field definitions but NOT their picklist option values, so the
 live dropdown options can't be diffed by API — `strategy_crosswalk` is the maintained record
 of them. The strongest live signal is therefore the **actual values on real GHL records**
