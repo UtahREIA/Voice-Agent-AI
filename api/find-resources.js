@@ -87,6 +87,12 @@ const STATE_SCOPED_HINTS = ['lend', 'loan', 'mortgage', 'attorney', 'legal', 'in
 const asArray = (v) => Array.isArray(v) ? v : (v === null || v === undefined || v === '' ? [] : [v]);
 const lc = (v) => String(v || '').toLowerCase().trim();
 const isTestRecord = (name) => /testing/i.test(String(name || ''));
+
+// Phase 3 confidence (ROUTING_SCORING_DESIGN.md): a 0-100 match_score per match,
+// banded against a threshold N so Lani's "close match" claim is computed, not judged.
+// N is a code constant for now (the design allows moving it to app_settings later).
+const CONF_THRESHOLD = 60;
+const band = (s) => s >= CONF_THRESHOLD ? 'high' : s >= CONF_THRESHOLD - 15 ? 'medium' : 'low';
 const cleanSentence = (v) => {
   if (!v) return '';
   const s = String(v).replace(/\s*—\s*/g, ' - ').replace(/\b(?:https?:\/\/|www\.)\S+/gi, '').replace(/\s+/g, ' ').trim();
@@ -196,11 +202,18 @@ export default async function handler(req, res) {
       else if (want && (lc(r.title).includes(want) || hay.some(h => h.includes(want)))) s += 20;
       return { r, s };
     }).sort((a, b) => b.s - a.s).slice(0, 2);
-    const matches = scored.map(({ r }) => ({
-      id: r.resource_key || r.title, name: r.title,
-      description: cleanSentence(r.voice_description), cost: accessWord(r.access),
-      booking_link: false, closest_fit: false
-    }));
+    const matches = scored.map(({ r }) => {
+      const hay = [...asArray(r.serves_needs), ...asArray(r.serves_problems)].map(lc);
+      const hit = (wantKey && hay.some(h => h === wantKey || h.includes(wantKey) || wantKey.includes(h)))
+        || (want && lc(r.title).includes(want));
+      const score = hit ? 90 : 72; // Utah REIA resources lead; strong when the need matches
+      return {
+        id: r.resource_key || r.title, name: r.title,
+        description: cleanSentence(r.voice_description), cost: accessWord(r.access),
+        booking_link: false, closest_fit: false,
+        match_score: score, confidence: band(score)
+      };
+    });
     return matches.length ? mk('ok', matches) : mk('no_match');
   }
 
@@ -235,15 +248,21 @@ export default async function handler(req, res) {
       const paid = r.paid_resource === true || r.paid_education === true;
       const members = r.membership_required === true;
       s += paid ? 0 : members ? 5 : 10;
-      scored.push({ r, s, closest });
+      // Phase 3 match score (0-100): topic 50 exact / 25 related, level 25.
+      let earned = 0, mx = 0;
+      if (tKey) { mx += 50; earned += topics.includes(tKey) ? 50 : 25; }
+      if (lKey) { mx += 25; earned += (levels.includes(lKey) || levels.length === 0) ? 25 : 0; }
+      const score100 = mx ? Math.round(earned / mx * 100) : 70;
+      scored.push({ r, s, closest, score100 });
     }
     scored.sort((a, b) => b.s - a.s);
-    const top = scored.slice(0, 2).map(({ r, closest }) => ({
+    const top = scored.slice(0, 2).map(({ r, closest, score100 }) => ({
       id: r.ghl_record_id, name: r[cfg.name],
       description: topicSentence(r.educational_topics, type),
       cost: costWord(r),
       booking_link: Boolean(r[cfg.url]),
-      closest_fit: closest
+      closest_fit: closest,
+      match_score: score100, confidence: band(score100)
     }));
     return top.length ? mk('ok', top, top.some(m => m.closest_fit) ? 'closest_fit' : '') : mk('no_match');
   }
@@ -259,11 +278,17 @@ export default async function handler(req, res) {
       if (!wanted.length) return true;
       return wanted.some(w => strats.some(s => s === w || s.includes(w) || w.includes(s)));
     });
-    const list = (pick.length ? pick : rows).slice(0, 2).map(e => ({
-      id: e.id, name: e.event_title,
-      description: cleanSentence([e.event_subtitle, e.event_date, e.event_time, e.event_location].filter(Boolean).join(' ')),
-      cost: 'first event free', booking_link: true, closest_fit: false
-    }));
+    const list = (pick.length ? pick : rows).slice(0, 2).map(e => {
+      const strats = asArray(e.strategies).map(lc);
+      const hit = wanted.length && strats.some(s => wanted.some(w => s === w || s.includes(w) || w.includes(s)));
+      const score = hit ? 82 : 60;
+      return {
+        id: e.id, name: e.event_title,
+        description: cleanSentence([e.event_subtitle, e.event_date, e.event_time, e.event_location].filter(Boolean).join(' ')),
+        cost: 'first event free', booking_link: true, closest_fit: false,
+        match_score: score, confidence: band(score)
+      };
+    });
     return list.length ? mk('ok', list) : mk('no_match');
   }
 
@@ -329,16 +354,22 @@ export default async function handler(req, res) {
       if (geo === 0) continue;
 
       const id = v.ghl_record_id;
-      scored.push({ v, score: svcScore + geo, last: lastRef.get(id) ?? 0, rnd: Math.random() });
+      // Phase 3 match score (0-100): service 50 specialty / 30 category, area up to 20.
+      let earned = 0, mx = 0;
+      if (serviceWords) { mx += 50; earned += svcScore >= 50 ? 50 : (svcScore >= 30 ? 30 : 0); }
+      mx += 20; earned += geo >= 9 ? 20 : (geo >= 7 ? 16 : (geo >= 4 ? 12 : 5));
+      const score100 = Math.round(earned / mx * 100);
+      scored.push({ v, score: svcScore + geo, last: lastRef.get(id) ?? 0, rnd: Math.random(), score100 });
     }
 
     // Rank by match score, then least-recently-referred, then random tiebreak.
     scored.sort((a, b) => b.score - a.score || a.last - b.last || a.rnd - b.rnd);
     const outOfUtah = callerState && callerState !== 'UT';
-    const top = scored.slice(0, 2).map(({ v }) => ({
+    const top = scored.slice(0, 2).map(({ v, score100 }) => ({
       id: v.ghl_record_id, name: v.company_name,
       description: cleanSentence(v.business_description),
       cost: 'partner', booking_link: false, closest_fit: false,
+      match_score: score100, confidence: band(score100),
       ...(outOfUtah && isStateScoped ? { coverage_warning: `may not cover ${callerState}` } : {})
     }));
     return top.length ? mk('ok', top, outOfUtah && isStateScoped ? 'out_of_state_coverage' : '') : mk('no_match');

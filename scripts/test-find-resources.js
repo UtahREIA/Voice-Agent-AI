@@ -50,7 +50,7 @@ async function run() {
       let parsed; try { parsed = JSON.parse(result); } catch { parsed = result; }
       if (parsed?.needs) {
         for (const n of parsed.needs) {
-          const names = n.matches.map(m => `${m.name} [${m.cost}${m.booking_link ? ', book' : ''}${m.closest_fit ? ', closest-fit' : ''}${m.coverage_warning ? ', ' + m.coverage_warning : ''}]`);
+          const names = n.matches.map(m => `${m.name} [${m.match_score}/${m.confidence}, ${m.cost}${m.booking_link ? ', book' : ''}${m.closest_fit ? ', closest-fit' : ''}${m.coverage_warning ? ', ' + m.coverage_warning : ''}]`);
           console.log(`  ${n.type}: ${n.status}${n.note ? ' (' + n.note + ')' : ''}`);
           names.forEach(x => console.log('     - ' + x));
         }
