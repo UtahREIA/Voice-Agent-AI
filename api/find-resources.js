@@ -206,7 +206,7 @@ export default async function handler(req, res) {
       const hay = [...asArray(r.serves_needs), ...asArray(r.serves_problems)].map(lc);
       const hit = (wantKey && hay.some(h => h === wantKey || h.includes(wantKey) || wantKey.includes(h)))
         || (want && lc(r.title).includes(want));
-      const score = hit ? 90 : 72; // Utah REIA resources lead; strong when the need matches
+      const score = hit ? 90 : 55; // Utah REIA resources lead; high only when the need matches, else medium
       return {
         id: r.resource_key || r.title, name: r.title,
         description: cleanSentence(r.voice_description), cost: accessWord(r.access),
@@ -281,7 +281,7 @@ export default async function handler(req, res) {
     const list = (pick.length ? pick : rows).slice(0, 2).map(e => {
       const strats = asArray(e.strategies).map(lc);
       const hit = wanted.length && strats.some(s => wanted.some(w => s === w || s.includes(w) || w.includes(s)));
-      const score = hit ? 82 : 60;
+      const score = hit ? 82 : 48; // topic match = high; a fallback/open event = medium, not high
       return {
         id: e.id, name: e.event_title,
         description: cleanSentence([e.event_subtitle, e.event_date, e.event_time, e.event_location].filter(Boolean).join(' ')),
