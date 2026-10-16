@@ -161,12 +161,38 @@ export default async function handler(req, res) {
   };
   try {
     const results = await Promise.all(needs.map(need => resolveNeed(need, { get, headers })));
-    const out = { needs: results };
     console.log('find_resources:', JSON.stringify(results.map(r => ({ type: r.type, status: r.status, n: r.matches.length }))));
-    // NOTE: end-of-call capture (the merged V2 output + SMS links by id) is a
-    // separate pending task (spec section 5, chat 5 + David). find_resources
-    // stays a pure lookup for now and does not write voice_agent_stack_links.
-    return reply(out);
+
+    // End-of-call capture (#5): collect EVERY found resource's link (server-side
+    // only), then STRIP _url from every match so Lani never reads a URL aloud.
+    const linkItems = [];
+    let educatorName = '', educatorUrl = '';
+    for (const n of results) {
+      for (const m of n.matches) {
+        if (m._url) linkItems.push({ name: m.name, type: n.type, url: m._url });
+        if (n.type === 'educator' && !educatorName) { educatorName = m.name; educatorUrl = m._url || ''; }
+        delete m._url;
+      }
+    }
+    // Cache keyed by the Vapi call id so ghl-sync folds the full list into the
+    // follow-up SMS - every resource found, not just the ones Lani spoke.
+    if (vapiCallId && (linkItems.length || educatorName)) {
+      const smsLinks = linkItems.length
+        ? 'Your links:\n' + linkItems.map(r => `- ${r.name}: ${r.url}`).join('\n')
+        : '';
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_stack_links?on_conflict=vapi_call_id`, {
+          method: 'POST',
+          headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({
+            vapi_call_id: vapiCallId, sms_links: smsLinks, links: linkItems,
+            educator_name: educatorName, educator_url: educatorUrl, mode: 'find_resources'
+          })
+        });
+      } catch (e) { console.error('find_resources stack-links cache error:', e.message); }
+    }
+
+    return reply({ needs: results });
   } catch (e) {
     console.error('find_resources error:', e.message);
     return reply({ needs: [], error: 'exception',
@@ -196,7 +222,7 @@ export default async function handler(req, res) {
 
   // ── Utah REIA resources (these LEAD) ───────────────────────────────────
   async function resolveReia({ need, tKey, mk, get }) {
-    const rows = await get('reia_resources?is_active=eq.true&order=priority.asc&select=resource_key,title,voice_description,access,serves_needs,serves_problems,priority');
+    const rows = await get('reia_resources?is_active=eq.true&order=priority.asc&select=resource_key,title,voice_description,access,serves_needs,serves_problems,priority,url');
     const want = lc(need.service || need.topic || '');
     const wantKey = tKey || topicKey(need.service || '');
     const scored = rows.map(r => {
@@ -214,8 +240,9 @@ export default async function handler(req, res) {
       return {
         id: r.resource_key || r.title, name: r.title,
         description: cleanSentence(r.voice_description), cost: accessWord(r.access),
-        booking_link: false, closest_fit: false,
-        match_score: score, confidence: band(score)
+        booking_link: Boolean(r.url), closest_fit: false,
+        match_score: score, confidence: band(score),
+        _url: r.url || ''
       };
     });
     return matches.length ? mk('ok', matches) : mk('no_match');
@@ -276,6 +303,7 @@ export default async function handler(req, res) {
         booking_link: Boolean(link),
         closest_fit: closest,
         match_score: score100, confidence: band(score100),
+        _url: link || '',
         ...(isReplay ? { format: 'event_replay' } : {})
       };
     });
@@ -285,7 +313,7 @@ export default async function handler(req, res) {
   // ── Events (today or later; match by topic or networking) ──────────────
   async function resolveEvent({ tKey, related, mk, get }) {
     const today = new Date().toISOString().slice(0, 10);
-    const rows = await get(`ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=20&select=id,event_title,event_subtitle,event_date,event_time,event_location,speaker_name,strategies,event_type`);
+    const rows = await get(`ghl_upcoming_events?is_active=eq.true&event_date=gte.${today}&order=event_date.asc&limit=20&select=id,event_title,event_subtitle,event_date,event_time,event_location,speaker_name,strategies,event_type,registration_url`);
     const wanted = [tKey, ...related].filter(Boolean);
     const pick = rows.filter(e => {
       const strats = asArray(e.strategies).map(lc);
@@ -302,8 +330,9 @@ export default async function handler(req, res) {
       return {
         id: e.id, name: e.event_title,
         description: cleanSentence([e.event_subtitle, e.event_date, e.event_time, e.event_location].filter(Boolean).join(' ')),
-        cost: 'first event free', booking_link: true, closest_fit: false,
-        match_score: score, confidence: band(score)
+        cost: 'first event free', booking_link: Boolean(e.registration_url), closest_fit: false,
+        match_score: score, confidence: band(score),
+        _url: e.registration_url || ''
       };
     });
     return list.length ? mk('ok', list) : mk('no_match');
@@ -390,6 +419,7 @@ export default async function handler(req, res) {
       description: cleanSentence(v.business_description),
       cost: 'partner', booking_link: false, closest_fit: false,
       match_score: score100, confidence: band(score100),
+      _url: v.company_website || '',
       ...(outOfUtah && isStateScoped ? { coverage_warning: `may not cover ${callerState}` } : {})
     }));
     return top.length ? mk('ok', top, outOfUtah && isStateScoped ? 'out_of_state_coverage' : '') : mk('no_match');
