@@ -93,6 +93,10 @@ const isTestRecord = (name) => /testing/i.test(String(name || ''));
 // N is a code constant for now (the design allows moving it to app_settings later).
 const CONF_THRESHOLD = 60;
 const band = (s) => s >= CONF_THRESHOLD ? 'high' : s >= CONF_THRESHOLD - 15 ? 'medium' : 'low';
+
+// During V2 testing Chris wants TESTING fixtures INCLUDED (they are deleted
+// before launch). Set FIND_EXCLUDE_TEST_RECORDS=true to exclude them again.
+const EXCLUDE_TEST = process.env.FIND_EXCLUDE_TEST_RECORDS === 'true';
 const cleanSentence = (v) => {
   if (!v) return '';
   const s = String(v).replace(/\s*—\s*/g, ' - ').replace(/\b(?:https?:\/\/|www\.)\S+/gi, '').replace(/\s+/g, ' ').trim();
@@ -221,7 +225,7 @@ export default async function handler(req, res) {
   async function resolveLearning(type, { tKey, lKey, related, mk, get }) {
     const cfg = {
       educator: { table: 'ghl_educators_mentors', name: 'educators_name', url: 'educators_url', select: 'ghl_record_id,educators_name,educational_topics,educational_level,commercial_asset_types,educators_url' },
-      class:    { table: 'ghl_educational_courses', name: 'course_name', url: 'education_url', select: 'ghl_record_id,course_name,educational_topics,educational_level,commercial_asset_types,education_url,paid_education,membership_required' },
+      class:    { table: 'ghl_educational_courses', name: 'course_name', url: 'education_url', select: 'ghl_record_id,course_name,educational_topics,educational_level,commercial_asset_types,education_url,video_url,paid_education,membership_required' },
       tool:     { table: 'ghl_tools_resources', name: 'resource_title', url: 'resource_url', select: 'ghl_record_id,resource_title,educational_topics,educational_level,resource_url,resource_url_nonmember,paid_resource,membership_required' }
     }[type];
     if (!cfg) return mk('no_match');
@@ -231,9 +235,9 @@ export default async function handler(req, res) {
     const rows = await get(`${cfg.table}?is_active=eq.true&select=${cfg.select}&limit=200`);
     const scored = [];
     for (const r of rows) {
-      // Spec 4b: exclude test fixtures from live matching (applies to every
-      // record type, not just vendors). Stopgap by name until a real flag exists.
-      if (isTestRecord(r[cfg.name])) continue;
+      // Test fixtures: excluded only when FIND_EXCLUDE_TEST_RECORDS is set. During
+      // V2 testing they are included (Chris's request); deleted in GHL before launch.
+      if (EXCLUDE_TEST && isTestRecord(r[cfg.name])) continue;
       const topics = asArray(r.educational_topics).map(lc);
       const levels = asArray(r.educational_level).map(lc);
       let s = 0, closest = false;
@@ -256,14 +260,25 @@ export default async function handler(req, res) {
       scored.push({ r, s, closest, score100 });
     }
     scored.sort((a, b) => b.s - a.s);
-    const top = scored.slice(0, 2).map(({ r, closest, score100 }) => ({
-      id: r.ghl_record_id, name: r[cfg.name],
-      description: topicSentence(r.educational_topics, type),
-      cost: costWord(r),
-      booking_link: Boolean(r[cfg.url]),
-      closest_fit: closest,
-      match_score: score100, confidence: band(score100)
-    }));
+    const top = scored.slice(0, 2).map(({ r, closest, score100 }) => {
+      // A class with a video_url is a recording of a past event (Chris, 2026-10-16):
+      // Lani introduces it as a replay so the caller knows it is not a live class.
+      const isReplay = type === 'class' && Boolean(r.video_url);
+      const topicWords = asArray(r.educational_topics)
+        .map(t => PLAIN_WORDS[t] || String(t).replace(/__/g, ' ').replace(/_/g, ' '))
+        .slice(0, 2).join(' and ') || 'real estate investing';
+      const link = type === 'class' ? (r.education_url || r.video_url) : r[cfg.url];
+      return {
+        id: r.ghl_record_id, name: r[cfg.name],
+        description: isReplay ? `A replay of a past Utah REIA event on ${topicWords}.`
+                              : topicSentence(r.educational_topics, type),
+        cost: costWord(r),
+        booking_link: Boolean(link),
+        closest_fit: closest,
+        match_score: score100, confidence: band(score100),
+        ...(isReplay ? { format: 'event_replay' } : {})
+      };
+    });
     return top.length ? mk('ok', top, top.some(m => m.closest_fit) ? 'closest_fit' : '') : mk('no_match');
   }
 
@@ -278,7 +293,9 @@ export default async function handler(req, res) {
       if (!wanted.length) return true;
       return wanted.some(w => strats.some(s => s === w || s.includes(w) || w.includes(s)));
     });
-    const list = (pick.length ? pick : rows).slice(0, 2).map(e => {
+    // No "any event" fallback (Chris, 2026-10-16): if nothing matches the topic
+    // (and no open-to-everyone events), return no_match rather than an arbitrary event.
+    const list = pick.slice(0, 2).map(e => {
       const strats = asArray(e.strategies).map(lc);
       const hit = wanted.length && strats.some(s => wanted.some(w => s === w || s.includes(w) || w.includes(s)));
       const score = hit ? 82 : 48; // topic match = high; a fallback/open event = medium, not high
@@ -323,7 +340,7 @@ export default async function handler(req, res) {
     for (const v of vendors) {
       // Stopgap test exclusion: spec wants a real flag, but no is_test column
       // exists yet (flagged to Chris). Exclude by name until the flag lands.
-      if (isTestRecord(v.company_name)) continue;
+      if (EXCLUDE_TEST && isTestRecord(v.company_name)) continue;
 
       // Specialty-first: subtype columns first, then category columns. Gap fields
       // (other_contractor, other_vendor_services) are NOT matched.
@@ -351,6 +368,9 @@ export default async function handler(req, res) {
         else geo = 3; // no area data yet — keep at low score (transition-safe)
       } else if (callerCity && asArray(v.service_areas).some(a => lc(a).includes(callerCity))) geo = 7;
       else if (!callerCounty && !callerCity) geo = 3; // no location given
+      // TESTING vendors have no Area Serviced (it can't be set through the GHL
+      // connector), so during testing treat them as serving all of Utah (Chris).
+      if (!EXCLUDE_TEST && isTestRecord(v.company_name) && callerState === 'UT') geo = Math.max(geo, 4);
       if (geo === 0) continue;
 
       const id = v.ghl_record_id;
