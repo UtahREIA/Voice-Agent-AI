@@ -520,6 +520,28 @@ const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/DNirEjy0ejVwbHsa
 // The console always gets the full detail (look for the [REIA] prefix). ---
 const DEBUG = /[?&]debug=1/i.test(location.search);
 
+// Flatten a nested Vapi/daily error into a readable one-line string (message and
+// name are often non-enumerable, so JSON.stringify alone drops them).
+function describeErr(e) {
+  const pick = (o) => (o && (o.message || o.msg || o.errorMsg || o.name)) || '';
+  const bits = [];
+  if (e && e.type) bits.push('type=' + e.type);
+  if (e && e.stage) bits.push('stage=' + e.stage);
+  const m = pick(e) || pick(e && e.error) || pick(e && e.error && e.error.error);
+  if (m) bits.push('msg=' + m);
+  try {
+    const inner = (e && e.error && (e.error.error || e.error)) || {};
+    const flat = {};
+    for (const k of Object.getOwnPropertyNames(inner)) {
+      const v = inner[k];
+      if (typeof v !== 'object' && typeof v !== 'function') flat[k] = v;
+    }
+    const j = JSON.stringify(flat);
+    if (j && j !== '{}') bits.push('inner=' + j);
+  } catch (_) {}
+  return bits.join(' | ') || String(e);
+}
+
 // DOM refs
 const setupScreen   = document.getElementById('setupScreen');
 const callScreen    = document.getElementById('callScreen');
@@ -781,7 +803,7 @@ function initVapi() {
       log('Call ended normally (suppressed error event: ' + errType + ' | ' + errMsg + ')');
       // Diagnostic: if Lani never spoke, this "normal end" is really a connect
       // failure being swallowed. Surface the full error so the cause is visible.
-      if (!assistantSpoke) console.error('[REIA] Connect-time Vapi error (suppressed as normal end, Lani never spoke):', e);
+      if (!assistantSpoke) console.error('[REIA] Connect-time Vapi error: ' + describeErr(e), e);
       return;
     }
 
@@ -825,15 +847,15 @@ async function startCall() {
 
     // --- DIAGNOSTICS: surface the real connect failure (mic / iframe / provider) ---
     try { log('Env: iframe=' + (window.self !== window.top) + ' | ' + location.href); } catch(e) { log('Env: iframe=unknown (cross-origin)'); }
-    if (DEBUG) {
-      try {
-        const _mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-        _mic.getTracks().forEach(t => t.stop());
-        log('Mic permission: GRANTED');
-      } catch (micErr) {
-        log('Mic permission: FAILED - ' + (micErr && micErr.name) + ': ' + (micErr && micErr.message));
-        console.error('[REIA] Microphone blocked. This is the most common cause of "trouble connecting". When embedded, the iframe needs allow="microphone; autoplay".', micErr);
-      }
+    try {
+      const _mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _mic.getTracks().forEach(t => t.stop());
+      log('Mic permission: GRANTED');
+      console.log('[REIA] Mic permission: GRANTED');
+    } catch (micErr) {
+      log('Mic permission: FAILED - ' + (micErr && micErr.name) + ': ' + (micErr && micErr.message));
+      console.error('[REIA] MICROPHONE BLOCKED (' + (micErr && micErr.name) + '): ' + (micErr && micErr.message) +
+        '. When embedded, the GHL iframe needs allow="microphone; autoplay". In DevTools device/responsive mode, exit it and test a normal window.', micErr);
     }
 
     // Arm the connect watchdog: if Lani has not spoken within the budget
