@@ -651,9 +651,13 @@ async function loadVapiSDK() {
   for (const url of sources) {
     try {
       const mod = await import(url);
-      const V = (mod && (mod.default || mod.Vapi)) || window.Vapi;
-      if (V) { window.Vapi = V; log('Vapi SDK loaded (ESM): ' + url); return; }
-      log('Loaded but no Vapi export: ' + url);
+      // Resolve the Vapi class across ESM/CJS interop shapes (default,
+      // double-default, or named). It MUST be a constructor function, or we
+      // reject this source and try the next one.
+      let V = (mod && (mod.default || mod.Vapi)) || mod;
+      if (V && typeof V !== 'function' && typeof V.default === 'function') V = V.default;
+      if (typeof V === 'function') { window.Vapi = V; log('Vapi SDK loaded (ESM): ' + url); return; }
+      log('Loaded but export is not a constructor (' + typeof V + '): ' + url);
     } catch (e) {
       log('Vapi SDK load failed: ' + url + ' - ' + (e && e.message));
     }
@@ -978,6 +982,7 @@ async function startCall() {
     // SDK load failure or connect throw — same class of "cannot reach the
     // service" problem from the caller's point of view. Show the retry panel.
     log('Start error: ' + e.message);
+    console.error('[REIA] START EXCEPTION (full error + stack):', e);
     showConnectTrouble('start-exception');
   }
 }
