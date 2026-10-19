@@ -594,6 +594,9 @@ function showConnectTrouble(reason) {
   callScreen.classList.add('active');
   callScreen.classList.add('conn-failed');
   log('Fast-fail connect trouble shown (reason: ' + (reason || 'unknown') + ')');
+  console.error('[REIA] Connect-trouble panel shown. reason=' + (reason || 'unknown') +
+    ' | assistantSpoke=' + assistantSpoke +
+    ' | (timeout = connected but Lani never spoke; start-exception = SDK/start threw; error-before-speech = Vapi error, see above)');
 }
 
 function setStatus(state, text) {
