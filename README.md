@@ -20,7 +20,7 @@
 Caller → index.html (GHL Funnel)
            ├── /api/context       — loads liveContext (vendors, educators, events, tools)
            ├── /api/member-lookup — checks if returning member, injects profile + last call
-           └── Vapi Web SDK (self-hosted at /public/vapi-bundle.js)
+           └── Vapi Web SDK (ESM from CDN: @vapi-ai/web@2.7.1)
                     │
                     ▼
               Vapi Assistant (claude-haiku-4-5)
@@ -62,7 +62,9 @@ Voice-Agent-AI/
 │   └── workflows/
 │       └── sync-ghl-objects.yml  # GitHub Actions backup sync (runs nightly at 9:15 PM MDT)
 ├── public/
-│   └── vapi-bundle.js        # Self-hosted Vapi SDK (@vapi-ai/web@2.5.2, daily-js 0.85.0)
+│   ├── index.html            # Voice agent widget (live agent)
+│   ├── index-new.html        # Voice agent widget (V2 agent)
+│   └── dashboard.html        # Chris metrics dashboard
 ├── index.html                # Voice agent widget page
 ├── vercel.json               # Vercel deployment config
 ├── package.json              # Must include "type": "module" for ESM support on Vercel
@@ -114,7 +116,7 @@ Voice-Agent-AI/
    - **Returning member with past call history** → personalized follow-up: "Aloha [name], welcome back... I recommended [last stack_summary]. How did that go?"
    - **Returning member, no meaningful call history** → "Aloha [name], glad you reached out. How can I help you today?"
    - **New caller** → "Aloha, welcome to Utah REIA. How can I help you today?"
-6. Vapi SDK loads from self-hosted bundle (`/vapi-bundle.js`) first, falls back to CDN
+6. Vapi SDK loads as an ESM module from a CDN (`@vapi-ai/web@2.7.1`), with fallbacks
 7. liveContext truncated to 8,000 characters — Mahalo closing rule prepended so it is never truncated
 8. Reconnect button shown automatically if call drops due to network issues
 
@@ -366,12 +368,14 @@ The GitHub repo must remain **public** for Vercel to accept deployments from col
 
 ## Vapi SDK Note
 
-The self-hosted bundle at `public/vapi-bundle.js` is built from `@vapi-ai/web@2.5.2` with `daily-js 0.85.0`. Always load from the self-hosted bundle first.
+The widget loads the Vapi Web SDK as an **ESM module from a CDN** inside `loadVapiSDK()` (in `public/index.html` and `public/index-new.html`), pinned to `@vapi-ai/web@2.7.1` (daily-js 0.87.x). The old self-hosted `vapi-bundle.js` (daily-js 0.85.0) was removed on 2026-10-19 after Daily sunset 0.85.0, which caused `daily-call-object-creation-error` and a failed connect for every caller.
 
-Add to GHL funnel head tracking code:
-```html
-<script src="https://voice-agent-ai-nu.vercel.app/vapi-bundle.js"></script>
+```js
+const mod = await import('https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.7.1/+esm');
+window.Vapi = mod.default;
 ```
+
+When daily-js moves on again, bump the pinned version (2.7.1 → latest 2.x, or 3.0.0 for daily-js 0.93+). To embed in GHL, point an iframe at the hosted page (`allow="microphone; autoplay"`), rather than pasting the raw HTML.
 
 ---
 
@@ -409,7 +413,7 @@ SELECT setting_key, value, description FROM app_settings;
 - [ ] Multi-language support (Spanish path)
 - [ ] Inbound SMS routing
 - [ ] Test vendor email notification end to end (REIPrintMail / CamaPlan)
-- [ ] Upgrade vapi-bundle.js when daily-js 0.85.0 is fully deprecated
+- [x] Upgrade Vapi SDK off sunset daily-js 0.85.0 (now loads @vapi-ai/web@2.7.1 ESM; self-hosted bundle removed 2026-10-19)
 
 ---
 
