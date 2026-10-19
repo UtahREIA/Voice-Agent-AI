@@ -516,6 +516,10 @@ const VAPI_PUBLIC_KEY  = 'fdd43a99-3ec4-4eab-ba03-d83d99e2f94d';
 const VAPI_ASSISTANT_ID = '92018c4f-f382-41b9-80e0-c46e8f2b505a';
 const GHL_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/DNirEjy0ejVwbHsaBYrn/webhook-trigger/d0a34baf-4e42-4a96-8f77-e6b99df93060';
 
+// --- DIAGNOSTICS: add ?debug=1 to the URL for an on-screen log + a mic check.
+// The console always gets the full detail (look for the [REIA] prefix). ---
+const DEBUG = /[?&]debug=1/i.test(location.search);
+
 // DOM refs
 const setupScreen   = document.getElementById('setupScreen');
 const callScreen    = document.getElementById('callScreen');
@@ -555,6 +559,7 @@ const retryBtn    = document.getElementById('retryBtn');
 
 function log(msg) {
   debugLog.classList.add('show');
+  if (DEBUG && debugLog) debugLog.style.cssText = 'display:block;position:fixed;bottom:0;left:0;right:0;max-height:42vh;overflow:auto;background:rgba(0,0,0,.88);color:#3f6;font:11px/1.4 monospace;padding:8px;z-index:99999;white-space:pre-wrap';
   const div = document.createElement('div');
   div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
   debugLog.appendChild(div);
@@ -774,13 +779,16 @@ function initVapi() {
 
     if (isNormalEnd) {
       log('Call ended normally (suppressed error event: ' + errType + ' | ' + errMsg + ')');
+      // Diagnostic: if Lani never spoke, this "normal end" is really a connect
+      // failure being swallowed. Surface the full error so the cause is visible.
+      if (!assistantSpoke) console.error('[REIA] Connect-time Vapi error (suppressed as normal end, Lani never spoke):', e);
       return;
     }
 
     // Only show error banner for genuine errors during an active call
-    const errStr = JSON.stringify(e).slice(0, 200);
+    let errStr; try { errStr = JSON.stringify(e); } catch(_) { errStr = String(e); }
     log('Vapi error: ' + errStr);
-    console.error('Vapi error:', e);
+    console.error('[REIA] Vapi error (full object):', e);
 
     // A genuine error before Lani ever spoke is a connect/provider failure —
     // show the calm "temporarily unavailable" panel, same as a fast drop.
@@ -814,6 +822,19 @@ async function startCall() {
 
     setStatus('thinking', 'Connecting...');
     if (statusLabel) statusLabel.textContent = 'Connecting...';
+
+    // --- DIAGNOSTICS: surface the real connect failure (mic / iframe / provider) ---
+    try { log('Env: iframe=' + (window.self !== window.top) + ' | ' + location.href); } catch(e) { log('Env: iframe=unknown (cross-origin)'); }
+    if (DEBUG) {
+      try {
+        const _mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        _mic.getTracks().forEach(t => t.stop());
+        log('Mic permission: GRANTED');
+      } catch (micErr) {
+        log('Mic permission: FAILED - ' + (micErr && micErr.name) + ': ' + (micErr && micErr.message));
+        console.error('[REIA] Microphone blocked. This is the most common cause of "trouble connecting". When embedded, the iframe needs allow="microphone; autoplay".', micErr);
+      }
+    }
 
     // Arm the connect watchdog: if Lani has not spoken within the budget
     // (covers context fetch + member lookup + connect + first speech), assume a
