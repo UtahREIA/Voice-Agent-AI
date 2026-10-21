@@ -163,30 +163,46 @@ export default async function handler(req, res) {
     const results = await Promise.all(needs.map(need => resolveNeed(need, { get, headers })));
     console.log('find_resources:', JSON.stringify(results.map(r => ({ type: r.type, status: r.status, n: r.matches.length }))));
 
-    // End-of-call capture (#5): collect EVERY found resource's link (server-side
-    // only), then STRIP _url from every match so Lani never reads a URL aloud.
-    const linkItems = [];
+    // End-of-call capture (LANI-V2-CALL-RECORD-SPEC Part 1): cache EVERY match
+    // with id/name/type/url/cost/status PLUS the needs that came back no_match or
+    // needs_location, keyed by the Vapi call id. This is the exact record the
+    // call-record build, educator rotation and vendor_referrals read. _url is
+    // collected server-side then STRIPPED so Lani never reads a URL aloud.
+    const allEntries = [];      // {id,name,type,url,cost,status}
     let educatorName = '', educatorUrl = '';
     for (const n of results) {
+      if (n.status !== 'ok') {  // record a missing need even when Lani does not say it
+        allEntries.push({ id: null, name: '', type: n.type, url: '', cost: '', status: n.status });
+      }
       for (const m of n.matches) {
-        if (m._url) linkItems.push({ name: m.name, type: n.type, url: m._url });
-        if (n.type === 'educator' && !educatorName) { educatorName = m.name; educatorUrl = m._url || ''; }
+        const url = m._url || '';
+        allEntries.push({ id: m.id, name: m.name, type: n.type, url, cost: m.cost, status: 'ok' });
+        if (n.type === 'educator' && !educatorName) { educatorName = m.name; educatorUrl = url; }
         delete m._url;
       }
     }
-    // Cache keyed by the Vapi call id so ghl-sync folds the full list into the
-    // follow-up SMS - every resource found, not just the ones Lani spoke.
-    if (vapiCallId && (linkItems.length || educatorName)) {
-      const smsLinks = linkItems.length
-        ? 'Your links:\n' + linkItems.map(r => `- ${r.name}: ${r.url}`).join('\n')
-        : '';
+    if (vapiCallId && allEntries.length) {
+      // Merge, do not overwrite: a second find_resources call in the same call
+      // unions with the first (dedupe by type + id/name/status).
+      let prior = [], priorName = '', priorUrl = '';
+      try {
+        const rows = await get(`voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=links,educator_name,educator_url&limit=1`);
+        if (rows[0]) { prior = Array.isArray(rows[0].links) ? rows[0].links : []; priorName = rows[0].educator_name || ''; priorUrl = rows[0].educator_url || ''; }
+      } catch (e) {}
+      const keyOf = (m) => (m.type || '') + '|' + (m.id || m.name || m.status || '');
+      const merged = [...prior];
+      const seen = new Set(prior.map(keyOf));
+      for (const m of allEntries) if (!seen.has(keyOf(m))) { seen.add(keyOf(m)); merged.push(m); }
+      const edName = priorName || educatorName, edUrl = priorUrl || educatorUrl;
+      const withUrl = merged.filter(m => m.url);
+      const smsLinks = withUrl.length ? 'Your links:\n' + withUrl.map(r => `- ${r.name}: ${r.url}`).join('\n') : '';
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_stack_links?on_conflict=vapi_call_id`, {
           method: 'POST',
           headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({
-            vapi_call_id: vapiCallId, sms_links: smsLinks, links: linkItems,
-            educator_name: educatorName, educator_url: educatorUrl, mode: 'find_resources'
+            vapi_call_id: vapiCallId, sms_links: smsLinks, links: merged,
+            educator_name: edName, educator_url: edUrl, mode: 'find_resources'
           })
         });
       } catch (e) { console.error('find_resources stack-links cache error:', e.message); }
@@ -299,7 +315,9 @@ export default async function handler(req, res) {
         id: r.ghl_record_id, name: r[cfg.name],
         description: isReplay ? `A replay of a past Utah REIA event on ${topicWords}.`
                               : topicSentence(r.educational_topics, type),
-        cost: costWord(r),
+        // All Utah REIA educators and mentors are paid (Chris, 2026-10-21); they
+        // carry no cost field so costWord would default them to free.
+        cost: type === 'educator' ? 'paid' : costWord(r),
         booking_link: Boolean(link),
         closest_fit: closest,
         match_score: score100, confidence: band(score100),
