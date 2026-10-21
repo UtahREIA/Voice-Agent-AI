@@ -276,6 +276,23 @@ export default async function handler(req, res) {
     // Match across EVERY record (spec 4b: no subset). Pull active, filter in JS so
     // exact-vs-related topic and "no level set = any level" are handled precisely.
     const rows = await get(`${cfg.table}?is_active=eq.true&select=${cfg.select}&limit=200`);
+
+    // Educator rotation (LANI-V2-CALL-RECORD-SPEC Part 1): among equally-good
+    // educators, prefer the one recommended least recently, by scanning the
+    // find_resources cache for educator IDs. Never-recommended sort first.
+    const eduLastRec = new Map();
+    if (type === 'educator') {
+      try {
+        const cache = await get('voice_agent_stack_links?select=links,created_at&order=created_at.desc&limit=500');
+        for (const row of cache) {
+          const t = Date.parse(row.created_at || 0) || 0;
+          for (const m of (Array.isArray(row.links) ? row.links : [])) {
+            if (m && m.type === 'educator' && m.id && (!eduLastRec.has(m.id) || t > eduLastRec.get(m.id))) eduLastRec.set(m.id, t);
+          }
+        }
+      } catch (e) {}
+    }
+
     const scored = [];
     for (const r of rows) {
       // Test fixtures: excluded only when FIND_EXCLUDE_TEST_RECORDS is set. During
@@ -300,9 +317,11 @@ export default async function handler(req, res) {
       if (tKey) { mx += 50; earned += topics.includes(tKey) ? 50 : 25; }
       if (lKey) { mx += 25; earned += (levels.includes(lKey) || levels.length === 0) ? 25 : 0; }
       const score100 = mx ? Math.round(earned / mx * 100) : 70;
-      scored.push({ r, s, closest, score100 });
+      scored.push({ r, s, closest, score100,
+        last: type === 'educator' ? (eduLastRec.get(r.ghl_record_id) ?? 0) : 0, rnd: Math.random() });
     }
-    scored.sort((a, b) => b.s - a.s);
+    // Score first; then (educators) least-recently-recommended; then random.
+    scored.sort((a, b) => b.s - a.s || a.last - b.last || a.rnd - b.rnd);
     const top = scored.slice(0, 2).map(({ r, closest, score100 }) => {
       // A class with a video_url is a recording of a past event (Chris, 2026-10-16):
       // Lani introduces it as a replay so the caller knows it is not a live class.
