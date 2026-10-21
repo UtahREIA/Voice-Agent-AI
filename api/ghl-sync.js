@@ -813,20 +813,21 @@ export default async function handler(req, res) {
       : strategies.split(',').map(s => s.trim()).filter(Boolean);
 
     // Canonicalize whatever strategy wording Lani extracted to the EXACT GHL
-    // "What type of investing are you most interested in?" option labels (the
-    // Investing Interests picklist, Chris 2026-10-21), so the GHL field gets a
-    // value it recognizes. Falls back to the raw text if nothing matches.
+    // "What type of investing are you most interested in?" option VALUES (keys)
+    // of the Investing Interests picklist (Chris 2026-10-21). GHL matches a
+    // dropdown write on the value/key, not the display label. Falls back to the
+    // raw text if nothing matches.
     const INVESTING_INTEREST_OPTIONS = [
-      ['Buy & Hold / Rentals', /buy.*hold/], ['BRRRR', /brrrr/], ['Commercial', /commercial/],
-      ['Creative Financing', /creative/], ['Development', /develop/], ['Fix & Flip', /fix|flip/],
-      ['House Hacking', /house.*hack/], ['Land / Entitlement', /land|entitlement/],
-      ['Mid-Term & Co-Living Rentals', /mid.?term|co.?living/], ['Notes / Lending', /note|lending/],
-      ['Out-of-State Investing', /out.?of.?state/], ['Passive Investments', /passive/],
-      ['Raising Capital', /rais|capital/], ['Short Term Rental', /short.?term|airbnb|\bstr\b/],
-      ['Syndication & Funds', /syndicat|fund/], ['Tax Deeds and Liens', /tax.?deed|lien/],
-      ['Wholesaling', /wholesal/], ["Not sure yet → I'm here to learn", /not.?sure|here to learn|learning|explor/]
+      ['buy__hold__rentals', /buy.*hold/], ['brrrr', /brrrr/], ['commercial', /commercial/],
+      ['creative_financing', /creative/], ['development', /develop/], ['fix__flip', /fix|flip/],
+      ['house_hacking', /house.*hack/], ['land__entitlement', /land|entitlement/],
+      ['midterm__coliving_rentals', /mid.?term|co.?living/], ['notes__lending', /note|lending/],
+      ['outofstate_investing', /out.?of.?state/], ['passive_investments', /passive/],
+      ['raising_capital', /rais|capital/], ['short_term_rental', /short.?term|airbnb|\bstr\b/],
+      ['syndication__funds', /syndicat|fund/], ['tax_deeds_and_liens', /tax.?deed|lien/],
+      ['wholesaling', /wholesal/], ['not_sure_yet__im_here_to_learn', /not.?sure|here to learn|learning|explor/]
     ];
-    const canonicalInterest = (s) => { const t = String(s || '').toLowerCase(); for (const [l, re] of INVESTING_INTEREST_OPTIONS) if (re.test(t)) return l; return ''; };
+    const canonicalInterest = (s) => { const t = String(s || '').toLowerCase(); for (const [v, re] of INVESTING_INTEREST_OPTIONS) if (re.test(t)) return v; return ''; };
     const investingInterestsLabels = [...new Set(strategiesArray.map(canonicalInterest).filter(Boolean))];
 
     // Split full name into first and last for GHL
