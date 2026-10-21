@@ -336,6 +336,28 @@ export default async function handler(req, res) {
       }
     }
 
+    // --- laniCallRecord: spread the one object output into the flat map ---
+    // The V2 end-of-call record is a single object structured output
+    // (LANI-V2-CALL-RECORD-SPEC). It only counts on a real conversation (>= 4
+    // caller messages), so hang-ups and wrong numbers do not save fabricated
+    // fields. Spread its fields into `structured` so every existing field read
+    // below keeps working, without overwriting a value already present.
+    const _recMsgs = payload.message?.artifact?.messages || payload.artifact?.messages || payload.message?.messages || [];
+    const _callerMsgs = Array.isArray(_recMsgs) ? _recMsgs.filter(m => m && (m.role === 'user' || m.role === 'customer')).length : null;
+    const recordCounts = _callerMsgs == null || _callerMsgs >= 4;
+    if (recordCounts) {
+      for (const k of Object.keys(structured)) {
+        const v = structured[k];
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          for (const [fk, fv] of Object.entries(v)) {
+            if (structured[fk] === undefined || structured[fk] === '' || structured[fk] === null) structured[fk] = fv;
+          }
+        }
+      }
+    } else {
+      console.log('laniCallRecord: object spread skipped (' + _callerMsgs + ' caller messages, need >= 4)');
+    }
+
     // Log full payload structure for debugging
     console.log('Payload keys:', JSON.stringify(Object.keys(payload.message || payload)));
     console.log('Artifact keys:', JSON.stringify(Object.keys(payload.message?.artifact || payload.artifact || {})));
