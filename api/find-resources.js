@@ -68,6 +68,19 @@ const VENDOR_MATCH_TEXT_COLS = ['contractor_speciality']; // subtype text, match
 // Spec 4b: parent values are NOT matchable when a sub-type exists — match the
 // sub-type only. A vendor tagged with just a bare parent token never matches.
 const PARENT_TOKENS = new Set(['attorney', 'contractor', 'mortgage_broker']);
+// Generic role WORDS that must never anchor a vendor match on their own (the
+// word-level counterpart of PARENT_TOKENS). "real estate attorney" must match on
+// real/estate, not on the shared word "attorney" that every attorney carries.
+const PARENT_WORDS = new Set(['attorney', 'contractor', 'mortgage', 'broker']);
+// Grammatical glue words that must never anchor a vendor match. Lani sends the
+// service as free text (e.g. "tax professional for depreciation and 1031"), so
+// without this the old substring match let "for" hit "formation" and "and" hit
+// "landlord", pulling unrelated attorneys into a tax request (cards 38/43, 2026-10-22).
+const SERVICE_STOPWORDS = new Set([
+  'for', 'and', 'the', 'with', 'who', 'that', 'can', 'will', 'our', 'your',
+  'their', 'need', 'needs', 'help', 'want', 'looking', 'someone', 'person',
+  'about', 'from', 'into', 'this', 'these', 'those', 'any', 'some', 'get'
+]);
 
 // Local service types (spec section 4). A local type requested with no city/
 // county returns needs_location so Lani asks and looks up again. This is the
@@ -87,6 +100,9 @@ const STATE_SCOPED_HINTS = ['lend', 'loan', 'mortgage', 'attorney', 'legal', 'in
 const asArray = (v) => Array.isArray(v) ? v : (v === null || v === undefined || v === '' ? [] : [v]);
 const lc = (v) => String(v || '').toLowerCase().trim();
 const isTestRecord = (name) => /testing/i.test(String(name || ''));
+// Split a vendor token into whole words, dropping generic parent words so a
+// match has to land on a distinguishing word (tax, landlord, real, estate...).
+const wordsOf = (val) => lc(val).split(/[^a-z0-9]+/).filter(Boolean).filter(w => !PARENT_WORDS.has(w));
 
 // Phase 3 confidence (ROUTING_SCORING_DESIGN.md): a 0-100 match_score per match,
 // banded against a threshold N so Lani's "close match" claim is computed, not judged.
@@ -401,7 +417,8 @@ export default async function handler(req, res) {
       if (!lastRef.has(id) || t > lastRef.get(id)) lastRef.set(id, t);
     }
 
-    const terms = serviceWords.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+    const terms = serviceWords.split(/[^a-z0-9]+/)
+      .filter(w => w.length >= 3 && !SERVICE_STOPWORDS.has(w) && !PARENT_WORDS.has(w));
     const scored = [];
     for (const v of vendors) {
       // Stopgap test exclusion: spec wants a real flag, but no is_test column
@@ -418,7 +435,11 @@ export default async function handler(req, res) {
         .filter(Boolean).filter(t => !PARENT_TOKENS.has(t));
 
       let svcScore = 0;
-      const hit = (vals) => vals.some(val => terms.some(t => val.includes(t) || t.includes(val)));
+      // Word-level match: a term matches a vendor token-word by equality or a
+      // length-guarded prefix (rental~rentals, lend~lending), NOT raw substring,
+      // so short glue words can no longer hit inside unrelated words.
+      const wordMatch = (w, t) => w === t || (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w)));
+      const hit = (vals) => vals.some(val => wordsOf(val).some(w => terms.some(t => wordMatch(w, t))));
       if (!serviceWords) svcScore = 1;                 // no service specified: any vendor
       else if (hit(subtypeVals)) svcScore = 50;        // specialty-first
       else if (hit(categoryVals)) svcScore = 30;
