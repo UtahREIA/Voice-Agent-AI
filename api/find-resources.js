@@ -456,8 +456,23 @@ export default async function handler(req, res) {
       } else if (callerCity && asArray(v.service_areas).some(a => lc(a).includes(callerCity))) geo = 7;
       else if (!callerCounty && !callerCity) geo = 3; // no location given
       // TESTING vendors have no Area Serviced (it can't be set through the GHL
-      // connector), so during testing treat them as serving all of Utah (Chris).
-      if (!EXCLUDE_TEST && isTestRecord(v.company_name) && callerState === 'UT') geo = Math.max(geo, 4);
+      // connector), so by default, during testing, treat them as serving all of
+      // Utah (Chris). To test an area NO-match: set the test vendor's company_city
+      // to the city or county it serves and it is scoped to that area instead of
+      // statewide. company_city is editable in GHL, survives the daily cron, is not
+      // shown to callers, and is not otherwise used in matching. Empty = statewide.
+      if (!EXCLUDE_TEST && isTestRecord(v.company_name) && callerState === 'UT') {
+        const testArea = lc(v.company_city);
+        if (!testArea) {
+          geo = Math.max(geo, 4);                        // no test area set: serve all of UT
+        } else {
+          const countyBare = callerCounty ? callerCounty.replace(/_county$/, '').replace(/_/g, ' ') : '';
+          const areaHit =
+            (callerCity && (testArea.includes(callerCity) || callerCity.includes(testArea))) ||
+            (countyBare && (testArea.includes(countyBare) || countyBare.includes(testArea)));
+          geo = areaHit ? Math.max(geo, 9) : 0;          // out of its area -> no_match by area
+        }
+      }
       if (geo === 0) continue;
 
       const id = v.ghl_record_id;
