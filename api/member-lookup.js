@@ -448,7 +448,7 @@ export default async function handler(req, res) {
               rec ? 'Recommended: ' + rec.slice(0, 120) : 'No recommendation was delivered on this call.'
             ].filter(Boolean).join('. ');
           } catch(e) { return null; }
-        }).filter(Boolean);
+        }).filter(Boolean);Oh 
 
         if (historyParts.length > 0) {
           historyBlock = ' PAST CALL HISTORY (' + historyParts.length + ' previous call' +
