@@ -453,7 +453,7 @@
       </div>
       <div id="memberGreeting" style="display:none;"></div>
       <!-- TCPA consent. Wording approved for the Utah REIA survey (Chris, 2026-11-05); spelling corrected to house style. Version tracked in data-consent-version below. -->
-      <label id="consentLabel" style="display:flex;gap:8px;align-items:flex-start;max-width:320px;margin:10px auto 0;font-family:'DM Sans',sans-serif;font-size:11px;line-height:1.45;color:rgba(30,10,2,.7);text-align:left;cursor:pointer;">
+      <label id="consentLabel" style="display:flex;gap:8px;align-items:flex-start;max-width:320px;margin:10px auto 0;padding:12px 14px;background:rgba(50,20,2,.55);border:1px solid rgba(80,35,5,.7);border-radius:2px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:11px;line-height:1.45;color:#fff;text-align:left;cursor:pointer;">
         <input type="checkbox" id="preCallConsent" data-consent-version="2026-11-05-survey-v1" style="margin-top:2px;flex-shrink:0;" />
         <span>By providing your contact information, you agree to receive text messages, emails and phone calls from Utah REIA, including calls that may be automated or use an AI-generated voice. These communications may include event updates, education resources, and marketing messages. You can opt out at any time by replying STOP to texts or following unsubscribe instructions in emails.</span>
       </label>
@@ -1062,8 +1062,8 @@ async function syncToGHL() {
 function requireConsent() {
   const c = document.getElementById('preCallConsent');
   const label = document.getElementById('consentLabel');
-  if (c && c.checked) { if (label) label.style.color = 'rgba(30,10,2,.7)'; return true; }
-  if (label) label.style.color = 'rgba(180,60,20,.95)';
+  if (c && c.checked) { if (label) { label.style.color = '#fff'; label.style.borderColor = 'rgba(80,35,5,.7)'; } return true; }
+  if (label) { label.style.color = '#ffc9b3'; label.style.borderColor = 'rgba(220,90,45,.95)'; }
   if (c) c.focus();
   return false;
 }
