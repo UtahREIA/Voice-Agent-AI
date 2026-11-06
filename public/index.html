@@ -149,7 +149,7 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .error-banner{background:rgba(180,60,20,.15);border:1px solid rgba(180,60,20,.35);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(120,30,5,.9);margin:0 24px;display:none;font-family:'DM Mono',monospace;word-break:break-word;line-height:1.5}
   .error-banner.show{display:block}
-  .setup-screen{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:4px 24px 20px;gap:12px;overflow-y:auto}
+  .setup-screen{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px 24px 12px;gap:8px;overflow-y:auto}
   .setup-screen.hidden{display:none}
   .orb-stage{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center}
   .orb-ring-outer{position:absolute;width:220px;height:220px;border-radius:50%;border:1px solid rgba(120,60,10,.25);animation:ringBreath 4s ease-in-out infinite}
@@ -435,7 +435,7 @@
   </div>
   <div class="error-banner" id="errorBanner"></div>
   <div class="setup-screen" id="setupScreen">
-    <div class="orb-stage" id="setupOrb" style="margin-top:36px;">
+    <div class="orb-stage" id="setupOrb" style="transform:scale(.78);margin:-18px auto -10px;">
       <div class="orb-ring-outer"></div><div class="orb-ring-mid"></div><div class="orb-ring-inner"></div><div class="orb-glow"></div><div class="orb-core"></div>
     </div>
     <div class="status-label">Begin your journey</div>
