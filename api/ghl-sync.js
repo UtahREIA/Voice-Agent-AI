@@ -33,6 +33,14 @@
 import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
 import { parseDealCount } from './lib/deal-count.js';
 
+// A phone value is only usable if it carries a full 10-digit number. Junk like
+// "<UNKNOWN>" (what Vapi emits when it never captured a number) is truthy but
+// has no digits, so without this guard it beats the real preCallPhone injected
+// by the widget and the call record saves no phone at all (bug 657).
+function phoneHas10(v) {
+  return (v || '').replace(/\D/g, '').length >= 10;
+}
+
 // This end-of-call handler intentionally waits ~8s for the GHL workflow to create the
 // contact (STEP 6) and then does the GHL v2 updates + Supabase writes (STEP 7 call-history
 // save, STEP 8 roadmap). On Vercel's 10s default that work can be killed before the STEP 7
@@ -433,7 +441,15 @@ export default async function handler(req, res) {
         || payload.message?.assistant?.variableValues
         || payload.call?.metadata?.variableValues
         || {};
-      const rawVendorPhone = structured.callerPhone || structured.caller_phone || variableValuesV.preCallPhone || '';
+      // Same 10-digit guard as the investor path (bug 657): skip a junk
+      // structured phone so the widget's preCallPhone wins.
+      const rawVendorPhone = phoneHas10(structured.callerPhone)
+        ? structured.callerPhone
+        : (phoneHas10(structured.caller_phone)
+            ? structured.caller_phone
+            : (phoneHas10(variableValuesV.preCallPhone)
+                ? variableValuesV.preCallPhone
+                : (structured.callerPhone || structured.caller_phone || variableValuesV.preCallPhone || '')));
       const vDigits = rawVendorPhone.replace(/\D/g, '').slice(-10);
       const vPhone = vDigits.length === 10 ? '+1' + vDigits : rawVendorPhone;
 
@@ -621,9 +637,15 @@ export default async function handler(req, res) {
       || payload.call?.metadata?.variableValues
       || {};
 
-    const rawCallerPhone = structured.callerPhone
-      || variableValues.preCallPhone
-      || '';
+    // Prefer the first source that actually carries 10 digits, so a junk
+    // structured.callerPhone (e.g. "<UNKNOWN>") can no longer shut out the
+    // real preCallPhone (bug 657). Falls back to the old order only when no
+    // source has a full number, so nothing valid is ever dropped.
+    const rawCallerPhone = phoneHas10(structured.callerPhone)
+      ? structured.callerPhone
+      : (phoneHas10(variableValues.preCallPhone)
+          ? variableValues.preCallPhone
+          : (structured.callerPhone || variableValues.preCallPhone || ''));
     const callerPhoneDigits = rawCallerPhone.replace(/\D/g, '').slice(-10);
     const callerPhone = callerPhoneDigits.length === 10
       ? '+1' + callerPhoneDigits
@@ -645,10 +667,13 @@ export default async function handler(req, res) {
     } catch(e) {}
 
     // Apply context phone if structured and variable sources are both empty
-    const finalRawPhone = structured.callerPhone
-      || variableValues.preCallPhone
-      || phoneFromContext
-      || '';
+    const finalRawPhone = phoneHas10(structured.callerPhone)
+      ? structured.callerPhone
+      : (phoneHas10(variableValues.preCallPhone)
+          ? variableValues.preCallPhone
+          : (phoneHas10(phoneFromContext)
+              ? phoneFromContext
+              : (structured.callerPhone || variableValues.preCallPhone || phoneFromContext || '')));
 
     const finalDigits = finalRawPhone.replace(/\D/g, '').slice(-10);
     const resolvedPhone = finalDigits.length === 10

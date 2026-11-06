@@ -257,9 +257,9 @@ export default async function handler(req, res) {
         // Format 1: +1XXXXXXXXXX (E.164)
         // Format 2: plain last 10 digits
         const vacUrl1 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=3';
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
         const vacUrl2 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=like.*' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=3';
+          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
 
         let vacRows = [];
         const vacResp1 = await fetch(vacUrl1, { headers: vacHeaders });
@@ -408,7 +408,7 @@ export default async function handler(req, res) {
 
       const surveyResp = await fetch(
         SUPABASE_URL + '/rest/v1/voice_agent_calls?contact_id=eq.' + match.id +
-        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=5',
+        '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=15',
         { headers: histHeaders }
       );
       const surveyData = await surveyResp.json();
@@ -419,7 +419,7 @@ export default async function handler(req, res) {
         const phoneE164 = encodeURIComponent('+1' + last10);
         const surveyResp2 = await fetch(
           SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.' + phoneE164 +
-          '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=5',
+          '&select=summary,blocker,recommended_next,educator_match,vendor_matches,stack_summary,profile_type,created_at&order=created_at.desc&limit=15',
           { headers: histHeaders }
         );
         const surveyData2 = await surveyResp2.json();
@@ -448,7 +448,7 @@ export default async function handler(req, res) {
               rec ? 'Recommended: ' + rec.slice(0, 120) : 'No recommendation was delivered on this call.'
             ].filter(Boolean).join('. ');
           } catch(e) { return null; }
-        }).filter(Boolean);Oh 
+        }).filter(Boolean);
 
         if (historyParts.length > 0) {
           historyBlock = ' PAST CALL HISTORY (' + historyParts.length + ' previous call' +
