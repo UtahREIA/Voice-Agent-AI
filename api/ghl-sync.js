@@ -1171,10 +1171,12 @@ export default async function handler(req, res) {
     // Runs BEFORE STEP 6 so resolvedProfileType is available for the GHL v2 update,
     // and BEFORE STEP 7 so the voice_agent_calls INSERT writes the correct value once.
     let resolvedProfileType = profileType;
+    // Fullest name this phone has given on a past call (see STEP 7 caller_name).
+    let priorFullName = '';
     if (SUPABASE_URL && SUPABASE_KEY && effectivePhone) {
       try {
         const priorInvResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/voice_agent_calls?caller_phone=eq.${encodeURIComponent(effectivePhone)}&select=profile_type&order=created_at.desc&limit=10`,
+          `${SUPABASE_URL}/rest/v1/voice_agent_calls?caller_phone=eq.${encodeURIComponent(effectivePhone)}&select=profile_type,caller_name&order=created_at.desc&limit=10`,
           {
             headers: {
               'Content-Type': 'application/json',
@@ -1189,6 +1191,11 @@ export default async function handler(req, res) {
           const priorInvTypes = priorInvRows.map(r => (r.profile_type || '').toLowerCase());
           const hadVendorBefore = priorInvTypes.some(t => t === 'vendor' || t.includes('vendor') || t === 'both');
           if (hadVendorBefore) resolvedProfileType = 'Both';
+          for (const r of priorInvRows) {
+            const n = String(r.caller_name || '').trim();
+            if (!n || n.includes('<') || /unknown/i.test(n)) continue;
+            if (n.split(/\s+/).length > priorFullName.split(/\s+/).filter(Boolean).length) priorFullName = n;
+          }
         }
       } catch(e) {
         console.error('Cross-door check error (investor path):', e.message);
@@ -1496,9 +1503,22 @@ export default async function handler(req, res) {
           callDurationSecs = Number.isFinite(s) ? s : null;
         }
 
+        // A returning caller is never asked for a last name again (prompt v11), so
+        // this call's record may hold only the first name. Keep the fuller name a
+        // past call from the same phone gave, when the first names agree (bug:
+        // Lani re-asked the last name on Journey A calls 3 and 4, 2026-11-10).
+        const firstOf = (n) => String(n || '').trim().split(/\s+/)[0].toLowerCase();
+        const nameForRecord = (priorFullName && (!callerName || (firstOf(callerName) === firstOf(priorFullName)
+          && priorFullName.split(/\s+/).length > String(callerName).trim().split(/\s+/).length)))
+          ? priorFullName : (callerName || '');
+        // Full transcript for the daily call review (lani_call_reviews). Vapi sends
+        // it as a string on the end-of-call artifact. Capped to keep rows small.
+        const transcriptText = String(payload.message?.artifact?.transcript || payload.message?.transcript || payload.artifact?.transcript || '').slice(0, 60000);
+
         const callRecord = {
           contact_id:       contactId || null,
-          caller_name:      callerName || '',
+          caller_name:      nameForRecord,
+          transcript:       transcriptText || null,
           caller_phone:     effectivePhone || '',
           // caller_email removed — emails not collected during voice calls
           investor_stage:   investorStage || '',

@@ -2,7 +2,7 @@
  * find-resources.js — the single V2 lookup tool (Vapi tool: find_resources).
  *
  * Replaces the seven V1 lookup tools. Lani works out the need with her own rules
- * first, then calls this ONCE with up to 3 typed needs. It matches DIRECTLY on
+ * first, then calls this ONCE with up to 5 typed needs. It matches DIRECTLY on
  * GHL service keys, topics and levels — no vendor_routing_matrix, no
  * blocker_service_mapping, no education_routing_matrix (all retire at the switch).
  *
@@ -76,10 +76,43 @@ const PARENT_WORDS = new Set(['attorney', 'contractor', 'mortgage', 'broker']);
 // service as free text (e.g. "tax professional for depreciation and 1031"), so
 // without this the old substring match let "for" hit "formation" and "and" hit
 // "landlord", pulling unrelated attorneys into a tax request (cards 38/43, 2026-10-22).
+// Role words name WHAT KIND of professional a vendor is. When the request names
+// a role and a vendor token names a DIFFERENT role, the token cannot match, even
+// if other words overlap. Bug 2026-11-10 (card 49): "real estate agent" matched
+// JMOSS (real_estate_transaction_attorney) on the shared words real/estate, and the
+// attorney outranked the real agent because attorney_subclass scores as a subtype.
+// Synonyms fold to one role so "lawyer" still finds attorneys and "realtor" agents.
+const ROLE_OF = {
+  agent: 'agent', agents: 'agent', realtor: 'agent', realtors: 'agent',
+  attorney: 'attorney', attorneys: 'attorney', lawyer: 'attorney', lawyers: 'attorney',
+  lender: 'lender', lenders: 'lender', lending: 'lender',
+  broker: 'broker', brokers: 'broker',
+  inspector: 'inspector', inspectors: 'inspector', inspection: 'inspector',
+  appraiser: 'appraiser', appraisers: 'appraiser', appraisal: 'appraiser',
+  manager: 'manager', managers: 'manager', management: 'manager',
+  contractor: 'contractor', contractors: 'contractor',
+  advisor: 'advisor', advisors: 'advisor', adviser: 'advisor',
+  coach: 'coach', coaches: 'coach', bookkeeper: 'bookkeeper', accountant: 'accountant',
+  custodian: 'custodian', stager: 'stager', engineer: 'engineer', surveyor: 'surveyor',
+  architect: 'architect', wholesaler: 'wholesaler', designer: 'designer',
+  insurance: 'insurer', insurer: 'insurer'
+};
+// Request words people say for the same thing a GHL key spells differently.
+const WORD_SYNONYM = { lawyer: 'attorney', lawyers: 'attorney', realtor: 'real estate agent', realtors: 'real estate agent', cpa: 'accountant',
+  dispute: 'litigation', lawsuit: 'litigation', sue: 'litigation' };
+// Roles whose vendors serve the whole state, so a request naming one is never a
+// local service even if it also mentions a local word ("lawyer for a contractor dispute").
+const STATEWIDE_ROLES = new Set(['attorney', 'lender', 'broker', 'accountant', 'advisor', 'custodian', 'bookkeeper']);
+const rolesOf = (text) => new Set(lc(text).split(/[^a-z0-9]+/).map(w => ROLE_OF[w]).filter(Boolean));
+
 const SERVICE_STOPWORDS = new Set([
   'for', 'and', 'the', 'with', 'who', 'that', 'can', 'will', 'our', 'your',
   'their', 'need', 'needs', 'help', 'want', 'looking', 'someone', 'person',
-  'about', 'from', 'into', 'this', 'these', 'those', 'any', 'some', 'get'
+  'about', 'from', 'into', 'this', 'these', 'those', 'any', 'some', 'get',
+  // Generic business nouns: "title company" must match on "title", not on the
+  // "company" in loan_servicing_company (2026-11-11).
+  'company', 'companies', 'service', 'services', 'specialist', 'specialists',
+  'professional', 'professionals', 'provider', 'providers', 'firm', 'group', 'business'
 ]);
 
 // Local service types (spec section 4). A local type requested with no city/
@@ -162,7 +195,7 @@ export default async function handler(req, res) {
     if (args.type || args.topic || args.service) needs = [args];
     else needs = [];
   }
-  needs = needs.slice(0, 3); // spec: up to 3 needs
+  needs = needs.slice(0, 5); // up to 5 needs (deal stages, Chris 2026-11-10; was 3)
   if (!needs.length) {
     return reply({ needs: [], message: 'No need was specified. Ask the caller what kind of help they are looking for.' });
   }
@@ -398,7 +431,8 @@ export default async function handler(req, res) {
     let callerCounty = lc(need.county).replace(/\s+/g, '_');
     if (callerCounty && !callerCounty.endsWith('_county')) callerCounty += '_county';
     const callerCity = lc(need.city);
-    const isLocalType = LOCAL_SERVICE_HINTS.some(h => serviceWords.includes(h));
+    const isLocalType = LOCAL_SERVICE_HINTS.some(h => serviceWords.includes(h))
+      && ![...rolesOf(serviceWords)].some(r => STATEWIDE_ROLES.has(r));
     const isStateScoped = STATE_SCOPED_HINTS.some(h => serviceWords.includes(h));
 
     // A local service with no location: stop and ask (spec section 4).
@@ -417,8 +451,48 @@ export default async function handler(req, res) {
       if (!lastRef.has(id) || t > lastRef.get(id)) lastRef.set(id, t);
     }
 
-    const terms = serviceWords.split(/[^a-z0-9]+/)
-      .filter(w => w.length >= 3 && !SERVICE_STOPWORDS.has(w) && !PARENT_WORDS.has(w));
+    // Request words, split into DISTINCTIVE terms (tax, landlord, agent, painter)
+    // and PARENT terms (attorney, contractor, mortgage, broker). Distinctive terms
+    // carry the match; parent terms only help rank, and only a request made of
+    // nothing but parent words ("mortgage broker") may match a bare parent token.
+    const reqWords = serviceWords.split(/[^a-z0-9]+/).flatMap(w => (WORD_SYNONYM[w] || w).split(' '))
+      .filter(w => w.length >= 3 && !SERVICE_STOPWORDS.has(w));
+    const terms = reqWords.filter(w => !PARENT_WORDS.has(w));
+    const parentTerms = reqWords.filter(w => PARENT_WORDS.has(w));
+    const allTerms = [...terms, ...parentTerms];
+    const requestRoles = rolesOf(serviceWords);
+    // Word-level match: equality or a length-guarded prefix (rental~rentals,
+    // lend~lending), NOT raw substring, so glue words cannot hit inside others.
+    const wordMatch = (w, t) => w === t || (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w)));
+    const rawWords = (val) => lc(val).split(/[^a-z0-9]+/).filter(Boolean);
+    // A token is eligible only if it does not name a DIFFERENT role than the
+    // request (see ROLE_OF). Tokens with no role word, or requests with no role
+    // word ("title company", "tax professional"), are unaffected.
+    const roleOk = (val) => {
+      if (!requestRoles.size) return true;
+      // A subtype tagged with its parent ("entity_formation__registered_agent attorney")
+      // IS that parent: its own words do not add roles (it is not an agent).
+      const tagged = val.match(/ (attorney|contractor)$/);
+      const tr = tagged ? new Set([tagged[1]]) : rolesOf(val);
+      return !tr.size || [...tr].some(r => requestRoles.has(r));
+    };
+    // Coverage of one vendor token: 0 when it is the wrong role or misses every
+    // distinctive term; otherwise the share of ALL request terms it accounts for,
+    // so "real estate agent" fully covered beats "real estate" alone.
+    const coverage = (val, isParent) => {
+      if (!allTerms.length || !roleOk(val)) return 0;
+      const ws = rawWords(val);
+      const covers = (t) => ws.some(w => wordMatch(w, t));
+      if (isParent) {
+        // Bare parent token ("mortgage_broker" with no loan products): it must
+        // cover every parent word the request used, and it scores on its share.
+        if (!parentTerms.length || !parentTerms.every(covers)) return 0;
+        return parentTerms.length / allTerms.length;
+      }
+      if (terms.length && !terms.some(covers)) return 0;
+      if (!terms.length) return 0; // parent-only request: subtypes need a distinctive word
+      return allTerms.filter(covers).length / allTerms.length;
+    };
     const scored = [];
     for (const v of vendors) {
       // Stopgap test exclusion: spec wants a real flag, but no is_test column
@@ -426,24 +500,39 @@ export default async function handler(req, res) {
       if (EXCLUDE_TEST && isTestRecord(v.company_name)) continue;
 
       // Specialty-first: subtype columns first, then category columns. Gap fields
-      // (other_contractor, other_vendor_services) are NOT matched.
+      // (other_contractor, other_vendor_services) are NOT matched. Attorney
+      // subclasses and contractor specialties carry their parent role implicitly
+      // ("entity_formation__registered_agent" is an attorney, not an agent).
+      const clean = (arr) => arr.map(lc).filter(Boolean);
+      const specialty = clean(VENDOR_MATCH_TEXT_COLS.flatMap(c => String(v[c] || '').split(',')));
+      const attorneySub = clean(asArray(v.attorney_subclass));
+      const loanProducts = clean(asArray(v.loan_product));
       const subtypeVals = [
-        ...VENDOR_MATCH_TEXT_COLS.flatMap(c => String(v[c] || '').split(',')),
-        ...asArray(v.attorney_subclass), ...asArray(v.loan_product)
-      ].map(lc).filter(Boolean).filter(t => !PARENT_TOKENS.has(t));
-      const categoryVals = VENDOR_MATCH_ARRAY_COLS.flatMap(c => asArray(v[c])).map(lc)
-        .filter(Boolean).filter(t => !PARENT_TOKENS.has(t));
+        ...specialty.filter(t => !PARENT_TOKENS.has(t)).map(t => t + ' contractor'),
+        ...attorneySub.filter(t => !PARENT_TOKENS.has(t)).map(t => t + ' attorney'),
+        ...loanProducts.filter(t => !PARENT_TOKENS.has(t))
+      ];
+      // attorney_subclass and loan_product are sub-types (matched above with their
+      // parent role), so they are not counted again as untagged category values.
+      const catAll = clean(VENDOR_MATCH_ARRAY_COLS.filter(c => c !== 'attorney_subclass' && c !== 'loan_product').flatMap(c => asArray(v[c])));
+      const categoryVals = catAll.filter(t => !PARENT_TOKENS.has(t));
+      // Spec 4b: a parent value is not matchable when the vendor has a sub-type
+      // in that family. A vendor tagged only "mortgage_broker" (no loan_product
+      // data, which is every broker today) can still match "mortgage broker".
+      const familyEmpty = { mortgage_broker: !loanProducts.length, attorney: !attorneySub.length, contractor: !specialty.length };
+      const parentVals = catAll.filter(t => PARENT_TOKENS.has(t) && familyEmpty[t]);
 
       let svcScore = 0;
-      // Word-level match: a term matches a vendor token-word by equality or a
-      // length-guarded prefix (rental~rentals, lend~lending), NOT raw substring,
-      // so short glue words can no longer hit inside unrelated words.
-      const wordMatch = (w, t) => w === t || (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w)));
-      const hit = (vals) => vals.some(val => wordsOf(val).some(w => terms.some(t => wordMatch(w, t))));
+      const best = (vals, isParent) => vals.reduce((m, val) => Math.max(m, coverage(val, isParent)), 0);
+      const subCov = best(subtypeVals, false), catCov = best(categoryVals, false), parCov = best(parentVals, true);
+      let cov = 0, viaParent = false;
       if (!serviceWords) svcScore = 1;                 // no service specified: any vendor
-      else if (hit(subtypeVals)) svcScore = 50;        // specialty-first
-      else if (hit(categoryVals)) svcScore = 30;
+      else if (subCov > 0 && subCov >= catCov) { svcScore = 50; cov = subCov; }   // specialty-first
+      else if (catCov > 0 && catCov >= parCov) { svcScore = 30; cov = catCov; }
+      else if (parCov > 0) { svcScore = 30; cov = parCov; viaParent = terms.length > 0; }
       else continue;                                   // spec 4b: never fall through to unfiltered
+      // Ranking only: coverage dominates; specialty-vs-category is the tiebreak.
+      const rankSvc = Math.round(cov * 100) + (svcScore >= 50 ? 10 : 0);
 
       // Area match (reuse vendors.js logic shape).
       let geo = 0;
@@ -481,16 +570,22 @@ export default async function handler(req, res) {
       if (serviceWords) { mx += 50; earned += svcScore >= 50 ? 50 : (svcScore >= 30 ? 30 : 0); }
       mx += 20; earned += geo >= 9 ? 20 : (geo >= 7 ? 16 : (geo >= 4 ? 12 : 5));
       const score100 = Math.round(earned / mx * 100);
-      scored.push({ v, score: svcScore + geo, last: lastRef.get(id) ?? 0, rnd: Math.random(), score100 });
+      scored.push({ v, cov, viaParent, score: rankSvc + geo, last: lastRef.get(id) ?? 0, rnd: Math.random(), score100 });
     }
 
+    // Drop weak partial matches: a vendor whose service coverage is under half of
+    // the best one is a different kind of help, not a second option.
+    const bestCov = scored.reduce((m, x) => Math.max(m, x.cov || 0), 0);
+    for (let i = scored.length - 1; i >= 0; i--) if (bestCov && (scored[i].cov || 0) < bestCov / 2) scored.splice(i, 1);
     // Rank by match score, then least-recently-referred, then random tiebreak.
     scored.sort((a, b) => b.score - a.score || a.last - b.last || a.rnd - b.rnd);
     const outOfUtah = callerState && callerState !== 'UT';
-    const top = scored.slice(0, 2).map(({ v, score100 }) => ({
+    const top = scored.slice(0, 2).map(({ v, score100, viaParent }) => ({
       id: v.ghl_record_id, name: v.company_name,
       description: cleanSentence(v.business_description),
-      cost: 'partner', booking_link: false, closest_fit: false,
+      // Matched only on the parent kind (a general mortgage broker or contractor
+      // for a more specific ask): Lani says "the closest fit I have".
+      cost: 'partner', booking_link: false, closest_fit: !!viaParent,
       match_score: score100, confidence: band(score100),
       _url: v.company_website || '',
       ...(outOfUtah && isStateScoped ? { coverage_warning: `may not cover ${callerState}` } : {})

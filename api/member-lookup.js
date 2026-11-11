@@ -92,6 +92,39 @@ export default async function handler(req, res) {
     const cleanRec = looksIncomplete(rec) ? '' : rec;
     return (cleanRec || (s.educator_match || '').trim() || ven || '').trim();
   }
+  // The fullest name the caller has ever given (bug: a follow-up call that
+  // only re-captured "Chris" made Lani re-ask the last name on the next call).
+  // Most words wins; ties go to the most recent. Placeholders are skipped.
+  function bestName(rows) {
+    let best = '';
+    for (const r of (rows || [])) {
+      const n = String((r && r.caller_name) || '').trim();
+      if (!n || n.includes('<') || /unknown/i.test(n)) continue;
+      if (n.split(/\s+/).length > best.split(/\s+/).filter(Boolean).length) best = n;
+    }
+    return best;
+  }
+  // Voice-ready history of the last few calls. The summary carries details a
+  // returning caller should never be asked again, such as the property city
+  // ("a flip in Ogden"), so it is passed through at a useful length.
+  function historyBlockOf(rows) {
+    const parts = (rows || []).slice(0, 5).map(s => {
+      try {
+        const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const rec = recText(s);
+        return [
+          date ? 'Call on ' + date : 'Previous call',
+          s.summary ? 'Summary: ' + String(s.summary).slice(0, 240) : '',
+          s.blocker ? 'Blocker was: ' + s.blocker : '',
+          rec ? 'Recommended: ' + rec.slice(0, 160) : 'No recommendation was delivered on this call.'
+        ].filter(Boolean).join('. ');
+      } catch(e) { return null; }
+    }).filter(Boolean);
+    if (!parts.length) return '';
+    return ' PAST CALL HISTORY (' + parts.length + ' most recent call' + (parts.length > 1 ? 's' : '') +
+      '; do not ask again for anything stated here, such as the property location): ' + parts.join(' || ');
+  }
+
   // A vendor enrollment call is a COMPLETE interaction (a handoff to get the
   // caller listed) but populates none of the recommendation fields, so recText
   // is empty. Without this guard, pickLastCall skips it and resurfaces an OLDER
@@ -257,9 +290,9 @@ export default async function handler(req, res) {
         // Format 1: +1XXXXXXXXXX (E.164)
         // Format 2: plain last 10 digits
         const vacUrl1 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=eq.%2B1' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
+          '&select=caller_name,caller_phone,summary,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
         const vacUrl2 = SUPABASE_URL + '/rest/v1/voice_agent_calls?caller_phone=like.*' + last10 +
-          '&select=caller_name,caller_phone,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
+          '&select=caller_name,caller_phone,summary,stack_summary,recommended_next,educator_match,vendor_matches,blocker,profile_type,created_at&order=created_at.desc&limit=15';
 
         let vacRows = [];
         const vacResp1 = await fetch(vacUrl1, { headers: vacHeaders });
@@ -275,8 +308,7 @@ export default async function handler(req, res) {
         // vacRows already populated above
 
         if (Array.isArray(vacRows) && vacRows.length > 0) {
-          const lastCall = vacRows[0];
-          const callerName = lastCall.caller_name || '';
+          const callerName = bestName(vacRows);
           const firstName = callerName.split(' ')[0] || '';
 
           const lastCallData = pickLastCall(vacRows);
@@ -292,7 +324,7 @@ export default async function handler(req, res) {
               : ' NOTE: the last call did not finish and no recommendation was made. Do not reference a past recommendation.';
 
           return res.status(200).json({
-            result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock,
+            result: 'RETURNING MEMBER PROFILE\n' + greeting + historyBlock + historyBlockOf(vacRows),
             member_name: firstName,
             last_call: lastCallData,
             prior_profile_type: computePriorProfileType(vacRows)
@@ -437,23 +469,7 @@ export default async function handler(req, res) {
         // caller is recognized but no recommendation was ever delivered.
         lastCallData = pickLastCall(surveys);
 
-        const historyParts = surveys.map(s => {
-          try {
-            const date = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-            const rec = recText(s);
-            return [
-              date ? 'Call on ' + date : 'Previous call',
-              s.summary ? 'Summary: ' + s.summary.slice(0, 100) : '',
-              s.blocker ? 'Blocker was: ' + s.blocker : '',
-              rec ? 'Recommended: ' + rec.slice(0, 120) : 'No recommendation was delivered on this call.'
-            ].filter(Boolean).join('. ');
-          } catch(e) { return null; }
-        }).filter(Boolean);
-
-        if (historyParts.length > 0) {
-          historyBlock = ' PAST CALL HISTORY (' + historyParts.length + ' previous call' +
-            (historyParts.length > 1 ? 's' : '') + '): ' + historyParts.join(' || ');
-        }
+        historyBlock = historyBlockOf(surveys);
       }
     } catch(e) {
       console.error('History fetch error:', e.message);
