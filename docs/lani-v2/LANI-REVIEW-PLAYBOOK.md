@@ -22,7 +22,9 @@ Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris
 - Location is asked only for local services (trades, property managers, leasing agents, agents, inspectors, appraisers, stagers, crews, wholesalers, surveyors, engineers). Never for lenders, attorneys, title or escrow, insurance or tax (2026-11-04, 2026-11-10).
 - Returning callers are never asked their last name or the location of a property from a past call (2026-11-10).
 - Vendors are described by kind, not by name, unless the caller asks who it is.
-- The only waiting words are the thinking line and "Let me pull a few things together for you."
+- The only waiting words are the thinking line and "Let me pull a few things together for you." Since v12 the partner disclosure sits between them on the first partner lookup.
+- Partner disclosure (2026-11-11, v12): once per call, word for word, after the thinking line and before the first lookup for a vendor, educator, mentor, class or tool: "Before I share these, two things. They're Utah REIA partners and they pay us a referral fee, and I only match from that list. If you'd rather look beyond our partners, I can tell you where to start." She waits for the answer before looking up. Skipped only when everything is a Utah REIA resource or event. Said to returning callers too.
+- Beyond partners (2026-11-11, v12): if the caller wants it, she gives one starting point per kind of help (license lookup, federal lookup for advisers, or references), never names an outside business, promises the guide in the follow-up, then asks "Would you also like our partners for this?" Asked "are there others?", she says there are plenty outside the list and she only matches from partners. Never calls a partner the best or only option.
 - The "a few more options in your follow-up" line only when the lookup returned more than she said (2026-10-22). Chris dislikes redundant lines.
 - Never praise the caller. No hype. Peer tone. One short acknowledgment of a hard situation is fine.
 - Never read URLs aloud. Always write "Utah REIA". No em dashes anywhere.
@@ -45,6 +47,7 @@ Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris
 - Most vendors, educators and tools are TESTING placeholders until launch. A TESTING name is not a problem. A wrong kind of vendor is.
 
 ## 5. How Chris judges a call (what to look for)
+- Disclosure: said word for word, once, before the first partner is named. Missing, late, repeated, or reworded is a fail. Choosing "beyond partners" and still getting partners named is a fail.
 - Right resources for the stage. His biggest complaint: one resource when the stage needs a team. Name exactly which kinds of help the stage needed and were missing.
 - Wrong routing is "very, very concerning". Any vendor of the wrong kind is a fail.
 - No repeats: never asking for something the caller already said, in this call or a past one ("I said Ogden flip").
