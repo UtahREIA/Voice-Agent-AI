@@ -66,6 +66,18 @@ export default async function handler(req, res) {
   // Only accept POST requests — Vapi always POSTs to this endpoint
   if (req.method !== 'POST') return res.status(405).end();
 
+  // Optional shared-secret gate for the Vapi webhook. NON-BREAKING: only
+  // enforced once VAPI_WEBHOOK_SECRET is set in the environment. When set, Vapi
+  // must send the matching x-vapi-secret header (its server-URL secret); any
+  // other POST is a spoof and is rejected. Until the env var is set this is a
+  // no-op, so live calls keep working after deploy. Activation is a coordinated
+  // step: set VAPI_WEBHOOK_SECRET in Vercel AND the Vapi server-URL secret.
+  const vapiWebhookSecret = process.env.VAPI_WEBHOOK_SECRET;
+  if (vapiWebhookSecret && req.headers['x-vapi-secret'] !== vapiWebhookSecret) {
+    console.warn('ghl-sync: rejected request with missing/invalid x-vapi-secret');
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+
   try {
     const payload = req.body;
 
