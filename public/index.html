@@ -453,16 +453,6 @@
           onclick="startPhoneDictation()">🎤</button>
       </div>
       <div id="memberGreeting" style="display:none;"></div>
-      <!-- TCPA consent. Wording approved for the Utah REIA survey (Chris, 2026-11-05); spelling corrected to house style. Version tracked in data-consent-version below. -->
-      <label id="consentLabel" style="display:flex;gap:8px;align-items:flex-start;max-width:320px;margin:10px auto 0;padding:12px 14px;background:rgba(50,20,2,.55);border:1px solid rgba(80,35,5,.7);border-radius:2px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:11px;line-height:1.45;color:#fff;text-align:left;cursor:pointer;">
-        <input type="checkbox" id="preCallConsent" data-consent-version="2026-11-05-survey-v1" style="margin-top:2px;flex-shrink:0;" />
-        <span>By providing your contact information, you agree to receive text messages, emails and phone calls from Utah REIA, including calls that may be automated or use an AI-generated voice. These communications may include event updates, education resources, and marketing messages. You can opt out at any time by replying STOP to texts or following unsubscribe instructions in emails.</span>
-      </label>
-    </div>
-    <div class="quiet-banner" id="quietBanner">
-      <span class="quiet-banner-icon">&#127897;</span>
-      <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation.</span>
-      <button class="quiet-banner-dismiss" id="quietDismiss" aria-label="Dismiss">&#215;</button>
     </div>
     <button class="start-btn" id="startBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -470,6 +460,16 @@
       </svg>
       Begin Journey
     </button>
+    <!-- TCPA consent. Wording approved for the Utah REIA survey (Chris, 2026-11-05); spelling corrected to house style. Version tracked in data-consent-version below. -->
+    <label id="consentLabel" style="display:flex;gap:8px;align-items:flex-start;max-width:320px;margin:10px auto 0;padding:12px 14px;background:rgba(50,20,2,.55);border:1px solid rgba(80,35,5,.7);border-radius:2px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:11px;line-height:1.45;color:#fff;text-align:left;cursor:pointer;">
+      <input type="checkbox" id="preCallConsent" data-consent-version="2026-11-05-survey-v1" style="margin-top:2px;flex-shrink:0;" />
+      <span>By providing your contact information, you agree to receive text messages, emails and phone calls from Utah REIA, including calls that may be automated or use an AI-generated voice. These communications may include event updates, education resources, and marketing messages. You can opt out at any time by replying STOP to texts or following unsubscribe instructions in emails.</span>
+    </label>
+    <div class="quiet-banner" id="quietBanner">
+      <span class="quiet-banner-icon">&#127897;</span>
+      <span class="quiet-banner-text"><strong>Find a quiet spot first.</strong> Background noise cuts off the conversation.</span>
+      <button class="quiet-banner-dismiss" id="quietDismiss" aria-label="Dismiss">&#215;</button>
+    </div>
     <a id="vendorLink" href="#" style="font-size:12px;color:#ffffff;font-weight:500;text-decoration:underline;cursor:pointer;margin-top:2px;letter-spacing:0.3px;text-shadow:0 1px 6px rgba(0,0,0,.6);">Are you a service provider? Partner with us</a>
   </div>
   <div class="call-screen" id="callScreen">
