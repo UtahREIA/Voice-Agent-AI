@@ -31,6 +31,18 @@ Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris
 - Never block a member's goal. Give a realistic path to it instead.
 - Vapi settings Chris set (2026-11-03): stop speaking after 2 words, idle message "Are you still there?" up to 2 times, idle timeout about 6 seconds, smart denoising on.
 
+## 2b. Standing data rules (moved here from the tracker on 2026-11-19, still in force)
+- GHL picklist is the authority, not the vendor table. A service with no vendor is a recruitment target, not a routing gap: route to it anyway and log the gap.
+- Parent values with a sub-dimension (attorney, contractor, mortgage_broker) are not matched directly; match the sub-dimension. Exception since v11 code: a bare mortgage_broker can match a vendor that has no loan_product, marked closest fit.
+- other_contractor and other_vendor_services are free-text gap fields, never match fields.
+- The GHL key contractor_specility keeps its misspelling. Never "fix" it.
+- Never predict a GHL value; read it. Example: the railings value is railings_custom, not railings.
+- BRRRR was never retired; it is its own strategy, not part of buy and hold.
+- Guest passes have no expiration; a pass is claimed against a specific event.
+- The landlord and tenant attorney gap was a test data gap, not a network gap.
+- 6 of the 7 early service gaps were recruitment gaps. Do not add matrix rows that point at no vendor.
+- Split a picklist value by asset class only where the service itself differs (decided 2026-10-14). A cross-category asset class gate stays a future task.
+
 ## 3. Open decisions (do not flag as bugs)
 - Spanish: the prompt says Lani continues in the caller's language, but the transcriber is English only. Chris has not decided whether to remove the promise or switch the transcriber.
 - TCPA consent on the website: uses the approved survey wording.
