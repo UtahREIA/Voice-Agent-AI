@@ -51,9 +51,17 @@ jobs:
           fi
 
           while [ "$PAGES" -lt "$MAX_PAGES" ]; do
+            # --retry survives transient TLS/connection blips (e.g. curl exit 35,
+            # SSL connect error) that would otherwise abort the whole step under
+            # `set -eo pipefail`. On a hard failure, fall through to a clear
+            # message and the controlled exit 1 rather than a bare curl code.
             RESP=$(curl -s --max-time 90 \
+              --retry 4 --retry-delay 5 --retry-all-errors \
               -H "Authorization: Bearer ${{ secrets.PURGE_CONFIRM_TOKEN }}" \
-              "${BASE}?limit=${LIMIT}&offset=${OFFSET}${PURGE}")
+              "${BASE}?limit=${LIMIT}&offset=${OFFSET}${PURGE}") || {
+                echo "curl failed at offset ${OFFSET} (exit $?). Transient network error — rerun the workflow to resume from where the daily cron left off."
+                exit 1
+              }
 
             OK=$(echo "$RESP" | jq -r '.ok // false')
             if [ "$OK" != "true" ]; then
