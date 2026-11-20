@@ -2,7 +2,7 @@
 
 Read this before reviewing any V2 Lani call. It holds what Chris has already decided, why, and how he judges a call, so a review never re-argues a settled choice or misses what he cares about. The live prompt (LANI-V3-LOOKUP-RULES-DRAFT.md, same folder) is the rulebook. This file is the history and the judgment behind it.
 
-Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris approves or rejects a change. The daily review never edits this file.
+Updated: 2026-11-19 (prompt v13). Chat 5 (Chris) adds a line here whenever Chris approves or rejects a change. The daily review never edits this file.
 
 ## 1. Who decides
 - Chris approves every prompt change, in chat 5. Nothing is loaded without his OK.
@@ -25,6 +25,10 @@ Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris
 - The only waiting words are the thinking line and "Let me pull a few things together for you." Since v12 the partner disclosure sits between them on the first partner lookup.
 - Partner disclosure (2026-11-11, v12): once per call, word for word, after the thinking line and before the first lookup for a vendor, educator, mentor, class or tool: "Before I share these, two things. They're Utah REIA partners and they pay us a referral fee, and I only match from that list. If you'd rather look beyond our partners, I can tell you where to start." She waits for the answer before looking up. Skipped only when everything is a Utah REIA resource or event. Said to returning callers too.
 - Beyond partners (2026-11-11, v12): if the caller wants it, she gives one starting point per kind of help (license lookup, federal lookup for advisers, or references), never names an outside business, promises the guide in the follow-up, then asks "Would you also like our partners for this?" Asked "are there others?", she says there are plenty outside the list and she only matches from partners. Never calls a partner the best or only option.
+- Prompt v13 (2026-11-19, approved by Chris): never call a deal, offer or decision risky, safe, smart, significant, a red flag or yellow flag, and never say whether a professional is right. Only the bridge line while waiting (never "give me a moment", "hold on"). Brand new callers always get a Utah REIA event in the lookup. One lookup of up to 5 needs (no second lookup). The disclosure is word for word with no lead-in, and any answer other than a clear request to look beyond partners means go ahead (she never asks them to choose again).
+- Lenders and loan types (v13): every lender or mortgage broker lookup names the loan type (FHA, VA, conventional, DSCR, bank statement, 1099, asset utilization, ITIN, foreign national, portfolio or blanket, commercial, SBA, construction, bridge, hard money, home equity). Lani never says which loan they should get and never explains loan rules. A broker without the asked-for product is offered only as the closest fit, with "ask them whether they offer it".
+- Callers who are both vendor and investor (v13): help with both in one call, starting with the part they called about. Investor first means the vendor questions come after the recommendations and before the closing question. Never recommend their own company back to them.
+- Opening line (2026-11-19): "Aloha, I am Lani, Utah REIA's AI assistant. What can I help you with today?" (Vapi first message; the website override must match).
 - The "a few more options in your follow-up" line only when the lookup returned more than she said (2026-10-22). Chris dislikes redundant lines.
 - Never praise the caller. No hype. Peer tone. One short acknowledgment of a hard situation is fine.
 - Never read URLs aloud. Always write "Utah REIA". No em dashes anywhere.
@@ -51,7 +55,6 @@ Updated: 2026-11-11 (prompt v11). Chat 5 (Chris) adds a line here whenever Chris
 ## 4. Known open issues (do not re-log; add new evidence to the existing tracker item instead)
 - Vendor matcher matches on the words "real estate", so a real estate agent request returned an attorney (JMOSS). [V2] Vendor matcher returns attorneys for "real estate agent".
 - Returning profile carries only the last call's name and recommendation, not the full name or property location. [V2] Returning profile missing full name and property location.
-- find_resources accepts only 3 needs. v11 uses a second lookup for needs 4 and 5. [V2] find_resources: allow up to 5 needs per lookup.
 - Transcriber mishears names (Borden as Boarding, Morning) and investor words (house hacking as whole stacking). [V2] Transcriber key terms for investor words, [V2] Last names misheard and saved to GHL.
 - Transcripts are not saved in Supabase yet. [V2] Save the call transcript in voice_agent_calls.
 - vendor_referrals (the referral log) has no rows; nothing writes to it yet.
