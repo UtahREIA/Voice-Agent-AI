@@ -203,6 +203,8 @@ export default async function handler(req, res) {
                   // Category fields -- GHL appends _partner to the key
                   deals_opportunities:  parseArray(props.deals__opportunities_partner || props.deals_opportunities),
                   funding_financial:    parseArray(props.funding__financial_partner   || props.funding_financial),
+                  // Loan Product (partner): sub-dimension of mortgage_broker (tracker rows 84-86, 143).
+                  loan_product:         parseArray(props.loan_product_partner || props.loan__product_partner || props.loan_product),
                   team_vendors:         parseArray(props.team__vendors_partner        || props.team_vendors),
                   attorney_subclass:    parseArray(props.attorney_subclass_partner || props.attorney__subclass_partner || props.attorney_subclass),
                   operations:           parseArray(props.operations_partner           || props.operations),
@@ -475,6 +477,7 @@ export default async function handler(req, res) {
         // GHL appends _partner to multi-select category field keys in webhook payloads too
         deals_opportunities:    parseArray(body.deals__opportunities_partner || body.deals_opportunities),
         funding_financial:      parseArray(body.funding__financial_partner   || body.funding_financial),
+        loan_product:           parseArray(body.loan_product_partner || body.loan__product_partner || body.loan_product),
         team_vendors:           parseArray(body.team__vendors_partner        || body.team_vendors),
         attorney_subclass:      parseArray(body.attorney_subclass_partner || body.attorney__subclass_partner || body.attorney_subclass),
         operations:             parseArray(body.operations_partner           || body.operations),

@@ -112,8 +112,13 @@ const SERVICE_STOPWORDS = new Set([
   // Generic business nouns: "title company" must match on "title", not on the
   // "company" in loan_servicing_company (2026-11-11).
   'company', 'companies', 'service', 'services', 'specialist', 'specialists',
-  'professional', 'professionals', 'provider', 'providers', 'firm', 'group', 'business'
+  'professional', 'professionals', 'provider', 'providers', 'firm', 'group', 'business',
+  // "loan"/"loans" name no kind of help on their own and used to pull
+  // loan_servicing_company into every loan product request (2026-11-19).
+  'loan', 'loans'
 ]);
+// Two-letter words that are real request terms (the VA loan product).
+const SHORT_TERMS = new Set(['va']);
 
 // Local service types (spec section 4). A local type requested with no city/
 // county returns needs_location so Lani asks and looks up again. This is the
@@ -456,7 +461,7 @@ export default async function handler(req, res) {
     // carry the match; parent terms only help rank, and only a request made of
     // nothing but parent words ("mortgage broker") may match a bare parent token.
     const reqWords = serviceWords.split(/[^a-z0-9]+/).flatMap(w => (WORD_SYNONYM[w] || w).split(' '))
-      .filter(w => w.length >= 3 && !SERVICE_STOPWORDS.has(w));
+      .filter(w => (w.length >= 3 || SHORT_TERMS.has(w)) && !SERVICE_STOPWORDS.has(w));
     const terms = reqWords.filter(w => !PARENT_WORDS.has(w));
     const parentTerms = reqWords.filter(w => PARENT_WORDS.has(w));
     const allTerms = [...terms, ...parentTerms];
@@ -520,15 +525,22 @@ export default async function handler(req, res) {
       // in that family. A vendor tagged only "mortgage_broker" (no loan_product
       // data, which is every broker today) can still match "mortgage broker".
       const familyEmpty = { mortgage_broker: !loanProducts.length, attorney: !attorneySub.length, contractor: !specialty.length };
-      const parentVals = catAll.filter(t => PARENT_TOKENS.has(t) && familyEmpty[t]);
+      // A request that is ONLY "mortgage broker" (no product named) matches every
+      // broker, tagged or not; otherwise brokers with loan products would vanish
+      // from a plain broker request once loan_product is populated (2026-11-19).
+      const parentVals = catAll.filter(t => PARENT_TOKENS.has(t) && (familyEmpty[t] || (t === 'mortgage_broker' && !terms.length)));
 
       let svcScore = 0;
       const best = (vals, isParent) => vals.reduce((m, val) => Math.max(m, coverage(val, isParent)), 0);
       const subCov = best(subtypeVals, false), catCov = best(categoryVals, false), parCov = best(parentVals, true);
-      let cov = 0, viaParent = false;
+      // Does a value cover a request word that is not just the role ("lender")?
+      // Used to drop role-only matches when a sub-type matched the product asked for.
+      const nonRoleTerms = terms.filter(t => !ROLE_OF[t]);
+      const hitsNonRole = (vals) => vals.some(val => roleOk(val) && nonRoleTerms.some(t => rawWords(val).some(w => wordMatch(w, t))));
+      let cov = 0, viaParent = false, specific = false;
       if (!serviceWords) svcScore = 1;                 // no service specified: any vendor
-      else if (subCov > 0 && subCov >= catCov) { svcScore = 50; cov = subCov; }   // specialty-first
-      else if (catCov > 0 && catCov >= parCov) { svcScore = 30; cov = catCov; }
+      else if (subCov > 0 && subCov >= catCov) { svcScore = 50; cov = subCov; specific = hitsNonRole(subtypeVals); }   // specialty-first
+      else if (catCov > 0 && catCov >= parCov) { svcScore = 30; cov = catCov; specific = hitsNonRole(categoryVals); }
       else if (parCov > 0) { svcScore = 30; cov = parCov; viaParent = terms.length > 0; }
       else continue;                                   // spec 4b: never fall through to unfiltered
       // Ranking only: coverage dominates; specialty-vs-category is the tiebreak.
@@ -570,9 +582,21 @@ export default async function handler(req, res) {
       if (serviceWords) { mx += 50; earned += svcScore >= 50 ? 50 : (svcScore >= 30 ? 30 : 0); }
       mx += 20; earned += geo >= 9 ? 20 : (geo >= 7 ? 16 : (geo >= 4 ? 12 : 5));
       const score100 = Math.round(earned / mx * 100);
-      scored.push({ v, cov, viaParent, score: rankSvc + geo, last: lastRef.get(id) ?? 0, rnd: Math.random(), score100 });
+      scored.push({ v, cov, viaParent, isSub: svcScore >= 50, specific, score: rankSvc + geo, last: lastRef.get(id) ?? 0, rnd: Math.random(), score100 });
     }
 
+    // A specific sub-type match (a broker tagged with the loan product asked for)
+    // beats a generic parent match ("closest fit"), so drop the generic ones when
+    // a specific one exists (2026-11-19, loan products).
+    // Same idea for role-only matches: when a sub-type matched the product word
+    // ("SBA lender" -> a broker tagged sba), a vendor that matched only on the
+    // role word ("lender" -> any hard money lender) is a different kind of help.
+    if (scored.some(x => x.isSub && !x.viaParent)) {
+      for (let i = scored.length - 1; i >= 0; i--) if (scored[i].viaParent) scored.splice(i, 1);
+    }
+    if (scored.some(x => x.isSub && x.specific)) {
+      for (let i = scored.length - 1; i >= 0; i--) if (!scored[i].specific) scored.splice(i, 1);
+    }
     // Drop weak partial matches: a vendor whose service coverage is under half of
     // the best one is a different kind of help, not a second option.
     const bestCov = scored.reduce((m, x) => Math.max(m, x.cov || 0), 0);
