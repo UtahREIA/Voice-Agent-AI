@@ -138,6 +138,28 @@ const STATE_SCOPED_HINTS = ['lend', 'loan', 'mortgage', 'attorney', 'legal', 'in
 const asArray = (v) => Array.isArray(v) ? v : (v === null || v === undefined || v === '' ? [] : [v]);
 const lc = (v) => String(v || '').toLowerCase().trim();
 const isTestRecord = (name) => /testing/i.test(String(name || ''));
+
+// +18015550168 -> (801) 555-0168. Anything else is returned as given.
+export const prettyPhone = (p) => {
+  const d = String(p || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : String(p || '').trim();
+};
+
+// The follow-up text block: partners by name + phone (+ website), learning
+// resources by name + link. Entries with neither are left out.
+export function buildSmsLinks(entries) {
+  const lines = [];
+  for (const r of entries || []) {
+    if (!r || !r.name) continue;
+    if (r.type === 'vendor') {
+      const parts = [prettyPhone(r.phone), r.url].filter(Boolean);
+      if (parts.length) lines.push(`- ${r.name}: ${parts.join(', ')}`);
+    } else if (r.url) {
+      lines.push(`- ${r.name}: ${r.url}`);
+    }
+  }
+  return lines.length ? 'Your contacts and links:\n' + lines.join('\n') : '';
+}
 // Split a vendor token into whole words, dropping generic parent words so a
 // match has to land on a distinguishing word (tax, landlord, real, estate...).
 const wordsOf = (val) => lc(val).split(/[^a-z0-9]+/).filter(Boolean).filter(w => !PARENT_WORDS.has(w));
@@ -230,9 +252,18 @@ export default async function handler(req, res) {
       }
       for (const m of n.matches) {
         const url = m._url || '';
-        allEntries.push({ id: m.id, name: m.name, type: n.type, url, cost: m.cost, status: 'ok' });
+        const entry = { id: m.id, name: m.name, type: n.type, url, cost: m.cost, status: 'ok' };
+        // Vendors carry their phone (every partner has one; few have a website)
+        // and the service Lani asked for, so the follow-up text can deliver the
+        // partner and ghl-sync can write the referral log (Chris, 2026-11-23).
+        if (n.type === 'vendor') {
+          entry.phone = m._phone || '';
+          entry.service = (n.requested && n.requested.service) || '';
+        }
+        allEntries.push(entry);
         if (n.type === 'educator' && !educatorName) { educatorName = m.name; educatorUrl = url; }
         delete m._url;
+        delete m._phone;
       }
     }
     if (vapiCallId && allEntries.length) {
@@ -248,8 +279,10 @@ export default async function handler(req, res) {
       const seen = new Set(prior.map(keyOf));
       for (const m of allEntries) if (!seen.has(keyOf(m))) { seen.add(keyOf(m)); merged.push(m); }
       const edName = priorName || educatorName, edUrl = priorUrl || educatorUrl;
-      const withUrl = merged.filter(m => m.url);
-      const smsLinks = withUrl.length ? 'Your links:\n' + withUrl.map(r => `- ${r.name}: ${r.url}`).join('\n') : '';
+      // Before 2026-11-23 only items with a URL reached the text, so partners
+      // (8 of 102 have a website, none of the TESTING ones) never reached the
+      // caller even though Lani promises their contact details.
+      const smsLinks = buildSmsLinks(merged);
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/voice_agent_stack_links?on_conflict=vapi_call_id`, {
           method: 'POST',
@@ -612,6 +645,7 @@ export default async function handler(req, res) {
       cost: 'partner', booking_link: false, closest_fit: !!viaParent,
       match_score: score100, confidence: band(score100),
       _url: v.company_website || '',
+      _phone: v.company_phone || '',
       ...(outOfUtah && isStateScoped ? { coverage_warning: `may not cover ${callerState}` } : {})
     }));
     return top.length ? mk('ok', top, outOfUtah && isStateScoped ? 'out_of_state_coverage' : '') : mk('no_match');
