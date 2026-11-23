@@ -247,12 +247,16 @@ export default async function handler(req, res) {
     const allEntries = [];      // {id,name,type,url,cost,status}
     let educatorName = '', educatorUrl = '';
     for (const n of results) {
+      // What Lani asked for, kept on every entry so the daily call review can
+      // check the ask against the caller's situation (2026-11-23).
+      const rq = n.requested || {};
+      const asked = [rq.service || rq.topic || '', rq.city || rq.county || ''].filter(Boolean).join(' | ');
       if (n.status !== 'ok') {  // record a missing need even when Lani does not say it
-        allEntries.push({ id: null, name: '', type: n.type, url: '', cost: '', status: n.status });
+        allEntries.push({ id: null, name: '', type: n.type, url: '', cost: '', status: n.status, asked });
       }
       for (const m of n.matches) {
         const url = m._url || '';
-        const entry = { id: m.id, name: m.name, type: n.type, url, cost: m.cost, status: 'ok' };
+        const entry = { id: m.id, name: m.name, type: n.type, url, cost: m.cost, status: 'ok', asked, closest_fit: !!m.closest_fit };
         // Vendors carry their phone (every partner has one; few have a website)
         // and the service Lani asked for, so the follow-up text can deliver the
         // partner and ghl-sync can write the referral log (Chris, 2026-11-23).
