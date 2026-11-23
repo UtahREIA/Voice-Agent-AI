@@ -1,6 +1,6 @@
 # Finding help beyond our partners
 
-Lani only matches from Utah REIA's partner list, and partners pay us a referral fee. There are good providers in Utah who are not partners. Here is where to start on your own.
+Lani only matches from Utah REIA's partner list, and some of our partners pay Utah REIA. There are good providers in Utah who are not partners. Here is where to start on your own.
 
 ## Check a license (free official lookups)
 
