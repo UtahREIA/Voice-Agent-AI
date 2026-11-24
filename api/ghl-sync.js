@@ -701,17 +701,58 @@ export default async function handler(req, res) {
     // Use resolved phone going forward
     const effectivePhone = resolvedPhone || callerPhone;
 
-    // --- VENDOR LOOKUP: fetch vendor phone for two-sided warm intro ---
-    // When a vendor is matched during the call, we look up their contact in Supabase.
-    // We join vendor_profiles to contacts to get the phone number since company_phone
-    // is not yet populated on most vendor records — contact.phone is the reliable fallback.
-    // The vendor gets an SMS intro with the caller's profile so they can follow up directly.
+    // --- RESOURCE STACK (cached by find_resources, keyed by vapi_call_id) ---
+    // find_resources cached the exact matches it delivered on this call
+    // (voice_agent_stack_links): the SMS block, the educator, and every matched
+    // item with its id. Read first, so the vendor lookup below can use the exact
+    // matched partner instead of a structured output that often does not emit
+    // (2026-11-23: vendorMatches was empty on all three test calls).
+    let stackLinks = '';
+    let stackEducatorName = '';
+    let stackEducatorUrl = '';
+    let stackItems = [];
+    if (vapiCallId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      try {
+        const linkResp = await fetch(
+          `${process.env.SUPABASE_URL}/rest/v1/voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=sms_links,links,educator_name,educator_url&limit=1`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': process.env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+            }
+          }
+        );
+        const linkData = await linkResp.json();
+        if (Array.isArray(linkData) && linkData[0]) {
+          stackLinks        = linkData[0].sms_links     || '';
+          stackEducatorName = linkData[0].educator_name || '';
+          stackEducatorUrl  = linkData[0].educator_url  || '';
+          stackItems        = Array.isArray(linkData[0].links) ? linkData[0].links : [];
+        }
+        console.log('Resource stack resolved — links:', stackLinks ? stackLinks.length + ' chars' : 'none',
+          '| educator:', stackEducatorName || 'none');
+      } catch(e) {
+        console.error('Stack lookup error:', e.message);
+      }
+    }
+    // Partners actually delivered on this call, deduped by record id.
+    const stackVendors = [];
+    for (const m of stackItems) {
+      if (m && m.type === 'vendor' && m.status === 'ok' && m.id && !stackVendors.some(x => x.id === m.id)) stackVendors.push(m);
+    }
+    // What was delivered (stack) wins over what Lani's structured output says.
+    const vendorMatchesResolved = stackVendors.map(v => v.name).join(', ') || structured.vendorMatches || '';
+
+    // --- VENDOR LOOKUP: fetch vendor contact for two-sided warm intro ---
+    // Prefer the exact partner find_resources delivered (by GHL record id).
+    // Fall back to the vendorMatches structured output (first-word name search).
     let vendorPhone = '';
     let vendorEmail = '';
     let vendorWebsite = '';
     let vendorName = '';
     let vendorCompany = '';
-    const matchedVendorName = structured.vendorMatches ? structured.vendorMatches.split(',')[0].trim() : '';
+    const matchedVendorName = stackVendors[0] ? stackVendors[0].name : (structured.vendorMatches ? structured.vendorMatches.split(',')[0].trim() : '');
 
     if (matchedVendorName && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       try {
@@ -720,16 +761,13 @@ export default async function handler(req, res) {
           'apikey': process.env.SUPABASE_SERVICE_KEY,
           'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
         };
-
-        // Search vendor_profiles by full_name matching the first word of the matched vendor name
-        // Then join to contacts to get their phone number
-        // Search ghl_vendor_resources (synced from GHL custom objects) by company name
-        // This is now the source of truth for vendor phone numbers
-        const firstWord = encodeURIComponent(matchedVendorName.split(' ')[0]);
-        const vendorResp = await fetch(
-          `${process.env.SUPABASE_URL}/rest/v1/ghl_vendor_resources?select=company_name,company_phone&company_name=ilike.*${firstWord}*&is_active=eq.true&limit=1`,
-          { headers: supaHeaders }
-        );
+        // ghl_vendor_resources (synced from GHL custom objects) is the source of truth.
+        const vendorSelect = 'select=company_name,company_phone,company_email,company_website';
+        const byId = stackVendors[0] && stackVendors[0].id;
+        const vendorUrl = byId
+          ? `${process.env.SUPABASE_URL}/rest/v1/ghl_vendor_resources?${vendorSelect}&ghl_record_id=eq.${encodeURIComponent(stackVendors[0].id)}&limit=1`
+          : `${process.env.SUPABASE_URL}/rest/v1/ghl_vendor_resources?${vendorSelect}&company_name=ilike.*${encodeURIComponent(matchedVendorName.split(' ')[0])}*&is_active=eq.true&limit=1`;
+        const vendorResp = await fetch(vendorUrl, { headers: supaHeaders });
         const vendorData = await vendorResp.json();
 
         if (Array.isArray(vendorData) && vendorData.length > 0) {
@@ -746,46 +784,12 @@ export default async function handler(req, res) {
             vendorPhone = '+1' + vendorDigits;
           }
 
-          console.log('Vendor found for warm intro:', vendorCompany, '| phone:', vendorPhone);
+          console.log('Vendor found for warm intro:', vendorCompany, '| phone:', vendorPhone, byId ? '(by record id)' : '(by name)');
         } else {
           console.log('No vendor found in Supabase for:', matchedVendorName);
         }
       } catch(e) {
         console.error('Vendor lookup error:', e.message);
-      }
-    }
-
-    // --- RESOURCE STACK (cached by resources.js, keyed by vapi_call_id) ---
-    // resources.js cached the exact links AND the educator getResourceStack
-    // delivered on this call (voice_agent_stack_links). Read them back so the SMS
-    // carries real links and so an educator booking is triggered off a reliable
-    // signal, not the per-resource structured outputs, which per CLAUDE.md do not
-    // reliably emit.
-    let stackLinks = '';
-    let stackEducatorName = '';
-    let stackEducatorUrl = '';
-    if (vapiCallId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-      try {
-        const linkResp = await fetch(
-          `${process.env.SUPABASE_URL}/rest/v1/voice_agent_stack_links?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=sms_links,educator_name,educator_url&limit=1`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': process.env.SUPABASE_SERVICE_KEY,
-              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
-            }
-          }
-        );
-        const linkData = await linkResp.json();
-        if (Array.isArray(linkData) && linkData[0]) {
-          stackLinks        = linkData[0].sms_links     || '';
-          stackEducatorName = linkData[0].educator_name || '';
-          stackEducatorUrl  = linkData[0].educator_url  || '';
-        }
-        console.log('Resource stack resolved — links:', stackLinks ? stackLinks.length + ' chars' : 'none',
-          '| educator:', stackEducatorName || 'none');
-      } catch(e) {
-        console.error('Stack lookup error:', e.message);
       }
     }
 
@@ -883,7 +887,7 @@ export default async function handler(req, res) {
     // Falls back to inferring from absence of matches if structured output not set
     // isNoMatch — only true when genuinely no resources were found
     // Check structured outputs AND stackSummary as a safety net
-    const hasVendors   = structured.vendorMatches && structured.vendorMatches.length > 0;
+    const hasVendors   = vendorMatchesResolved.length > 0;
     const hasEducator  = matchedEducatorName && matchedEducatorName.trim().length > 2;
     const hasTools     = structured.toolMatches && structured.toolMatches.length > 0;
     const hasStack     = structured.stackSummary && structured.stackSummary.trim().length > 20 &&
@@ -931,7 +935,7 @@ export default async function handler(req, res) {
         return s.slice(0, 900); // multi-segment SMS is fine; links must survive
       })(),
       alreadyTried:   structured.alreadyTried  || '',
-      vendorMatches:  structured.vendorMatches || '',
+      vendorMatches:  vendorMatchesResolved,
       toolMatches:    structured.toolMatches   || '',
       educatorMatch:  matchedEducatorName  || '',
       eventMatch:     structured.eventMatch     || '',
@@ -947,7 +951,7 @@ export default async function handler(req, res) {
       dealNeeds:          blocker === 'deals' ? 'Off Market Deals' : '',
       teamNeeds:          (blocker === 'team' || blocker === 'contractors') ? 'Contractors' : '',
       wantsMentor:        bookingRequired === 'true' ? 'Yes' : '',
-      wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
+      wantsProfessionals: vendorMatchesResolved ? 'Yes' : '',
       handoffChannel: structured.handoffChannel || 'sms',
       tier:           structured.tier           || '1_info',
 
@@ -959,7 +963,7 @@ export default async function handler(req, res) {
       accomplish6to12:    goals || '',
       whatDescribesYou:   profileType || '',
       wantsMentor:        bookingRequired === 'true' ? 'Yes' : '',
-      wantsProfessionals: structured.vendorMatches ? 'Yes' : '',
+      wantsProfessionals: vendorMatchesResolved ? 'Yes' : '',
 
       // Vendor warm intro fields — used by GHL workflow to send parallel SMS to vendor
       // vendorPhone is the matched vendor's phone number from Supabase vendor_profiles
@@ -1017,7 +1021,7 @@ export default async function handler(req, res) {
         { id: 'pqEFatxBgBKsS8dvY37S', field_value: structured.alreadyTried  || '' },  // Already Tried
         { id: 'QKOAN0pyMa2IkeGVAF9f', field_value: structured.stackSummary  || summary || '' }, // Stack Summary
         { id: 'Ed5YpSfkVwceWfnuDK8M', field_value: structured.tier          || '1_info' },      // Routing Tier
-        { id: '192I9uLeuO0eFLRE9VLq', field_value: structured.vendorMatches || '' },  // Vendor Matches
+        { id: '192I9uLeuO0eFLRE9VLq', field_value: vendorMatchesResolved },  // Vendor Matches
         { id: 'gWwvq2pv8P6jcSGOZKa8', field_value: structured.toolMatches   || '' },  // Tool Matches
         { id: 's6q99vaJ472SDrn3lKfS', field_value: structured.eventMatch     || '' },  // Event Match
         { id: 'A6oIIJNzdW2MdVTYX9I5', field_value: matchedEducatorName  || '' },  // Educator Match
@@ -1390,7 +1394,7 @@ export default async function handler(req, res) {
                   }] : []),
 
                   // Would you like us to connect you with professionals? (SINGLE_OPTIONS)
-                  ...(structured.vendorMatches ? [{
+                  ...(vendorMatchesResolved ? [{
                     id: 'K0oXRPbezNJdlHutBGOa',
                     field_value: 'Yes'
                   }] : []),
@@ -1543,7 +1547,7 @@ export default async function handler(req, res) {
           goals:            goals || '',
           already_tried:    structured.alreadyTried || '',
           summary:          summary || '',
-          vendor_matches:   structured.vendorMatches || '',
+          vendor_matches:   vendorMatchesResolved,
           tool_matches:     structured.toolMatches || '',
           educator_match:   matchedEducatorName || '',
           booking_url:      educatorBookingUrl || structured.bookingUrl || '',
@@ -1639,6 +1643,58 @@ export default async function handler(req, res) {
         }
       } catch (e) {
         console.error('Roadmap creation error (non-fatal):', e.message);
+      }
+    }
+
+    // --- STEP 7: Referral log (vendor_referrals = the partner billing record) ---
+    // One row per partner delivered on this call, written only once the
+    // follow-up has been handed to GHL (webhook accepted). Partners only:
+    // find_resources only ever matches enroll_vendor_match=true vendors.
+    // billable=false for a TESTING record, or when the same partner already went
+    // to the same caller in the last 30 days (Chris's billing rule, row 284).
+    // A retried webhook for the same call never writes a second row.
+    if (SUPABASE_URL && SUPABASE_KEY && vapiCallId && stackVendors.length && ghlResp && ghlResp.ok) {
+      try {
+        const rh = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+        const already = await (await fetch(
+          `${SUPABASE_URL}/rest/v1/vendor_referrals?vapi_call_id=eq.${encodeURIComponent(vapiCallId)}&select=vendor_ghl_record_id`,
+          { headers: rh })).json();
+        const done = new Set((Array.isArray(already) ? already : []).map(r => r.vendor_ghl_record_id));
+        const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+        const rows = [];
+        for (const v of stackVendors) {
+          if (done.has(v.id)) continue;
+          let billable = true, note = '';
+          if (/testing/i.test(v.name || '')) { billable = false; note = 'TESTING record'; }
+          else if (effectivePhone) {
+            const prior = await (await fetch(
+              `${SUPABASE_URL}/rest/v1/vendor_referrals?vendor_ghl_record_id=eq.${encodeURIComponent(v.id)}&caller_phone=eq.${encodeURIComponent(effectivePhone)}&referral_delivered_at=gte.${encodeURIComponent(since)}&select=id&limit=1`,
+              { headers: rh })).json();
+            if (Array.isArray(prior) && prior.length) { billable = false; note = 'Repeat to same caller within 30 days'; }
+          }
+          rows.push({
+            caller_contact_id: /^[0-9a-f-]{36}$/i.test(String(contactId || '')) ? contactId : null,
+            caller_phone: effectivePhone || null,
+            caller_name: callerName || null,
+            vendor_ghl_record_id: v.id,
+            vendor_company_name: v.name || null,
+            vendor_category: v.service || null,
+            referral_delivered_at: new Date().toISOString(),
+            delivery_channel: 'sms',
+            source: 'voice_agent',
+            vapi_call_id: vapiCallId,
+            billable,
+            billing_note: note || null
+          });
+        }
+        if (rows.length) {
+          const ins = await fetch(`${SUPABASE_URL}/rest/v1/vendor_referrals`, {
+            method: 'POST', headers: { ...rh, Prefer: 'return=minimal' }, body: JSON.stringify(rows)
+          });
+          console.log('Referral log:', rows.length, 'row(s) written | status', ins.status);
+        }
+      } catch (e) {
+        console.error('Referral log error (non-fatal):', e.message);
       }
     }
 
