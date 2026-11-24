@@ -235,6 +235,22 @@ export default async function handler(req, res) {
                     const em = parseBool(Array.isArray(props.enroll_vendor_match) ? props.enroll_vendor_match[0] : props.enroll_vendor_match);
                     return em ? 'Approved' : null;
                   })(),
+                  // Vendor Assesment Approval (single-select: pending | approved | reject).
+                  // Distinct from approval_status (the recommend gate): this is the vetting/
+                  // assessment outcome; reject vendors are dropped from the weekly review list.
+                  // The GHL display name is misspelled "Assesment" and GHL field keys are
+                  // immutable, so the live key keeps that spelling (option fields carry a
+                  // _partner suffix / mangled double underscores). Also try the corrected
+                  // spelling in case the field was recreated. The SYNC PROPKEYS diag above
+                  // logs the live key set, so the one that hits can be confirmed.
+                  vendor_assessment_approval: parseSingleSelect(
+                    props.vendor_assesment_approval_partner
+                    ?? props.vendor__assesment__approval_partner
+                    ?? props.vendor_assesment_approval
+                    ?? props.vendor_assessment_approval_partner
+                    ?? props.vendor__assessment__approval_partner
+                    ?? props.vendor_assessment_approval
+                  ),
                   affiliate_partner:   parseBool(Array.isArray(props.affiliate_partner)   ? props.affiliate_partner[0]   : props.affiliate_partner),
                   investor_types:      parseArray(props.investor_types || props.which_types_of_investors),
                   // Area Serviced -> service_counties[] + serves_statewide/serves_national
@@ -500,6 +516,17 @@ export default async function handler(req, res) {
           const em = parseBool(Array.isArray(body.enroll_vendor_match) ? body.enroll_vendor_match[0] : body.enroll_vendor_match);
           return em ? 'Approved' : null;
         })(),
+        // Vendor Assesment Approval (single-select: pending | approved | reject) — see the
+        // note in the daily-sync mapper above. Misspelled, immutable GHL key; map across the
+        // spelling / _partner / double-underscore variants.
+        vendor_assessment_approval: parseSingleSelect(
+          body.vendor_assesment_approval_partner
+          ?? body.vendor__assesment__approval_partner
+          ?? body.vendor_assesment_approval
+          ?? body.vendor_assessment_approval_partner
+          ?? body.vendor__assessment__approval_partner
+          ?? body.vendor_assessment_approval
+        ),
         investor_types:         parseArray(body.investor_types || body.which_types_of_investors),
         affiliate_partner:      parseBool(Array.isArray(body.affiliate_partner) ? body.affiliate_partner[0] : body.affiliate_partner),
         // Area Serviced -> service_counties[] + serves_statewide/serves_national
@@ -585,6 +612,20 @@ function parseArray(value) {
     return value.split(',').map(s => s.trim()).filter(Boolean);
   }
   return [];
+}
+
+// Helper: extract a single-select / single-value GHL field.
+// Option fields may arrive array-wrapped (["approved"]) or as a plain string.
+// Returns the trimmed value verbatim (no case changes, to stay faithful to GHL),
+// or null when absent/empty.
+function parseSingleSelect(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) {
+    const first = value.find(v => v != null && String(v).trim() !== '');
+    return first != null ? String(first).trim() : null;
+  }
+  const s = String(value).trim();
+  return s === '' ? null : s;
 }
 
 // Helper: parse boolean values from GHL webhook
