@@ -1715,6 +1715,13 @@ export default async function handler(req, res) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                  // Standard GHL contact keys so the inbound-webhook workflow gets a
+                  // contact context and resolves/creates the PARTNER as the contact.
+                  // Without these GHL offers no contact actions and SMS has no target.
+                  // These are always the PARTNER (the SMS recipient), never the caller.
+                  phone:                 v.phone || '',
+                  first_name:            v.name || '',
+                  // Descriptive fields for the SMS body tokens.
                   partner_company_name:  v.name || '',
                   partner_phone:         v.phone || '',
                   vendor_ghl_record_id:  v.id || '',
