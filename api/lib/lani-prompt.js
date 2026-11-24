@@ -5,7 +5,9 @@
  *
  * Safety rails:
  *   - Target assistant comes ONLY from env LANI_V2_ASSISTANT_ID. Missing, or
- *     equal to the live assistant, refuses before any read or write.
+ *     equal to LIVE_ASSISTANT_ID (the retired V1 assistant, kept as a
+ *     never-target sentinel), refuses before any read or write. The real
+ *     write gate is LANI_PROMPT_WRITE (below).
  *   - Without VAPI_API_KEY it returns not_configured and does nothing else.
  *   - Writes to Vapi only when LANI_PROMPT_WRITE is exactly "true" and the
  *     caller did not ask for a dry run.
@@ -19,6 +21,11 @@
 import { createHash } from 'crypto';
 import { buildCatalog, loadCatalogData } from './lani-catalog.js';
 
+// Retired V1 assistant (deleted from Vapi 2026-11-24). Kept as a never-target
+// sentinel: the rebuild refuses if LANI_V2_ASSISTANT_ID is ever set to this id.
+// The live V2 assistant (39e25be8) is the normal rebuild target; writes to it
+// stay gated by LANI_PROMPT_WRITE. Name kept (not renamed) because the test and
+// seed script import this symbol.
 export const LIVE_ASSISTANT_ID = '92018c4f-f382-41b9-80e0-c46e8f2b505a';
 export const CATALOG_MARKER = '<<CATALOG>>';
 export const MAX_PROMPT_CHARS = 60000;
