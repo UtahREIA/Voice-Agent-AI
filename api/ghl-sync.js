@@ -27,7 +27,8 @@
  *   GHL_API_KEY            — GHL Private Integration Token for v2 API custom field updates
  *
  * GHL Location ID: DNirEjy0ejVwbHsaBYrn
- * Vapi Assistant ID: 92018c4f-f382-41b9-80e0-c46e8f2b505a
+ * Vapi Assistant ID (V2 live): 39e25be8-2e81-4df5-a314-e741b3a31160
+ *   (V1 assistant 92018c4f was retired on 2026-11-24.)
  */
 
 import { loadRefs, createRoadmap } from './lib/roadmap-generator.js';
