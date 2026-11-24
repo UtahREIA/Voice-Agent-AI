@@ -25,6 +25,9 @@
  *   SUPABASE_SERVICE_KEY   — Supabase service role key (bypasses RLS)
  *   GHL_WEBHOOK_URL        — GHL inbound webhook URL for the Voice Agent Lead workflow
  *   GHL_API_KEY            — GHL Private Integration Token for v2 API custom field updates
+ *   GHL_PARTNER_WEBHOOK_URL — (optional) GHL inbound webhook for the "Voice Agent -
+ *                             Partner Referral Notice" workflow. When set, STEP 7 posts
+ *                             one notice per delivered partner. Unset = no partner notices.
  *
  * GHL Location ID: DNirEjy0ejVwbHsaBYrn
  * Vapi Assistant ID (V2 live): 39e25be8-2e81-4df5-a314-e741b3a31160
@@ -1662,10 +1665,12 @@ export default async function handler(req, res) {
         const done = new Set((Array.isArray(already) ? already : []).map(r => r.vendor_ghl_record_id));
         const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
         const rows = [];
+        const notify = [];   // non-TESTING partners to notify via GHL (option 2)
         for (const v of stackVendors) {
           if (done.has(v.id)) continue;
           let billable = true, note = '';
-          if (/testing/i.test(v.name || '')) { billable = false; note = 'TESTING record'; }
+          const isTesting = /testing/i.test(v.name || '');
+          if (isTesting) { billable = false; note = 'TESTING record'; }
           else if (effectivePhone) {
             const prior = await (await fetch(
               `${SUPABASE_URL}/rest/v1/vendor_referrals?vendor_ghl_record_id=eq.${encodeURIComponent(v.id)}&caller_phone=eq.${encodeURIComponent(effectivePhone)}&referral_delivered_at=gte.${encodeURIComponent(since)}&select=id&limit=1`,
@@ -1686,6 +1691,7 @@ export default async function handler(req, res) {
             billable,
             billing_note: note || null
           });
+          if (!isTesting) notify.push(v);   // every delivered referral except TESTING
         }
         if (rows.length) {
           const ins = await fetch(`${SUPABASE_URL}/rest/v1/vendor_referrals`, {
@@ -1693,8 +1699,43 @@ export default async function handler(req, res) {
           });
           console.log('Referral log:', rows.length, 'row(s) written | status', ins.status);
         }
+
+        // --- Partner referral notice (option 2: GHL inbound webhook -> workflow) ---
+        // One notice per newly-logged, non-TESTING partner (the `done` set above
+        // already makes a webhook retry a no-op, so no partner is texted twice).
+        // Sends the partner the caller's name, need and contact so they can follow
+        // up. INERT until GHL_PARTNER_WEBHOOK_URL is set (the "Voice Agent - Partner
+        // Referral Notice" workflow is owned by ops). Non-fatal; per-POST isolation.
+        const PARTNER_WEBHOOK_URL = process.env.GHL_PARTNER_WEBHOOK_URL;
+        if (PARTNER_WEBHOOK_URL && notify.length) {
+          let sent = 0;
+          for (const v of notify) {
+            try {
+              const pr = await fetch(PARTNER_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  partner_company_name:  v.name || '',
+                  partner_phone:         v.phone || '',
+                  vendor_ghl_record_id:  v.id || '',
+                  caller_name:           callerName || '',
+                  caller_phone:          effectivePhone || '',
+                  caller_email:          callerEmail || '',
+                  requested_service:     v.service || '',
+                  vapi_call_id:          vapiCallId,
+                  referral_delivered_at: new Date().toISOString()
+                })
+              });
+              if (pr.ok) sent++;
+              else console.error('Partner notice non-200:', pr.status, 'for', v.name);
+            } catch (e) {
+              console.error('Partner notice error (non-fatal):', e.message, 'for', v.name);
+            }
+          }
+          console.log('Partner notices:', sent, 'of', notify.length, 'posted to GHL_PARTNER_WEBHOOK_URL');
+        }
       } catch (e) {
-        console.error('Referral log error (non-fatal):', e.message);
+        console.error('Referral log / partner notice error (non-fatal):', e.message);
       }
     }
 
